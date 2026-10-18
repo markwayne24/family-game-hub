@@ -1,0 +1,35 @@
+:root{--bg:#f6f4ff;--card:#fff;--ink:#1d1b2e;--mute:#6b6880;--accent:#6c4cf5;--ok:#1f9d55;--bad:#d64545;--line:#e3dfff}
+@media (prefers-color-scheme:dark){:root{--bg:#14121f;--card:#1f1c30;--ink:#f1eefc;--mute:#9c98b5;--line:#322e4d}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,sans-serif}
+#app{max-width:640px;margin:0 auto;padding:16px}
+h1,h2{margin:.2em 0}
+.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px;margin:12px 0}
+button,input{font:inherit;border-radius:12px;border:1px solid var(--line);padding:10px 14px;background:var(--card);color:var(--ink)}
+button{cursor:pointer;background:var(--accent);color:#fff;border:0;font-weight:600}
+button.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+button:disabled{opacity:.5;cursor:default}
+input{width:100%;margin:6px 0}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grow{flex:1}
+.code{font-size:2rem;letter-spacing:.2em;font-weight:800}
+.muted{color:var(--mute)}
+.chips{display:flex;gap:6px;flex-wrap:wrap}
+.chip{padding:4px 10px;border-radius:99px;background:var(--line);font-size:.9rem}
+.chip.me{outline:2px solid var(--accent)}
+.games{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.games button{padding:18px 10px;font-size:1.05rem}
+.banner{background:#fff3cd;color:#664d03;border-radius:12px;padding:8px 12px;margin:8px 0}
+.err{color:var(--bad)}
+.ttt{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:320px;margin:12px auto}
+.ttt button{aspect-ratio:1;font-size:2.4rem;background:var(--line);color:var(--ink)}
+.choice{display:block;width:100%;margin:6px 0;text-align:left;background:var(--line);color:var(--ink)}
+.choice.picked{outline:3px solid var(--accent)}
+.choice.right{background:var(--ok);color:#fff}
+.choice.wrong{background:var(--bad);color:#fff}
+.bingo{display:grid;grid-template-columns:repeat(5,1fr);gap:6px;max-width:340px;margin:12px auto}
+.bingo div{aspect-ratio:1;display:grid;place-items:center;border-radius:10px;background:var(--line);font-weight:700}
+.bingo div.hit{background:var(--accent);color:#fff}
+.big{font-size:3.5rem;font-weight:800;text-align:center}
+.table{width:100%;border-collapse:collapse}
+.table td{padding:6px 4px;border-bottom:1px solid var(--line)}
