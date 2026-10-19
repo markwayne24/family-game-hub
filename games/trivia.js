@@ -1,3 +1,5 @@
+import { fresh, confetti } from './fx.js';
+
 const BANK = [
   ['How many days are in a leap year?', ['364', '365', '366', '367'], 2],
   ['Which planet is known as the Red Planet?', ['Venus', 'Mars', 'Jupiter', 'Mercury'], 1],
@@ -92,7 +94,8 @@ export const trivia = {
       return `<table class="table">${rows || '<tr><td class="muted">No points yet</td></tr>'}</table>`;
     };
     if (s.phase === 'end') {
-      el.innerHTML = `<h2>🏆 Final scores</h2>${board()}${ui.isHost ? '<button id="again">Play again</button>' : ''}`;
+      if (fresh(el, 'end', true)) confetti();
+      el.innerHTML = `<div class="anim"><h2>🏆 Final scores</h2>${board()}${ui.isHost ? '<button id="again">Play again</button>' : ''}</div>`;
       el.querySelector('#again')?.addEventListener('click', () => ui.act('restart'));
       return;
     }
@@ -106,13 +109,14 @@ export const trivia = {
       return `<button class="${cls}" data-k="${k}" ${mine !== undefined || revealed ? 'disabled' : ''}>${ui.esc(text)}</button>`;
     }).join('');
     const answered = Object.keys(s.answers).length;
-    el.innerHTML = `
+    const isNew = fresh(el, 'q', `${s.i}-${s.phase}`);
+    el.innerHTML = `<div class="${isNew ? 'anim' : ''}">
       <p class="muted">Question ${s.i + 1} of ${s.qs.length} · ${answered}/${ui.players.length} answered</p>
       <h2>${ui.esc(q.q)}</h2>${choices}
       ${revealed ? `<h3>Scores</h3>${board()}` : ''}
       ${ui.isHost ? (revealed
         ? `<button id="next">${s.i + 1 < s.qs.length ? 'Next question' : 'Final scores'}</button>`
-        : '<button class="ghost" id="reveal">Reveal now</button>') : ''}`;
+        : '<button class="ghost" id="reveal">Reveal now</button>') : ''}</div>`;
     el.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { this._picked = +b.dataset.k; ui.act('answer', { choice: +b.dataset.k }); });
     el.querySelector('#next')?.addEventListener('click', () => ui.act('next'));
     el.querySelector('#reveal')?.addEventListener('click', () => ui.act('reveal'));
