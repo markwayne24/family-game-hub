@@ -45,3 +45,34 @@ canvas.draw{width:100%;height:auto;border:1px solid var(--line);border-radius:12
 .mem button.done{background:var(--ok);opacity:.7}
 .rpsbtn{font-size:1.6rem;padding:18px 8px}
 .rpsbtn.picked{outline:3px solid var(--ok)}
+
+/* ---------- animation ---------- */
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes pop{0%{transform:scale(.3);opacity:0}60%{transform:scale(1.18);opacity:1}100%{transform:scale(1)}}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-5px)}80%{transform:translateX(4px)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.08)}}
+@keyframes flipIn{from{transform:perspective(500px) rotateY(90deg);opacity:0}to{transform:perspective(500px) rotateY(0);opacity:1}}
+@keyframes slideIn{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
+@keyframes bob{0%,100%{transform:translateY(0)}50%{transform:translateY(-5px)}}
+@keyframes stamp{0%{transform:scale(1.7);opacity:.2}70%{transform:scale(.92)}100%{transform:scale(1);opacity:1}}
+@keyframes rattle{0%{transform:rotate(0)}15%{transform:rotate(-18deg) scale(1.1)}30%{transform:rotate(16deg) scale(1.1)}45%{transform:rotate(-12deg)}60%{transform:rotate(10deg)}75%{transform:rotate(-5deg)}100%{transform:rotate(0)}}
+
+#app>*{animation:fadeUp .4s ease both}
+#app>*:nth-child(2){animation-delay:.05s}
+#app>*:nth-child(3){animation-delay:.1s}
+#app>*:nth-child(4){animation-delay:.15s}
+h1{animation:bob 3s ease-in-out infinite}
+button{transition:transform .12s,filter .12s,box-shadow .12s,background-color .2s,opacity .2s}
+button:not(:disabled):hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 6px 14px rgba(108,76,245,.25)}
+button:not(:disabled):active{transform:scale(.95);box-shadow:none}
+.chip.new{animation:pop .45s ease both}
+.games button{animation:pop .45s ease both}
+.games button:nth-child(2){animation-delay:.05s}.games button:nth-child(3){animation-delay:.1s}
+.games button:nth-child(4){animation-delay:.15s}.games button:nth-child(5){animation-delay:.2s}
+.games button:nth-child(6){animation-delay:.25s}.games button:nth-child(7){animation-delay:.3s}
+#stage.enter{animation:fadeUp .35s ease both}
+.banner{animation:pulse 2s ease-in-out infinite}
+
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+}

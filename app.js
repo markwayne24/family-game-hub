@@ -15,7 +15,7 @@ const store = {
 };
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
-const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null };
+const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set() };
 
 /* ---------- entry ---------- */
 
@@ -209,8 +209,10 @@ function render() {
   app.querySelector('#lobby').style.display = S.isHost && g ? '' : 'none';
   app.querySelector('#banner').innerHTML = ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>';
   app.querySelector('#pcount').textContent = `Players (${ps.length})`;
+  // Only players who just arrived get the pop-in animation.
   app.querySelector('#chips').innerHTML = ps.map(p =>
-    `<span class="chip ${p.id === S.me ? 'me' : ''}">${p.host ? '👑 ' : ''}${esc(p.name)}</span>`).join('');
+    `<span class="chip ${p.id === S.me ? 'me' : ''} ${S.seen.has(p.id) ? '' : 'new'}">${p.host ? '👑 ' : ''}${esc(p.name)}</span>`).join('');
+  ps.forEach(p => S.seen.add(p.id));
 
   // The picker and waiting screens are built once so typing in the custom-trivia box isn't wiped by joins.
   const view = g && S.state ? g.id : S.isHost ? 'picker' : 'wait';
@@ -218,6 +220,10 @@ function render() {
     S.stageView = view;
     stage.innerHTML = '';
     stage._d = null;
+    stage._fx = null;
+    stage.classList.remove('enter');
+    void stage.offsetWidth;
+    stage.classList.add('enter');
     if (view === 'picker') {
       stage.innerHTML = pickerHtml();
       const box = stage.querySelector('#custom');
