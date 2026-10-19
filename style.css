@@ -93,5 +93,11 @@ button:not(:disabled):active{transform:scale(.95);box-shadow:none}
 .anim .emo{display:inline-block;animation:rattle .9s ease}
 .mem button{transition:transform .2s,background-color .2s}
 .mem button.flip{animation:flipIn .4s ease}
-.mem button.done{animation:pulse .5s ease}
 .mem button.match{animation:stamp .5s ease}
+
+.bar{height:6px;background:var(--line);border-radius:99px;overflow:hidden;margin:6px 0}
+.bar i{display:block;height:100%;width:100%;background:var(--accent);transition:width .5s linear,background-color .3s}
+.bar i.low{background:var(--bad)}
+.chat .in{animation:slideIn .3s ease}
+.role.flip{animation:flipIn .6s ease}
+.votes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
