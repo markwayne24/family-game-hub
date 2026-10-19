@@ -1,3 +1,5 @@
+import { fresh, confetti } from './fx.js';
+
 const EMOJI = ['🪨', '📄', '✂️'];
 const NAMES = ['Rock', 'Paper', 'Scissors'];
 const beats = (a, b) => (a - b + 3) % 3 === 1;
@@ -45,6 +47,8 @@ export const rps = {
   render(el, s, ui) {
     if (mine.round !== s.round) mine = { round: s.round, k: null };
     const picked = s.picks[ui.me] !== undefined;
+    const isNew = s.phase === 'reveal' && fresh(el, 'reveal', s.round);
+    if (isNew && (s.gained[ui.me] ?? 0) > 0 && s.gained[ui.me] === Math.max(...Object.values(s.gained))) confetti();
     let body;
     if (s.phase === 'pick') {
       body = `<div class="row">${EMOJI.map((e, k) =>
@@ -53,8 +57,8 @@ export const rps = {
         ${ui.isHost ? '<button class="ghost" id="reveal">Reveal now</button>' : ''}`;
     } else {
       const rows = Object.keys(s.picks).map(id =>
-        `<tr><td>${ui.esc(ui.nameOf(id))}</td><td>${EMOJI[s.picks[id]]}</td><td>+${s.gained[id] ?? 0}</td></tr>`).join('');
-      body = `<table class="table">${rows}</table>${ui.isHost ? '<button id="next">Next round</button>' : ''}`;
+        `<tr><td>${ui.esc(ui.nameOf(id))}</td><td class="emo">${EMOJI[s.picks[id]]}</td><td>+${s.gained[id] ?? 0}</td></tr>`).join('');
+      body = `<div class="${isNew ? 'anim' : ''}"><table class="table">${rows}</table></div>${ui.isHost ? '<button id="next">Next round</button>' : ''}`;
     }
     const board = Object.entries(s.scores).sort((a, b) => b[1] - a[1])
       .map(([id, pts]) => `<tr><td>${ui.esc(ui.nameOf(id))}</td><td><b>${pts}</b></td></tr>`).join('');

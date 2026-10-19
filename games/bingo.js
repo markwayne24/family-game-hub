@@ -1,3 +1,5 @@
+import { fresh, memo, confetti } from './fx.js';
+
 const LETTERS = ['B', 'I', 'N', 'G', 'O'];
 
 function rng(seed) {
@@ -56,16 +58,19 @@ export const bingo = {
   render(el, s, ui) {
     const card = cardFor(ui.me);
     const called = new Set(s.called);
+    const prevCalled = memo(el, 'called', s.called);
+    const newNum = prevCalled !== undefined && prevCalled.length !== s.called.length;
+    if (s.winner && fresh(el, 'winner', s.winner)) confetti();
     const letter = s.last ? LETTERS[Math.floor((s.last - 1) / 15)] : '';
     const notYet = s.bad && s.bad.id === ui.me && s.bad.n === s.called.length;
     el.innerHTML = `
       <h2>Bingo</h2>
-      <div class="big">${s.last ? `${letter} ${s.last}` : '—'}</div>
+      <div class="big ${newNum ? 'pop' : ''}">${s.last ? `${letter} ${s.last}` : '—'}</div>
       <p class="muted" style="text-align:center">${s.called.length} called${s.winner ? '' : ''}</p>
       ${s.winner ? `<p class="big" style="font-size:1.8rem">🎉 ${ui.esc(ui.nameOf(s.winner))} got BINGO!</p>` : ''}
       <div class="bingo">${LETTERS.map(l => `<div style="background:none">${l}</div>`).join('')}
-        ${card.map(n => `<div class="${n === 0 || called.has(n) ? 'hit' : ''}">${n === 0 ? '★' : n}</div>`).join('')}</div>
-      ${notYet ? '<p class="err" style="text-align:center">Not yet. Keep playing!</p>' : ''}
+        ${card.map(n => `<div class="${n === 0 || called.has(n) ? 'hit' : ''} ${prevCalled && called.has(n) && !prevCalled.includes(n) ? 'stamp' : ''}">${n === 0 ? '★' : n}</div>`).join('')}</div>
+      ${notYet ? `<p class="err ${fresh(el, 'bad', s.called.length) ? 'shake' : ''}" style="text-align:center">Not yet. Keep playing!</p>` : ''}
       <div class="row">
         <button id="claim" class="grow" ${s.winner ? 'disabled' : ''}>BINGO!</button>
         ${ui.isHost ? `<button id="call" class="grow" ${s.winner ? 'disabled' : ''}>Call next number</button>

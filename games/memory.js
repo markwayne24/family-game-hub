@@ -1,3 +1,5 @@
+import { fresh, memo, confetti } from './fx.js';
+
 const EMOJIS = ['🐶', '🐱', '🦊', '🐼', '🐸', '🐵', '🦁', '🐯', '🐰', '🐻', '🦄', '🐙'];
 const PAIRS = 8;
 const CHECK_MS = 1100;
@@ -58,6 +60,10 @@ export const memory = {
   },
 
   render(el, s, ui) {
+    const shown = new Set(s.cards.flatMap((c, i) => (c !== null ? [i] : [])));
+    const prevShown = memo(el, 'shown', shown);
+    const prevMatched = memo(el, 'matched', s.matched);
+    if (s.phase === 'end' && fresh(el, 'end', true)) confetti();
     const turnId = s.order.length ? current(s) : null;
     const myTurn = turnId === ui.me && s.phase === 'play';
     const board = Object.entries(s.scores).sort((a, b) => b[1] - a[1])
@@ -67,7 +73,7 @@ export const memory = {
       <p><b>${s.phase === 'end' ? '🏆 All pairs found!' : myTurn ? 'Your turn! Flip two cards.' : `Turn: ${ui.esc(ui.nameOf(turnId))}`}</b></p>
       <div class="mem">${s.cards.map((c, i) => {
         const owned = s.matched[i] !== undefined;
-        return `<button data-i="${i}" class="${owned ? 'done' : ''}" ${myTurn && c === null ? '' : 'disabled'}>${c ?? '❓'}</button>`;
+        return `<button data-i="${i}" class="${owned ? 'done' : ''} ${prevShown && c !== null && !prevShown.has(i) ? 'flip' : ''} ${prevMatched && owned && prevMatched[i] === undefined ? 'match' : ''}" ${myTurn && c === null ? '' : 'disabled'}>${c ?? '❓'}</button>`;
       }).join('')}</div>
       <table class="table">${board || '<tr><td class="muted">No pairs yet</td></tr>'}</table>
       ${ui.isHost ? '<div class="row"><button class="ghost" id="skip">Skip turn</button><button class="ghost" id="reset">New game</button></div>' : ''}`;
