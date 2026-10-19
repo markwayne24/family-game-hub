@@ -33,3 +33,15 @@ input{width:100%;margin:6px 0}
 .big{font-size:3.5rem;font-weight:800;text-align:center}
 .table{width:100%;border-collapse:collapse}
 .table td{padding:6px 4px;border-bottom:1px solid var(--line)}
+textarea{width:100%;font:inherit;border-radius:12px;border:1px solid var(--line);padding:10px;background:var(--card);color:var(--ink)}
+details{margin-top:12px}
+canvas.draw{width:100%;height:auto;border:1px solid var(--line);border-radius:12px;background:#fff;touch-action:none;display:block}
+.swatch{width:34px;height:34px;padding:0;border:2px solid var(--line);border-radius:50%}
+.chat{max-height:160px;overflow:auto;background:var(--bg);border-radius:12px;padding:8px 12px;margin:8px 0;min-height:44px}
+.role{background:var(--line);border-radius:14px;padding:14px;text-align:center;font-size:1.2rem;margin:8px 0}
+.role.bad{background:var(--bad);color:#fff}
+.mem{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;max-width:360px;margin:12px auto}
+.mem button{aspect-ratio:1;font-size:2rem;background:var(--line);color:var(--ink);padding:0}
+.mem button.done{background:var(--ok);opacity:.7}
+.rpsbtn{font-size:1.6rem;padding:18px 8px}
+.rpsbtn.picked{outline:3px solid var(--ok)}

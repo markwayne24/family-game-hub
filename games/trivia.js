@@ -20,6 +20,7 @@ const BANK = [
   ['Which instrument has black and white keys?', ['Guitar', 'Piano', 'Drum', 'Flute'], 1],
   ['What is the hardest natural substance?', ['Gold', 'Iron', 'Diamond', 'Quartz'], 2],
 ];
+const BANK_POOL = BANK.map(([q, c, a]) => ({ q, c, a }));
 const ROUNDS = 8;
 const POINTS = 100;
 
@@ -36,22 +37,33 @@ function reveal(s, env) {
   return { ...s, phase: 'reveal', scores };
 }
 
+// One question per line: Question | Right answer | Wrong 1 | Wrong 2 | Wrong 3
+export function parseCustom(text) {
+  return String(text ?? '').split('\n').map(line => line.split('|').map(x => x.trim()).filter(Boolean))
+    .filter(parts => parts.length >= 3 && parts.length <= 5)
+    .map(([q, right, ...wrong]) => {
+      const c = shuffle([right, ...wrong]);
+      return { q, c, a: c.indexOf(right) };
+    });
+}
+
 export const trivia = {
   id: 'trivia',
   name: 'Trivia',
   emoji: '🧠',
 
-  init() {
-    const qs = shuffle(BANK).slice(0, ROUNDS).map(([q, c, a]) => ({ q, c, a }));
-    return { phase: 'question', i: 0, qs, answers: {}, scores: {} };
+  // opts.pool: custom questions from the host (see parseCustom); falls back to the built-in bank.
+  init(env, opts) {
+    const pool = opts?.pool?.length ? opts.pool : BANK_POOL;
+    return { phase: 'question', i: 0, qs: shuffle(pool).slice(0, ROUNDS), answers: {}, scores: {}, pool };
   },
 
   reduce(s, a, env) {
     const isHost = a.from === env.hostId;
-    if (a.type === 'restart' && isHost) return this.init();
+    if (a.type === 'restart' && isHost) return this.init(env, { pool: s.pool });
     if (a.type === 'answer' && s.phase === 'question') {
       const c = a.data?.choice;
-      if (s.answers[a.from] !== undefined || !(c >= 0 && c < 4)) return s;
+      if (s.answers[a.from] !== undefined || !(c >= 0 && c < s.qs[s.i].c.length)) return s;
       const next = { ...s, answers: { ...s.answers, [a.from]: c } };
       return env.players.every(p => next.answers[p.id] !== undefined) ? reveal(next, env) : next;
     }
@@ -64,9 +76,10 @@ export const trivia = {
 
   // Hide correct answers and other players' picks until the reveal.
   view(s) {
-    if (s.phase !== 'question') return s;
+    const { pool, ...pub } = s;
+    if (s.phase !== 'question') return pub;
     return {
-      ...s,
+      ...pub,
       qs: s.qs.map(({ a, ...rest }) => rest),
       answers: Object.fromEntries(Object.keys(s.answers).map(id => [id, true])),
     };
