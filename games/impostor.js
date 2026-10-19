@@ -1,3 +1,5 @@
+import { fresh, confetti } from './fx.js';
+
 const CATEGORIES = {
   Food: ['pizza', 'burger', 'sushi', 'pasta', 'taco', 'salad', 'pancake', 'ice cream'],
   Animals: ['lion', 'dolphin', 'penguin', 'elephant', 'monkey', 'rabbit', 'eagle', 'turtle'],
@@ -121,18 +123,21 @@ export const impostor = {
         ${ui.isHost ? '<button id="start">Start round</button>' : '<p class="muted">Waiting for the host to start…</p>'}`;
     } else if (s.phase === 'result') {
       const r = s.result;
+      const newRes = fresh(el, 'res', s.round);
+      if (newRes && !r.impostorWins) confetti();
       const votes = Object.entries(s.votes).map(([from, t]) => `${name(from)} → ${t === 'skip' ? 'skip' : name(t)}`).join(' · ');
-      body = `<h3>${r.impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</h3>
+      body = `<h3 class="${newRes ? 'status-pop' : ''}">${r.impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</h3>
         <p>The impostor was <b>${name(s.impostor)}</b>. The word was <b>${ui.esc(s.word)}</b>.</p>
         ${r.ejected ? `<p>Voted out: <b>${name(r.ejected)}</b>${r.guess ? ` · impostor guessed “${ui.esc(r.guess)}”` : ''}</p>` : '<p>Nobody was voted out.</p>'}
         <p class="muted">${votes}</p>
         ${ui.isHost ? '<button id="start">Next round</button>' : ''}`;
     } else {
       const me = ui.priv;
+      const newRole = !!me && fresh(el, 'role', s.round);
       const card = !me ? '<div class="banner">You joined mid-round. Watching this one!</div>'
         : me.role === 'impostor'
-          ? `<div class="role bad">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`
-          : `<div class="role">Your secret word: <b>${ui.esc(me.word)}</b><br><small>Category: ${ui.esc(s.cat)}. Find the impostor.</small></div>`;
+          ? `<div class="role bad ${newRole ? 'flip' : ''}">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`
+          : `<div class="role ${newRole ? 'flip' : ''}">Your secret word: <b>${ui.esc(me.word)}</b><br><small>Category: ${ui.esc(s.cat)}. Find the impostor.</small></div>`;
       const clues = s.clues.map(c => `<div><b>${name(c.id)}:</b> ${ui.esc(c.text)}</div>`).join('');
       if (s.phase === 'clues') {
         const turn = s.order[s.clueIdx];
@@ -146,7 +151,7 @@ export const impostor = {
         body = `${card}<h3>Who is the impostor?</h3><div class="chat">${clues}</div>
           <p class="muted">Discuss out loud, then vote. ${Object.keys(s.votes).length}/${s.order.length} voted.</p>
           ${s.order.includes(ui.me) && !voted
-            ? `<div class="games">${s.order.filter(id => id !== ui.me).map(id => `<button data-v="${id}">${name(id)}</button>`).join('')}<button class="ghost" data-v="skip">Skip</button></div>`
+            ? `<div class="votes">${s.order.filter(id => id !== ui.me).map(id => `<button data-v="${id}">${name(id)}</button>`).join('')}<button class="ghost" data-v="skip">Skip</button></div>`
             : '<p class="muted">Vote locked in. Waiting for the others…</p>'}
           ${ui.isHost ? '<button class="ghost" id="endvote">Count votes now</button>' : ''}`;
       } else if (s.phase === 'guess') {

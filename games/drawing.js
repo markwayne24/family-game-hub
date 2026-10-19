@@ -1,3 +1,5 @@
+import { fresh, memo, confetti } from './fx.js';
+
 const WORDS = [
   'cat', 'dog', 'house', 'tree', 'sun', 'moon', 'star', 'car', 'boat', 'fish', 'bird', 'flower', 'apple', 'banana',
   'pizza', 'cake', 'guitar', 'rocket', 'robot', 'snowman', 'umbrella', 'bicycle', 'train', 'airplane', 'elephant',
@@ -99,6 +101,7 @@ export const drawing = {
       el.innerHTML = `
         <h2>Draw &amp; Guess</h2>
         <p id="info"></p>
+        <div class="bar"><i></i></div>
         <div id="wrap"><canvas width="${W}" height="${H}" class="draw"></canvas></div>
         <div id="tools" class="row">
           ${COLORS.map(c => `<button class="swatch" data-c="${c}" style="background:${c}" aria-label="color ${c}"></button>`).join('')}
@@ -116,6 +119,7 @@ export const drawing = {
         wrap: el.querySelector('#wrap'), board: el.querySelector('#board'), hostbar: el.querySelector('#hostbar'),
       };
       d.ctx = d.canvas.getContext('2d');
+      d.bar = el.querySelector('.bar i');
       const pos = e => {
         const r = d.canvas.getBoundingClientRect();
         return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
@@ -165,14 +169,24 @@ export const drawing = {
         if (!el.isConnected || el._d !== d) return clearInterval(d.tick);
         const t = el.querySelector('#timer');
         if (t && d.s.until) t.textContent = `${Math.max(0, Math.ceil((d.s.until - Date.now()) / 1000))}s`;
+        if (d.s.phase === 'draw' && d.s.until) {
+          const pct = Math.max(0, Math.min(100, ((d.s.until - Date.now()) / DRAW_MS) * 100));
+          d.bar.style.width = `${pct}%`;
+          d.bar.classList.toggle('low', pct < 25);
+        }
       }, 500);
     }
     d.s = s; d.ui = ui;
+    const prevLen = memo(el, 'guesses', s.guesses.length) ?? s.guesses.length;
+    const wasCorrect = memo(el, 'iCorrect', s.correct.includes(ui.me));
+    if (wasCorrect === false && s.correct.includes(ui.me)) confetti();
+    if (s.phase === 'end' && fresh(el, 'end', true)) confetti();
+    d.bar.parentElement.style.visibility = s.phase === 'draw' ? 'visible' : 'hidden';
 
     const iDraw = s.phase === 'draw' && ui.me === s.drawer;
     const drawerName = ui.esc(ui.nameOf(s.drawer));
     d.info.innerHTML = s.phase === 'end' ? '🏆 Game over!'
-      : s.phase === 'reveal' ? `The word was <b>${ui.esc(s.word)}</b>`
+      : s.phase === 'reveal' ? `The word was <b class="${fresh(el, 'rev', s.round) ? 'status-pop' : ''}">${ui.esc(s.word)}</b>`
       : iDraw ? `Draw: <b>${ui.esc(ui.priv ?? '…')}</b> · <span id="timer"></span>`
       : `${drawerName} is drawing: <b>${ui.esc(s.hint ?? '')}</b> · <span id="timer"></span>`;
     d.wrap.style.display = s.phase === 'end' ? 'none' : '';
@@ -186,9 +200,12 @@ export const drawing = {
       d.ctx.fillRect(0, 0, W, H);
       for (const st of s.strokes) paint(d.ctx, st);
     }
-    d.chat.innerHTML = s.guesses.map(g => g.ok
-      ? `<div>🎉 <b>${ui.esc(ui.nameOf(g.id))}</b> guessed it!</div>`
-      : `<div><b>${ui.esc(ui.nameOf(g.id))}:</b> ${ui.esc(g.text)}</div>`).join('');
+    d.chat.innerHTML = s.guesses.map((g, i) => {
+      const cls = i >= prevLen ? ' class="in"' : '';
+      return g.ok
+        ? `<div${cls}>🎉 <b>${ui.esc(ui.nameOf(g.id))}</b> guessed it!</div>`
+        : `<div${cls}><b>${ui.esc(ui.nameOf(g.id))}:</b> ${ui.esc(g.text)}</div>`;
+    }).join('');
     d.chat.scrollTop = d.chat.scrollHeight;
     const rows = Object.entries(s.scores).sort((a, b) => b[1] - a[1])
       .map(([id, pts]) => `<tr><td>${ui.esc(ui.nameOf(id))}</td><td><b>${pts}</b></td></tr>`).join('');
