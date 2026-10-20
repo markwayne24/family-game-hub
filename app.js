@@ -15,7 +15,7 @@ const store = {
 };
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
-const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set() };
+const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set() };
 
 /* ---------- entry ---------- */
 
@@ -105,6 +105,10 @@ async function joinScreen(code, msg = '') {
     app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
     return;
   }
+  if ((JSON.parse(store.get('hubKicked') || '[]')).includes(code)) {
+    app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">You were removed from room ${esc(code)} by the host.</p></div>`;
+    return;
+  }
   const last = JSON.parse(store.get('hubLast') || 'null');
   if (last?.code === code && last.name) {
     const { data: { user } } = await sb.auth.getUser();
@@ -175,6 +179,7 @@ function enterRoom(code, name, isHost) {
     try {
       const saved = JSON.parse(store.get(`hubState:${code}`) || 'null');
       if (saved && GAMES[saved.game]) { S.game = saved.game; S.raw = saved.raw; }
+      S.banned = new Set(JSON.parse(store.get(`hubBanned:${code}`) || '[]'));
     } catch { /* start fresh */ }
   }
   S.channel = sb.channel(`room:${code}`, { config: { broadcast: { self: true }, presence: { key: S.me } } });
@@ -185,7 +190,13 @@ function enterRoom(code, name, isHost) {
       render();
     })
     .on('presence', { event: 'sync' }, render)
-    .on('presence', { event: 'join' }, () => { if (S.isHost) pushState(); })
+    .on('broadcast', { event: 'kick' }, ({ payload }) => { if (payload.id === S.me) removedScreen('You were removed from the room by the host.', true); })
+    .on('broadcast', { event: 'closed' }, () => { if (!S.isHost) removedScreen('The host closed this room. Thanks for playing!'); })
+    .on('presence', { event: 'join' }, ({ key }) => {
+      if (!S.isHost) return;
+      if (S.banned.has(key)) return kick(key);
+      pushState();
+    })
     .subscribe(async status => {
       if (status !== 'SUBSCRIBED') return;
       await S.channel.track({ name, t: Date.now(), host: isHost });
@@ -199,19 +210,67 @@ function buildShell() {
   app.innerHTML = `
     <div class="row">
       <div class="grow"><div class="muted">Room code</div><div class="code">${esc(S.code)}</div></div>
+      <button class="ghost" id="mute" aria-label="Sound on/off"></button>
       <button class="ghost" id="copy">Copy invite link</button>
     </div>
     <div id="banner"></div>
     <div class="card" id="stage"></div>
-    <div class="row"><button class="ghost" id="lobby">Back to game list</button></div>
+    <div class="row">
+      <button class="ghost" id="lobby">Back to game list</button>
+      <button class="ghost danger" id="close">Close room</button>
+      <button class="ghost" id="leave">Leave room</button>
+    </div>
     <div class="card"><div class="muted" id="pcount"></div><div class="chips" id="chips"></div></div>`;
   S.stageView = null;
   app.querySelector('#lobby').onclick = () => hostHandle({ from: S.me, type: 'select', data: { game: 'lobby' } });
+  app.querySelector('#close').onclick = closeRoom;
+  app.querySelector('#leave').onclick = leaveRoom;
   app.querySelector('#copy').onclick = async e => {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
     try { await navigator.clipboard.writeText(link); e.target.textContent = 'Copied!'; }
     catch { prompt('Copy this link:', link); }
   };
+}
+
+function stopChannel() {
+  clearTimeout(S.timer);
+  if (S.channel) sb.removeChannel(S.channel);
+  S.channel = null;
+  S.seen = new Set();
+  S.stageView = null;
+}
+
+function removedScreen(message, kicked = false) {
+  if (kicked) store.set('hubKicked', JSON.stringify([...new Set([...JSON.parse(store.get('hubKicked') || '[]'), S.code])]));
+  store.set('hubLast', 'null');
+  stopChannel();
+  app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p>${esc(message)}</p></div>`;
+}
+
+function kick(id) {
+  S.banned.add(id);
+  store.set(`hubBanned:${S.code}`, JSON.stringify([...S.banned]));
+  S.channel.send({ type: 'broadcast', event: 'kick', payload: { id } });
+}
+
+function leaveRoom() {
+  const code = S.code;
+  store.set('hubLast', 'null');
+  stopChannel();
+  joinScreen(code);
+}
+
+async function closeRoom() {
+  if (!confirm('Close this room for everyone? Players will be disconnected.')) return;
+  const code = S.code;
+  S.channel.send({ type: 'broadcast', event: 'closed', payload: {} });
+  await sb.from('rooms').delete().eq('code', code);
+  store.set(`hubState:${code}`, 'null');
+  store.set(`hubBanned:${code}`, '[]');
+  stopChannel();
+  history.replaceState(null, '', location.pathname);
+  const { data: { user } } = await sb.auth.getUser();
+  user ? hostHome(user) : loginScreen();
 }
 
 function pickerHtml() {
@@ -232,11 +291,16 @@ function render() {
 
   app.querySelector('#copy').style.display = S.isHost ? '' : 'none';
   app.querySelector('#lobby').style.display = S.isHost && g ? '' : 'none';
+  app.querySelector('#close').style.display = S.isHost ? '' : 'none';
+  app.querySelector('#leave').style.display = S.isHost ? 'none' : '';
   app.querySelector('#banner').innerHTML = ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>';
   app.querySelector('#pcount').textContent = `Players (${ps.length})`;
   // Only players who just arrived get the pop-in animation.
   app.querySelector('#chips').innerHTML = ps.map(p =>
-    `<span class="chip ${p.id === S.me ? 'me' : ''} ${S.seen.has(p.id) ? '' : 'new'}">${p.host ? '👑 ' : ''}${esc(p.name)}</span>`).join('');
+    `<span class="chip ${p.id === S.me ? 'me' : ''} ${S.seen.has(p.id) ? '' : 'new'}">${p.host ? '👑 ' : ''}${esc(p.name)}${S.isHost && p.id !== S.me ? `<button class="x" data-kick="${esc(p.id)}" title="Remove ${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button>` : ''}</span>`).join('');
+  app.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
+    if (confirm(`Remove ${b.title.replace('Remove ', '')} from the room?`)) kick(b.dataset.kick);
+  });
   ps.forEach(p => S.seen.add(p.id));
 
   // The picker and waiting screens are built once so typing in the custom-trivia box isn't wiped by joins.

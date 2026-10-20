@@ -101,3 +101,7 @@ button:not(:disabled):active{transform:scale(.95);box-shadow:none}
 .chat .in{animation:slideIn .3s ease}
 .role.flip{animation:flipIn .6s ease}
 .votes{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+
+.chip .x{background:transparent;color:var(--bad);padding:0 0 0 6px;font-size:1.1rem;line-height:1;border-radius:0;box-shadow:none}
+.chip .x:hover{filter:none;box-shadow:none;transform:none;color:var(--ink)}
+button.danger{color:var(--bad);border-color:var(--bad)}
