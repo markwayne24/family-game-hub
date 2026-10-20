@@ -1,4 +1,4 @@
-import { fresh, confetti } from './fx.js';
+import { fresh, confetti, sfx } from './fx.js';
 
 const CATEGORIES = {
   Food: ['pizza', 'burger', 'sushi', 'pasta', 'taco', 'salad', 'pancake', 'ice cream'],
@@ -124,7 +124,7 @@ export const impostor = {
     } else if (s.phase === 'result') {
       const r = s.result;
       const newRes = fresh(el, 'res', s.round);
-      if (newRes && !r.impostorWins) confetti();
+      if (newRes) { if (r.impostorWins) sfx('lose'); else { confetti(); sfx('win'); } }
       const votes = Object.entries(s.votes).map(([from, t]) => `${name(from)} → ${t === 'skip' ? 'skip' : name(t)}`).join(' · ');
       body = `<h3 class="${newRes ? 'status-pop' : ''}">${r.impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</h3>
         <p>The impostor was <b>${name(s.impostor)}</b>. The word was <b>${ui.esc(s.word)}</b>.</p>
@@ -134,6 +134,7 @@ export const impostor = {
     } else {
       const me = ui.priv;
       const newRole = !!me && fresh(el, 'role', s.round);
+      if (newRole) sfx('whoosh');
       const card = !me ? '<div class="banner">You joined mid-round. Watching this one!</div>'
         : me.role === 'impostor'
           ? `<div class="role bad ${newRole ? 'flip' : ''}">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`

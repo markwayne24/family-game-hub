@@ -1,4 +1,4 @@
-import { fresh, confetti } from './fx.js';
+import { fresh, confetti, sfx } from './fx.js';
 
 const BANK = [
   ['How many days are in a leap year?', ['364', '365', '366', '367'], 2],
@@ -94,7 +94,7 @@ export const trivia = {
       return `<table class="table">${rows || '<tr><td class="muted">No points yet</td></tr>'}</table>`;
     };
     if (s.phase === 'end') {
-      if (fresh(el, 'end', true)) confetti();
+      if (fresh(el, 'end', true)) { confetti(); sfx('win'); }
       el.innerHTML = `<div class="anim"><h2>🏆 Final scores</h2>${board()}${ui.isHost ? '<button id="again">Play again</button>' : ''}</div>`;
       el.querySelector('#again')?.addEventListener('click', () => ui.act('restart'));
       return;
@@ -110,6 +110,7 @@ export const trivia = {
     }).join('');
     const answered = Object.keys(s.answers).length;
     const isNew = fresh(el, 'q', `${s.i}-${s.phase}`);
+    if (isNew && revealed) sfx(s.answers[ui.me] === q.a ? 'ding' : 'buzz');
     el.innerHTML = `<div class="${isNew ? 'anim' : ''}">
       <p class="muted">Question ${s.i + 1} of ${s.qs.length} · ${answered}/${ui.players.length} answered</p>
       <h2>${ui.esc(q.q)}</h2>${choices}

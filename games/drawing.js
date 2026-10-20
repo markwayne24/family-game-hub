@@ -1,4 +1,4 @@
-import { fresh, memo, confetti } from './fx.js';
+import { fresh, memo, confetti, sfx } from './fx.js';
 
 const WORDS = [
   'cat', 'dog', 'house', 'tree', 'sun', 'moon', 'star', 'car', 'boat', 'fish', 'bird', 'flower', 'apple', 'banana',
@@ -179,8 +179,9 @@ export const drawing = {
     d.s = s; d.ui = ui;
     const prevLen = memo(el, 'guesses', s.guesses.length) ?? s.guesses.length;
     const wasCorrect = memo(el, 'iCorrect', s.correct.includes(ui.me));
-    if (wasCorrect === false && s.correct.includes(ui.me)) confetti();
-    if (s.phase === 'end' && fresh(el, 'end', true)) confetti();
+    if (wasCorrect === false && s.correct.includes(ui.me)) { confetti(); sfx('ding'); }
+    else if (s.guesses.length > prevLen) sfx('blip');
+    if (s.phase === 'end' && fresh(el, 'end', true)) { confetti(); sfx('win'); }
     d.bar.parentElement.style.visibility = s.phase === 'draw' ? 'visible' : 'hidden';
 
     const iDraw = s.phase === 'draw' && ui.me === s.drawer;

@@ -2,6 +2,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 import { GAMES } from './games/index.js';
 import { parseCustom } from './games/trivia.js';
+import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById('app');
@@ -223,6 +224,9 @@ function buildShell() {
     <div class="card"><div class="muted" id="pcount"></div><div class="chips" id="chips"></div></div>`;
   S.stageView = null;
   app.querySelector('#lobby').onclick = () => hostHandle({ from: S.me, type: 'select', data: { game: 'lobby' } });
+  const mute = app.querySelector('#mute');
+  mute.textContent = isMuted() ? '🔇' : '🔊';
+  mute.onclick = () => { setMuted(!isMuted()); mute.textContent = isMuted() ? '🔇' : '🔊'; sfx('pop'); };
   app.querySelector('#close').onclick = closeRoom;
   app.querySelector('#leave').onclick = leaveRoom;
   app.querySelector('#copy').onclick = async e => {
@@ -301,6 +305,7 @@ function render() {
   app.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
     if (confirm(`Remove ${b.title.replace('Remove ', '')} from the room?`)) kick(b.dataset.kick);
   });
+  if (S.seen.size && ps.some(p => !S.seen.has(p.id) && p.id !== S.me)) sfx('blip');
   ps.forEach(p => S.seen.add(p.id));
 
   // The picker and waiting screens are built once so typing in the custom-trivia box isn't wiped by joins.
@@ -333,4 +338,5 @@ function render() {
   }
 }
 
+document.addEventListener('pointerdown', unlockAudio, { once: true });
 start();

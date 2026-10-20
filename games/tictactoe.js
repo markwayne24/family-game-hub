@@ -1,4 +1,4 @@
-import { fresh, memo, confetti } from './fx.js';
+import { fresh, memo, confetti, sfx } from './fx.js';
 
 const LINES = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
 
@@ -37,7 +37,8 @@ export const tictactoe = {
     const prevBoard = memo(el, 'board', s.board);
     const prevWinner = memo(el, 'winner', s.winner);
     const line = LINES.find(([a, b, c]) => s.board[a] && s.board[a] === s.board[b] && s.board[a] === s.board[c]);
-    if (s.winner && s.winner !== 'draw' && !prevWinner) confetti();
+    if (s.winner && s.winner !== 'draw' && !prevWinner) { confetti(); sfx('win'); }
+    else if (prevBoard && s.board.some((c, i) => c && !prevBoard[i])) sfx('pop');
     const status = s.winner === 'draw' ? "It's a draw!"
       : s.winner ? `${name(s.winner)} wins! 🎉`
       : `Turn: ${name(s.turn)} (${s.turn})`;

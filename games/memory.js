@@ -1,4 +1,4 @@
-import { fresh, memo, confetti } from './fx.js';
+import { fresh, memo, confetti, sfx } from './fx.js';
 
 const EMOJIS = ['🐶', '🐱', '🦊', '🐼', '🐸', '🐵', '🦁', '🐯', '🐰', '🐻', '🦄', '🐙'];
 const PAIRS = 8;
@@ -63,7 +63,9 @@ export const memory = {
     const shown = new Set(s.cards.flatMap((c, i) => (c !== null ? [i] : [])));
     const prevShown = memo(el, 'shown', shown);
     const prevMatched = memo(el, 'matched', s.matched);
-    if (s.phase === 'end' && fresh(el, 'end', true)) confetti();
+    if (s.phase === 'end' && fresh(el, 'end', true)) { confetti(); sfx('win'); }
+    else if (prevMatched && Object.keys(s.matched).length > Object.keys(prevMatched).length) sfx('ding');
+    else if (prevShown && [...shown].some(i => !prevShown.has(i))) sfx('flip');
     const turnId = s.order.length ? current(s) : null;
     const myTurn = turnId === ui.me && s.phase === 'play';
     const board = Object.entries(s.scores).sort((a, b) => b[1] - a[1])

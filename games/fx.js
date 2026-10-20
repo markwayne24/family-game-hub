@@ -52,3 +52,57 @@ export function confetti() {
   };
   tick(t0);
 }
+
+/* ---------- sound ---------- */
+// Tiny synthesized sound effects (no audio files). Mute state is remembered on this device.
+
+let audio = null;
+let muted = (() => { try { return localStorage.getItem('hubMuted') === '1'; } catch { return false; } })();
+
+export const isMuted = () => muted;
+export function setMuted(value) {
+  muted = value;
+  try { localStorage.setItem('hubMuted', value ? '1' : '0'); } catch { /* ignore */ }
+}
+
+// Browsers only allow audio after a tap, so call this from the first click.
+export function unlockAudio() {
+  try {
+    audio ??= new AudioContext();
+    if (audio.state === 'suspended') audio.resume();
+  } catch { /* no audio support */ }
+}
+
+function tone(freq, dur, { type = 'sine', gain = 0.12, delay = 0, to = null } = {}) {
+  const t0 = audio.currentTime + delay;
+  const osc = audio.createOscillator();
+  const amp = audio.createGain();
+  osc.type = type;
+  osc.frequency.setValueAtTime(freq, t0);
+  if (to) osc.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+  amp.gain.setValueAtTime(gain, t0);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(amp).connect(audio.destination);
+  osc.start(t0);
+  osc.stop(t0 + dur + 0.02);
+}
+
+const SOUNDS = {
+  pop: () => tone(420, 0.12, { to: 760, type: 'triangle' }),
+  blip: () => tone(660, 0.09, { type: 'triangle', gain: 0.08 }),
+  flip: () => tone(380, 0.07, { type: 'triangle', to: 520 }),
+  ball: () => { tone(260, 0.1, { type: 'square', gain: 0.05 }); tone(390, 0.12, { type: 'square', gain: 0.05, delay: 0.08 }); },
+  whoosh: () => tone(180, 0.3, { to: 900, gain: 0.08 }),
+  ding: () => { tone(880, 0.15); tone(1320, 0.3, { delay: 0.1 }); },
+  buzz: () => tone(150, 0.3, { type: 'sawtooth', gain: 0.08, to: 110 }),
+  win: () => [523, 659, 784, 1047].forEach((f, i) => tone(f, 0.28, { delay: i * 0.12, type: 'triangle' })),
+  lose: () => [392, 330, 262].forEach((f, i) => tone(f, 0.3, { delay: i * 0.16, type: 'triangle' })),
+};
+
+export function sfx(name) {
+  if (muted) return;
+  try {
+    unlockAudio();
+    if (audio?.state === 'running') SOUNDS[name]?.();
+  } catch { /* ignore */ }
+}

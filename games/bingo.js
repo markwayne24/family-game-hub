@@ -1,4 +1,4 @@
-import { fresh, memo, confetti } from './fx.js';
+import { fresh, memo, confetti, sfx } from './fx.js';
 
 const LETTERS = ['B', 'I', 'N', 'G', 'O'];
 
@@ -60,7 +60,8 @@ export const bingo = {
     const called = new Set(s.called);
     const prevCalled = memo(el, 'called', s.called);
     const newNum = prevCalled !== undefined && prevCalled.length !== s.called.length;
-    if (s.winner && fresh(el, 'winner', s.winner)) confetti();
+    if (s.winner && fresh(el, 'winner', s.winner)) { confetti(); sfx('win'); }
+    else if (newNum) sfx('ball');
     const letter = s.last ? LETTERS[Math.floor((s.last - 1) / 15)] : '';
     const notYet = s.bad && s.bad.id === ui.me && s.bad.n === s.called.length;
     el.innerHTML = `

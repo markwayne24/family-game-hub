@@ -1,4 +1,4 @@
-import { fresh, confetti } from './fx.js';
+import { fresh, confetti, sfx } from './fx.js';
 
 const EMOJI = ['🪨', '📄', '✂️'];
 const NAMES = ['Rock', 'Paper', 'Scissors'];
@@ -48,6 +48,7 @@ export const rps = {
     if (mine.round !== s.round) mine = { round: s.round, k: null };
     const picked = s.picks[ui.me] !== undefined;
     const isNew = s.phase === 'reveal' && fresh(el, 'reveal', s.round);
+    if (isNew) sfx('whoosh');
     if (isNew && (s.gained[ui.me] ?? 0) > 0 && s.gained[ui.me] === Math.max(...Object.values(s.gained))) confetti();
     let body;
     if (s.phase === 'pick') {
