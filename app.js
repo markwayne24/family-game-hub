@@ -279,7 +279,8 @@ async function closeRoom() {
 
 function pickerHtml() {
   return `<h2>Pick a game</h2>
-    <div class="games">${Object.values(GAMES).map(x => `<button data-g="${x.id}">${x.emoji}<br>${esc(x.name)}</button>`).join('')}</div>
+    <div class="games">${Object.values(GAMES).map(x => `<div class="gcard"><button data-g="${x.id}">${x.emoji}<br>${esc(x.name)}</button>${(x.options ?? []).map(o =>
+      `<label class="opt">${esc(o.label)}<select data-opt="${x.id}.${o.key}">${o.choices.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>`).join('')}</div>`).join('')}</div>
     <details><summary>Custom trivia questions</summary>
       <p class="muted">One per line: Question | Right answer | Wrong 1 | Wrong 2 | Wrong 3. Leave empty to use the built-in questions.</p>
       <textarea id="custom" rows="6" placeholder="Where did we go on vacation in 2019? | Cebu | Bohol | Davao | Manila"></textarea>
@@ -323,8 +324,15 @@ function render() {
       const box = stage.querySelector('#custom');
       box.value = store.get('hubCustom') || '';
       box.oninput = () => store.set('hubCustom', box.value);
+      // Remember each game's option choices on this device.
+      const saved = JSON.parse(store.get('hubOpts') || '{}');
+      stage.querySelectorAll('[data-opt]').forEach(sel => {
+        if (saved[sel.dataset.opt]) sel.value = saved[sel.dataset.opt];
+        sel.onchange = () => { saved[sel.dataset.opt] = sel.value; store.set('hubOpts', JSON.stringify(saved)); };
+      });
       stage.querySelectorAll('[data-g]').forEach(b => b.onclick = () => {
         const data = { game: b.dataset.g };
+        stage.querySelectorAll(`[data-opt^="${b.dataset.g}."]`).forEach(sel => { data[sel.dataset.opt.split('.')[1]] = sel.value; });
         if (data.game === 'trivia') data.pool = parseCustom(box.value);
         // Handled locally on the host so custom answers never travel over the channel.
         hostHandle({ from: S.me, type: 'select', data });

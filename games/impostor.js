@@ -7,6 +7,11 @@ const CATEGORIES = {
   Jobs: ['teacher', 'doctor', 'chef', 'pilot', 'farmer', 'firefighter', 'singer', 'driver'],
   Sports: ['soccer', 'basketball', 'tennis', 'swimming', 'volleyball', 'baseball', 'boxing', 'golf'],
   'Things at home': ['sofa', 'fridge', 'toothbrush', 'blanket', 'mirror', 'lamp', 'pillow', 'kettle'],
+  Fruits: ['mango', 'banana', 'grapes', 'pineapple', 'watermelon', 'strawberry', 'papaya', 'orange'],
+  Transport: ['jeepney', 'tricycle', 'airplane', 'train', 'bicycle', 'ship', 'bus', 'taxi'],
+  'Filipino food': ['adobo', 'sinigang', 'lechon', 'halo-halo', 'pancit', 'lumpia', 'kare-kare', 'bibingka'],
+  Nature: ['volcano', 'waterfall', 'rainbow', 'island', 'forest', 'river', 'cave', 'desert'],
+  'Toys & games': ['puzzle', 'yoyo', 'chess', 'doll', 'kite', 'marbles', 'lego', 'cards'],
 };
 const MIN_PLAYERS = 3;
 

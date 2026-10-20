@@ -66,10 +66,10 @@ button{transition:transform .12s,filter .12s,box-shadow .12s,background-color .2
 button:not(:disabled):hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 6px 14px rgba(108,76,245,.25)}
 button:not(:disabled):active{transform:scale(.95);box-shadow:none}
 .chip.new{animation:pop .45s ease both}
-.games button{animation:pop .45s ease backwards}
-.games button:nth-child(2){animation-delay:.05s}.games button:nth-child(3){animation-delay:.1s}
-.games button:nth-child(4){animation-delay:.15s}.games button:nth-child(5){animation-delay:.2s}
-.games button:nth-child(6){animation-delay:.25s}.games button:nth-child(7){animation-delay:.3s}
+.gcard{animation:pop .45s ease backwards}
+.gcard:nth-child(2){animation-delay:.05s}.gcard:nth-child(3){animation-delay:.1s}
+.gcard:nth-child(4){animation-delay:.15s}.gcard:nth-child(5){animation-delay:.2s}
+.gcard:nth-child(6){animation-delay:.25s}.gcard:nth-child(7){animation-delay:.3s}
 #stage.enter{animation:fadeUp .35s ease both}
 .banner{animation:pulse 2s ease-in-out infinite}
 
@@ -105,3 +105,8 @@ button:not(:disabled):active{transform:scale(.95);box-shadow:none}
 .chip .x{background:transparent;color:var(--bad);padding:0 0 0 6px;font-size:1.1rem;line-height:1;border-radius:0;box-shadow:none}
 .chip .x:hover{filter:none;box-shadow:none;transform:none;color:var(--ink)}
 button.danger{color:var(--bad);border-color:var(--bad)}
+
+.gcard{display:flex;flex-direction:column;gap:6px}
+.gcard>button{flex:1}
+.opt{display:flex;flex-direction:column;font-size:.8rem;color:var(--mute)}
+.opt select{font:inherit;border-radius:10px;border:1px solid var(--line);padding:6px;background:var(--card);color:var(--ink)}

@@ -1,28 +1,11 @@
 import { fresh, confetti, sfx } from './fx.js';
+import { PACKS } from './packs.js';
 
-const BANK = [
-  ['How many days are in a leap year?', ['364', '365', '366', '367'], 2],
-  ['Which planet is known as the Red Planet?', ['Venus', 'Mars', 'Jupiter', 'Mercury'], 1],
-  ['What is the largest animal on Earth?', ['Elephant', 'Blue whale', 'Giraffe', 'Great white shark'], 1],
-  ['How many colors are in a rainbow?', ['5', '6', '7', '8'], 2],
-  ['What do bees make?', ['Milk', 'Silk', 'Honey', 'Butter'], 2],
-  ['Which ocean is the largest?', ['Atlantic', 'Indian', 'Arctic', 'Pacific'], 3],
-  ['How many legs does a spider have?', ['6', '8', '10', '12'], 1],
-  ['What is the capital of Japan?', ['Seoul', 'Beijing', 'Tokyo', 'Bangkok'], 2],
-  ['Which fruit is traditionally used to make guacamole?', ['Mango', 'Avocado', 'Banana', 'Papaya'], 1],
-  ['What is H2O commonly called?', ['Salt', 'Water', 'Oxygen', 'Hydrogen'], 1],
-  ['How many continents are there?', ['5', '6', '7', '8'], 2],
-  ['Which animal is known as the King of the Jungle?', ['Tiger', 'Lion', 'Bear', 'Wolf'], 1],
-  ['What color do you get mixing blue and yellow?', ['Green', 'Purple', 'Orange', 'Brown'], 0],
-  ['How many minutes are in an hour?', ['30', '45', '60', '100'], 2],
-  ['Which is the tallest mountain above sea level?', ['K2', 'Mount Everest', 'Mount Fuji', 'Kilimanjaro'], 1],
-  ['What gas do plants take in from the air?', ['Oxygen', 'Nitrogen', 'Carbon dioxide', 'Helium'], 2],
-  ['How many players are on a soccer team on the field?', ['9', '10', '11', '12'], 2],
-  ['What is the largest country by area?', ['Canada', 'China', 'USA', 'Russia'], 3],
-  ['Which instrument has black and white keys?', ['Guitar', 'Piano', 'Drum', 'Flute'], 1],
-  ['What is the hardest natural substance?', ['Gold', 'Iron', 'Diamond', 'Quartz'], 2],
-];
-const BANK_POOL = BANK.map(([q, c, a]) => ({ q, c, a }));
+const packPool = key => (PACKS[key] ?? PACKS.general).qs.map(([q, c, a]) => {
+  const right = c[a];
+  const choices = shuffle(c);
+  return { q, c: choices, a: choices.indexOf(right) };
+});
 const ROUNDS = 8;
 const POINTS = 100;
 
@@ -53,10 +36,11 @@ export const trivia = {
   id: 'trivia',
   name: 'Trivia',
   emoji: '🧠',
+  options: [{ key: 'pack', label: 'Questions', choices: Object.entries(PACKS).map(([k, p]) => [k, p.name]) }],
 
   // opts.pool: custom questions from the host (see parseCustom); falls back to the built-in bank.
   init(env, opts) {
-    const pool = opts?.pool?.length ? opts.pool : BANK_POOL;
+    const pool = opts?.pool?.length ? opts.pool : packPool(opts?.pack);
     return { phase: 'question', i: 0, qs: shuffle(pool).slice(0, ROUNDS), answers: {}, scores: {}, pool };
   },
 

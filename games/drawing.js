@@ -1,11 +1,19 @@
 import { fresh, memo, confetti, sfx } from './fx.js';
 
-const WORDS = [
-  'cat', 'dog', 'house', 'tree', 'sun', 'moon', 'star', 'car', 'boat', 'fish', 'bird', 'flower', 'apple', 'banana',
-  'pizza', 'cake', 'guitar', 'rocket', 'robot', 'snowman', 'umbrella', 'bicycle', 'train', 'airplane', 'elephant',
-  'giraffe', 'butterfly', 'castle', 'rainbow', 'clock', 'key', 'book', 'shoe', 'hat', 'glasses', 'ice cream',
-  'mountain', 'cloud', 'spider', 'candle',
-];
+const LEVELS = {
+  easy: ['cat', 'dog', 'sun', 'moon', 'star', 'tree', 'house', 'fish', 'bird', 'flower', 'apple', 'ball', 'car', 'boat', 'hat', 'shoe',
+    'cup', 'book', 'cake', 'egg', 'heart', 'balloon', 'kite', 'duck', 'pig', 'cow', 'bed', 'door', 'clock', 'spoon', 'banana', 'pizza',
+    'cloud', 'rain', 'bus', 'key', 'bell', 'candle', 'ice cream', 'snake'],
+  medium: ['guitar', 'rocket', 'robot', 'snowman', 'umbrella', 'bicycle', 'train', 'airplane', 'elephant', 'giraffe', 'butterfly', 'castle',
+    'rainbow', 'glasses', 'mountain', 'spider', 'camera', 'piano', 'dragon', 'pirate', 'volcano', 'lighthouse', 'scissors', 'backpack',
+    'hamburger', 'snail', 'penguin', 'crown', 'ladder', 'tent', 'kangaroo', 'dinosaur', 'mermaid', 'windmill', 'helicopter', 'tractor',
+    'cactus', 'bridge', 'jeepney', 'parol'],
+  hard: ['astronaut', 'earthquake', 'fireworks', 'birthday party', 'traffic jam', 'library', 'waterfall', 'tornado', 'magician', 'skateboard',
+    'treasure map', 'haunted house', 'time machine', 'hot air balloon', 'sunrise', 'campfire', 'carnival', 'detective', 'superhero',
+    'sandcastle', 'jellyfish', 'telescope', 'parachute', 'wedding', 'thunderstorm', 'fishing', 'farmer', 'brushing teeth', 'sleeping',
+    'cooking', 'karaoke', 'basketball game', 'sari-sari store', 'flood', 'typhoon', 'family dinner'],
+};
+LEVELS.mixed = [...LEVELS.easy, ...LEVELS.medium, ...LEVELS.hard];
 const DRAW_MS = 75000;
 const REVEAL_MS = 6000;
 const COLORS = ['#000000', '#e03131', '#1971c2', '#2f9e44', '#f08c00', '#9c36b5', '#ffffff'];
@@ -19,8 +27,9 @@ const norm = t => String(t ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
 function startTurn(s, env) {
   const round = s.round + 1;
   if (round > s.order.length) return { ...s, phase: 'end', until: null };
-  const pool = WORDS.filter(w => !s.used.includes(w));
-  const word = pool[Math.floor(Math.random() * pool.length)] ?? WORDS[0];
+  const words = LEVELS[s.level] ?? LEVELS.mixed;
+  const pool = words.filter(w => !s.used.includes(w));
+  const word = pool[Math.floor(Math.random() * pool.length)] ?? words[0];
   return {
     ...s, phase: 'draw', round, drawer: s.order[round - 1], word, used: [...s.used, word],
     strokes: [], guesses: [], correct: [], until: env.now + DRAW_MS,
@@ -43,14 +52,16 @@ export const drawing = {
   id: 'drawing',
   name: 'Draw & Guess',
   emoji: '🎨',
+  options: [{ key: 'level', label: 'Words', choices: [['easy', 'Easy (kids)'], ['medium', 'Medium'], ['hard', 'Hard'], ['mixed', 'Mixed']] }],
 
-  init(env) {
-    return startTurn({ phase: 'draw', order: env.players.map(p => p.id), round: 0, used: [], scores: {} }, env);
+  init(env, opts) {
+    const level = opts?.level ?? 'mixed';
+    return startTurn({ phase: 'draw', order: env.players.map(p => p.id), round: 0, used: [], scores: {}, level }, env);
   },
 
   reduce(s, a, env) {
     const isHost = a.from === env.hostId;
-    if (a.type === 'reset' && isHost) return this.init(env);
+    if (a.type === 'reset' && isHost) return this.init(env, { level: s.level });
     const drawing = s.phase === 'draw';
 
     if (a.type === 'stroke' && drawing && a.from === s.drawer && s.strokes.length < 400) {
