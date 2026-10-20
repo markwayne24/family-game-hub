@@ -20,11 +20,23 @@ const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', r
 /* ---------- entry ---------- */
 
 async function start() {
-  const room = new URLSearchParams(location.search).get('room');
+  const params = new URLSearchParams(location.search);
+  const room = params.get('room');
   if (room) return joinScreen(room.trim().toUpperCase());
   const { data: { session } } = await sb.auth.getSession();
-  if (session && !session.user.is_anonymous) return hostHome(session.user);
+  if (session && !session.user.is_anonymous) {
+    const hosting = params.get('host');
+    return hosting ? resumeHost(session.user, hosting.trim().toUpperCase()) : hostHome(session.user);
+  }
   loginScreen();
+}
+
+// A refreshed host tab goes back to its own room, with the game state it had saved.
+async function resumeHost(user, code) {
+  S.me = user.id;
+  const { data } = await sb.from('rooms').select('code').eq('code', code).maybeSingle();
+  if (!data) { history.replaceState(null, '', location.pathname); return hostHome(user); }
+  enterRoom(code, store.get('hubName') || 'Host', true);
 }
 
 function loginScreen(msg = '') {
@@ -93,6 +105,11 @@ async function joinScreen(code, msg = '') {
     app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
     return;
   }
+  const last = JSON.parse(store.get('hubLast') || 'null');
+  if (last?.code === code && last.name) {
+    const { data: { user } } = await sb.auth.getUser();
+    if (user) { S.me = user.id; return enterRoom(code, last.name, false); }
+  }
   app.innerHTML = `
     <h1>🎲 Join room ${esc(code)}</h1>
     <form class="card" id="f">
@@ -106,6 +123,7 @@ async function joinScreen(code, msg = '') {
     store.set('hubName', name);
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return joinScreen(code, 'Could not sign in as a guest. Try again.');
+    store.set('hubLast', JSON.stringify({ code, name }));
     S.me = user.id;
     enterRoom(code, name, false);
   };
@@ -128,6 +146,7 @@ function pushState() {
   const state = g ? (g.view ? g.view(S.raw) : S.raw) : null;
   const priv = g?.priv ? g.priv(S.raw) : undefined;
   S.channel.send({ type: 'broadcast', event: 'state', payload: { game: S.game, state, priv } });
+  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw }));
   // Games with a clock (drawing turns, memory flips) ask the host to fire a 'timeout' action when it runs out.
   clearTimeout(S.timer);
   const at = g?.deadline?.(S.raw);
@@ -152,6 +171,12 @@ function hostHandle(a) {
 function enterRoom(code, name, isHost) {
   S.code = code;
   S.isHost = isHost;
+  if (isHost) {
+    try {
+      const saved = JSON.parse(store.get(`hubState:${code}`) || 'null');
+      if (saved && GAMES[saved.game]) { S.game = saved.game; S.raw = saved.raw; }
+    } catch { /* start fresh */ }
+  }
   S.channel = sb.channel(`room:${code}`, { config: { broadcast: { self: true }, presence: { key: S.me } } });
   S.channel
     .on('broadcast', { event: 'action' }, ({ payload }) => { if (S.isHost) hostHandle(payload); })
