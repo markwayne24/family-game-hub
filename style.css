@@ -137,3 +137,20 @@ button.danger{color:var(--bad);border-color:var(--bad)}
 .key{padding:10px 0;text-transform:uppercase}
 .key.hit{background:var(--ok)}
 .key.miss{background:var(--bad)}
+
+/* Word Race */
+@keyframes tileFlip{0%{transform:rotateX(0)}50%{transform:rotateX(90deg)}100%{transform:rotateX(0)}}
+.wr{display:grid;gap:6px;max-width:300px;margin:12px auto}
+.wr-row{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.wr-tile{aspect-ratio:1;display:grid;place-items:center;border:2px solid var(--line);border-radius:8px;font-size:1.5rem;font-weight:800;text-transform:uppercase}
+.wr-tile.g{background:var(--ok);border-color:var(--ok);color:#fff}
+.wr-tile.y{background:#f08c00;border-color:#f08c00;color:#fff}
+.wr-tile.x{background:var(--mute);border-color:var(--mute);color:#fff}
+.wr-tile.flip{animation:tileFlip .5s ease backwards;animation-delay:calc(var(--i) * .12s)}
+input.bad{border-color:var(--bad);animation:shake .4s ease}
+.wr-others{display:flex;flex-wrap:wrap;gap:12px;margin:8px 0}
+.wr-other{font-size:.85rem}
+.wr-mini{display:grid;gap:2px;margin-top:2px}
+.wr-mini div{display:flex;gap:2px}
+.wr-mini i{width:12px;height:12px;border-radius:3px;background:var(--line)}
+.wr-mini i.g{background:var(--ok)}.wr-mini i.y{background:#f08c00}.wr-mini i.x{background:var(--mute)}
