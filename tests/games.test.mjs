@@ -156,4 +156,99 @@ assert.equal(ch.view(s).prompt, s.prompt); // revealed after the turn
 s = ch.reduce(s,A('h','timeout'),env({now:s.until+50})); assert.equal(s.actor,'a'); assert.equal(s.phase,'act');
 s = ch.reduce(s,A('h','timeout'),env({now:s.until+50})); s = ch.reduce(s,A('h','timeout'),env({now:s.until+50}));
 s = ch.reduce(s,A('h','timeout'),env({now:s.until+50})); s = ch.reduce(s,A('h','timeout'),env({now:s.until+50})); assert.equal(s.phase,'end');
+
+
+// ---- bingo
+import { cardFor, winCells, PATTERNS, letterOf } from '../games/bingo.js';
+const bg = GAMES.bingo;
+{ // cards: valid, deterministic, per-seed
+  const c = cardFor('a', 0), c2 = cardFor('a', 0), c3 = cardFor('a', 5);
+  assert.deepEqual(c, c2); assert.notDeepEqual(c, c3);
+  assert.equal(c[12], 0); assert.equal(new Set(c).size, 25);
+  for (let i = 0; i < 25; i++) if (i !== 12) { const col = i % 5; assert.ok(c[i] >= col * 15 + 1 && c[i] <= col * 15 + 15, `column range ${i}`); }
+  assert.equal(letterOf(1), 'B'); assert.equal(letterOf(16), 'I'); assert.equal(letterOf(31), 'N'); assert.equal(letterOf(46), 'G'); assert.equal(letterOf(75), 'O');
+}
+{ // lobby: shuffle is allowed before the game starts, host controls the pattern
+  let b = bg.init(env(), {}); assert.equal(b.phase, 'lobby'); assert.equal(b.pattern, 'line');
+  assert.equal(bg.init(env(), { pattern: 'blackout' }).pattern, 'blackout');
+  assert.equal(bg.init(env(), { pattern: 'nonsense' }).pattern, 'line');
+  const before = cardFor('a', b.seeds.a ?? 0);
+  b = bg.reduce(b, A('a', 'shuffle'), env()); assert.notDeepEqual(cardFor('a', b.seeds.a), before);
+  assert.equal(bg.reduce(b, A('a', 'pattern', { id: 'x' }), env()).pattern, 'line'); // players can't pick the pattern
+  assert.equal(bg.reduce(b, A('h', 'pattern', { id: 'x' }), env()).pattern, 'x');
+  assert.equal(bg.reduce(b, A('h', 'pattern', { id: 'bogus' }), env()).pattern, 'line');
+  assert.equal(bg.reduce(b, A('a', 'start'), env()).phase, 'lobby'); // only host starts
+  assert.equal(bg.reduce(b, A('a', 'call'), env()).called.length, 0); // no calls before start
+  // many shuffles by many players: every card stays unique
+  const many = Array.from({ length: 30 }, (_, i) => ({ id: 'p' + i, name: 'P' + i }));
+  const e30 = { players: many, hostId: 'p0', now: 0 };
+  let m = bg.init(e30, {});
+  for (let r = 0; r < 3; r++) for (const p of many) m = bg.reduce(m, A(p.id, 'shuffle'), e30);
+  m = bg.reduce(m, A('p0', 'start'), e30);
+  assert.equal(new Set(many.map(p => cardFor(p.id, m.seeds[p.id]).join(','))).size, 30, 'all 30 cards unique');
+}
+{ // start locks cards; nobody can shuffle mid-game; host calls numbers
+  let b = bg.reduce(bg.init(env(), {}), A('h', 'start'), env());
+  assert.equal(b.phase, 'play');
+  const seedsBefore = JSON.stringify(b.seeds);
+  assert.equal(JSON.stringify(bg.reduce(b, A('a', 'shuffle'), env()).seeds), seedsBefore);
+  assert.equal(bg.reduce(b, A('a', 'call'), env()).called.length, 0); // only host calls
+  assert.equal(bg.reduce(b, A('h', 'pattern', { id: 'x' }), env()).pattern, b.pattern); // pattern locked
+  b = bg.reduce(b, A('h', 'call'), env()); assert.equal(b.called.length, 1); assert.equal(b.last, b.called[0]);
+  assert.equal(bg.reduce(b, A('a', 'claim'), env()).winners.length, 0); // the old BINGO button no longer does anything
+}
+{ // auto-win: the call that completes a card wins immediately, with no claim button
+  let b = bg.reduce(bg.init(env(), { pattern: 'line' }), A('h', 'start'), env());
+  const card = cardFor('a', b.seeds.a);
+  const topRow = [0, 1, 2, 3, 4].map(i => card[i]);
+  const needed = topRow[4];
+  const all = Array.from({ length: 75 }, (_, i) => i + 1);
+  const called = topRow.slice(0, 4);
+  const callForced = (state, n) => { // make the random draw land on `n`
+    const left = all.filter(x => !state.called.includes(x));
+    const orig = Math.random;
+    Math.random = () => (left.indexOf(n) + 0.5) / left.length;
+    try { return bg.reduce(state, A('h', 'call'), env()); } finally { Math.random = orig; }
+  };
+  const one = callForced({ ...b, called }, needed);
+  assert.equal(one.last, needed); assert.equal(one.phase, 'over');
+  const expected = P.filter(p => winCells(cardFor(p.id, b.seeds[p.id]), one.called, 'line')).map(p => p.id).sort();
+  assert.deepEqual(one.winners.map(w => w.id).sort(), expected); // exactly the players whose cards complete
+  assert.ok(expected.includes('a'));
+  assert.ok(one.winners.find(w => w.id === 'a').cells.includes(0)); // winning cells reported for highlighting
+  // one number short is not a win
+  const miss = callForced({ ...b, called: topRow.slice(0, 3) }, needed);
+  assert.equal(miss.phase, miss.winners.length ? 'over' : 'play');
+  assert.ok(!miss.winners.some(w => w.id === 'a'));
+  assert.equal(bg.reduce(one, A('h', 'call'), env()).called.length, one.called.length); // finished: no more calls
+  // play again returns to the lobby with the same cards and pattern
+  const again = bg.reduce(one, A('h', 'reset'), env());
+  assert.equal(again.phase, 'lobby'); assert.equal(again.called.length, 0); assert.equal(again.winners.length, 0);
+  assert.deepEqual(again.seeds, one.seeds); assert.equal(again.pattern, one.pattern);
+  assert.equal(bg.reduce(one, A('a', 'reset'), env()).phase, 'over'); // only host resets
+  // blackout needs the whole card
+  const bo = bg.reduce(bg.init(env(), { pattern: 'blackout' }), A('h', 'start'), env());
+  const cardNums = cardFor('a', bo.seeds.a).filter(Boolean);
+  const almost = callForced({ ...bo, called: cardNums.slice(0, 23) }, cardNums[23]);
+  assert.ok(almost.winners.some(w => w.id === 'a'));
+  assert.ok(!callForced({ ...bo, called: cardNums.slice(0, 22) }, cardNums[22]).winners.some(w => w.id === 'a'));
+}
+{ // patterns: complete only when every cell is called; free space counts
+  const card = cardFor('z', 3);
+  for (const [k, p] of Object.entries(PATTERNS)) {
+    const cells = p.cells ?? [0, 1, 2, 3, 4];
+    const nums = cells.map(i => card[i]).filter(Boolean);
+    assert.deepEqual(winCells(card, nums, k)?.slice().sort((x, y) => x - y), (p.cells ?? cells).slice().sort((x, y) => x - y), `${k} completes`);
+    if (nums.length) assert.equal(winCells(card, nums.slice(1), k), null, `${k} needs every cell`);
+  }
+  assert.equal(PATTERNS.blackout.cells.length, 25); assert.equal(PATTERNS.corners.cells.length, 4);
+  assert.equal(PATTERNS.l.cells.length, 9); assert.equal(PATTERNS.frame.cells.length, 16);
+  assert.equal(winCells(card, [], 'blackout'), null);
+  // two complete lines at once are both reported (union)
+  const two = [...[0, 1, 2, 3, 4].map(i => card[i]), ...[5, 6, 7, 8, 9].map(i => card[i])];
+  assert.deepEqual(winCells(card, two, 'line').sort((a, b) => a - b), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
+  // diagonal and column count as lines
+  assert.ok(winCells(card, [0, 6, 18, 24].map(i => card[i]), 'line'));
+  assert.ok(winCells(card, [2, 7, 17, 22].map(i => card[i]), 'line'));
+}
 console.log('all game tests passed');
