@@ -336,4 +336,87 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   const two = [...[0, 1, 2, 3, 4], ...[5, 6, 7, 8, 9]].map(i => card[i]);
   assert.deepEqual(winCells(card, two, 'line').sort((x, y) => x - y), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]);
 }
+
+
+// ---- bingo: ending games and history
+{
+  // a win is recorded: game number, winner names, pattern, how many numbers were called
+  let b = bg.reduce(bg.init(env(), { pattern: 'line' }), A('h', 'start'), env());
+  assert.deepEqual(b.history, []);
+  const top = row0(cardOf(b, 'a'));
+  const won = forced({ ...b, called: top.slice(0, 4) }, top[4], 'call');
+  assert.equal(won.phase, 'over'); assert.equal(won.history.length, 1);
+  const h1 = won.history[0];
+  assert.equal(h1.n, 1); assert.equal(h1.pattern, 'Any line'); assert.equal(h1.called, 5); assert.equal(h1.ended, undefined);
+  assert.ok(h1.winners.some(w => w.id === 'a' && w.name === 'Ann'), 'winner name is stored');
+  assert.deepEqual(h1.winners.map(w => w.id).sort(), won.winners.map(w => w.id).sort());
+  assert.ok(h1.at >= 0 && h1.mode === 'auto');
+
+  // new game keeps the history and the settings; the second win becomes game #2
+  const lobby = bg.reduce(won, A('h', 'reset'), env());
+  assert.equal(lobby.phase, 'lobby'); assert.equal(lobby.history.length, 1); assert.equal(lobby.ended, false);
+  assert.equal(bg.reduce(won, A('a', 'reset'), env()).phase, 'over'); // only the host
+  let g2 = bg.reduce(lobby, A('h', 'start'), env());
+  const top2 = row0(cardOf(g2, 'b'));
+  const won2 = forced({ ...g2, called: top2.slice(0, 4) }, top2[4], 'call');
+  assert.equal(won2.history.length, 2); assert.equal(won2.history[1].n, 2); assert.deepEqual(won2.history[0], h1); // earlier entry untouched
+
+  // ending a game early counts as played with no winner
+  let play = bg.reduce(bg.init(env(), { pattern: 'x' }), A('h', 'start'), env());
+  play = bg.reduce(bg.reduce(play, A('h', 'call'), env()), A('h', 'call'), env());
+  assert.equal(bg.reduce(play, A('a', 'end'), env()).phase, 'play'); // only the host can end it
+  assert.equal(bg.reduce(bg.init(env(), {}), A('h', 'end'), env()).phase, 'lobby'); // nothing to end in the lobby
+  const ended = bg.reduce(play, A('h', 'end'), env());
+  assert.equal(ended.phase, 'over'); assert.equal(ended.ended, true); assert.deepEqual(ended.winners, []);
+  assert.equal(ended.history.length, 1); assert.deepEqual(ended.history[0].winners, []); assert.equal(ended.history[0].called, 2); assert.equal(ended.history[0].pattern, 'X');
+  assert.equal(bg.reduce(ended, A('h', 'call'), env()).called.length, 2); // finished: no more numbers
+  assert.equal(bg.reduce(bg.reduce(ended, A('h', 'end'), env()), A('h', 'end'), env()).history.length, 1); // can't end twice
+  assert.equal(bg.reduce(ended, A('h', 'reset'), env()).ended, false);
+
+  // ending while a private roll is pending discards the number
+  let man = bg.reduce(bg.init(env(), { mode: 'manual' }), A('h', 'start'), env());
+  man = bg.reduce(man, A('h', 'roll'), env()); assert.ok(man.pending);
+  const manEnded = bg.reduce(man, A('h', 'end'), env());
+  assert.equal(manEnded.pending, null); assert.equal(manEnded.called.length, 0); assert.equal(bg.view(manEnded).hasPending, false);
+
+  // abandoning mid-game (New game) is NOT counted
+  const abandoned = bg.reduce(play, A('h', 'reset'), env());
+  assert.equal(abandoned.phase, 'lobby'); assert.equal(abandoned.history.length, 0); assert.equal(abandoned.called.length, 0);
+  assert.equal(bg.reduce(bg.reduce(won, A('h', 'reset'), env()), A('h', 'start'), env()).history.length, 1);
+  assert.equal(bg.reduce(bg.reduce(bg.reduce(won, A('h', 'reset'), env()), A('h', 'start'), env()), A('h', 'reset'), env()).history.length, 1);
+
+  // history survives leaving Bingo for another game (the room remembers it) and is restored on return
+  const memory = bg.remember(won2);
+  assert.equal(memory.history.length, 2);
+  const back = bg.init(env(), { pattern: 'line', memory });
+  assert.equal(back.history.length, 2); assert.equal(back.phase, 'lobby'); assert.equal(back.called.length, 0);
+  assert.equal(bg.init(env(), {}).history.length, 0);
+  assert.deepEqual(bg.remember({ phase: 'play' }), { history: [] }); // old saved game without history
+
+  // clear history: host only
+  assert.equal(bg.reduce(won2, A('a', 'clearhistory'), env()).history.length, 2);
+  assert.equal(bg.reduce(won2, A('h', 'clearhistory'), env()).history.length, 0);
+
+  // the public view carries the history to everyone, and the winner of a multi-card player knows which card
+  assert.equal(bg.view(won2).history.length, 2);
+  let multi = bg.reduce(bg.init(env(), { pattern: 'line' }), A('h', 'cards', { id: 'a', count: 2 }), env());
+  multi = bg.reduce(multi, A('h', 'start'), env());
+  const second = row0(cardOf(multi, 'a', 1));
+  const mw = forced({ ...multi, called: second.slice(0, 4) }, second[4], 'call');
+  const entry = mw.history[0].winners.find(w => w.id === 'a');
+  assert.equal(entry.k, 1); assert.equal(entry.multi, true);
+  assert.equal(mw.history[0].winners.find(w => w.id !== 'a')?.multi ?? false, false);
+
+  // custom patterns are named by how many squares they use
+  let cu = bg.reduce(bg.init(env(), {}), A('h', 'custom', { cells: [0, 6, 24] }), env());
+  cu = bg.reduce(cu, A('h', 'start'), env());
+  const ca = cardOf(cu, 'a');
+  const cuWon = forced({ ...cu, called: [ca[0], ca[6]] }, ca[24], 'call');
+  assert.equal(cuWon.history[0].pattern, 'Custom (3 squares)');
+
+  // old saved games without history/ended still work end to end
+  const oldGame = { phase: 'play', pattern: 'line', seeds: {}, called: [], last: null, winners: [] };
+  assert.equal(bg.reduce(oldGame, A('h', 'end'), env()).history.length, 1);
+  assert.equal(bg.view(oldGame).history.length, 0);
+}
 console.log('all game tests passed');
