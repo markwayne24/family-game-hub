@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
+import { HOWTO } from './games/howto.js';
 import { GAMES } from './games/index.js';
 import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
@@ -283,6 +284,7 @@ function buildShell() {
     </div>
     <div class="metarow"><div class="whoami" id="whoami"></div><div class="total" id="total" aria-live="polite"></div></div>
     <div id="banner"></div>
+    <div id="howto"></div>
     <div class="card" id="stage"></div>
     <div class="row">
       <button class="ghost" id="lobby">Back to game list</button>
@@ -554,10 +556,17 @@ function renderPlayers(ps) {
   });
 }
 
+const howtoHtml = x => {
+  const h = HOWTO[x.id];
+  if (!h) return '';
+  return `<p><b>🎯 Goal:</b> ${esc(h.goal)}</p><ol>${h.steps.map(l => `<li>${esc(l)}</li>`).join('')}</ol>${(h.tips ?? []).map(l => `<p class="muted">💡 ${esc(l)}</p>`).join('')}`;
+};
+
 function pickerHtml() {
   return `<h2>Pick a game</h2>
     <div class="games">${Object.values(GAMES).map(x => `<div class="gcard"><button data-g="${x.id}">${x.emoji}<br>${esc(x.name)}</button>${(x.options ?? []).map(o =>
       `<label class="opt">${esc(o.label)}<select data-opt="${x.id}.${o.key}">${o.choices.map(([v, l]) => `<option value="${esc(v)}">${esc(l)}</option>`).join('')}</select></label>`).join('')}</div>`).join('')}</div>
+    <details class="howto"><summary>❓ How do the games work?</summary>${Object.values(GAMES).map(x => `<details><summary>${x.emoji} ${esc(x.name)}</summary>${howtoHtml(x)}</details>`).join('')}</details>
     <details><summary>Custom trivia questions</summary>
       <p class="muted">One per line: Question | Right answer | Wrong 1 | Wrong 2 | Wrong 3. Leave empty to use the built-in questions.</p>
       <textarea id="custom" rows="6" placeholder="Where did we go on vacation in 2019? | Cebu | Bohol | Davao | Manila"></textarea>
@@ -625,6 +634,18 @@ function render() {
     } else if (view === 'wait') {
       stage.innerHTML = '<h2>Waiting for the host to pick a game…</h2><p class="muted">Hang tight, this screen updates by itself.</p>';
     }
+  }
+  // Instructions for the current game, open the first time this device sees that game.
+  const howto = app.querySelector('#howto');
+  const hid = g && S.state ? g.id : '';
+  if (howto.dataset.id !== hid) {
+    howto.dataset.id = hid;
+    const seen = JSON.parse(store.get('hubHow') || '{}');
+    howto.innerHTML = hid ? `<details class="howto card"${seen[hid] ? '' : ' open'}><summary>❓ How to play ${esc(g.name)}</summary>${howtoHtml(g)}</details>` : '';
+    howto.querySelector('details')?.addEventListener('toggle', () => {
+      const m = JSON.parse(store.get('hubHow') || '{}');
+      if (!howto.querySelector('details').open) { m[hid] = 1; store.set('hubHow', JSON.stringify(m)); }
+    });
   }
   stage.classList.toggle('spectating', spectator);
   if (g && S.state) {

@@ -386,3 +386,10 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww-ctl{margin-top:14px;position:sticky;bottom:8px}
 .ww-ctl button{box-shadow:0 2px 10px #0003}
 .ww .chip.pick{min-width:44px;justify-content:center}
+
+/* How to play */
+.howto summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+.howto.card{padding:4px 16px}
+.howto ol{padding-left:1.2em;margin:6px 0}
+.howto li{margin:6px 0}
+.howto details{margin:4px 0 4px 8px}

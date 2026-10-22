@@ -839,4 +839,6 @@ import { supported, makeKeys, seal, open as openSealed } from '../games/secure.j
   assert.equal(await openSealed(ann.privateKey, host.publicJwk, await seal(host.privateKey, ann.publicJwk, 'just a word')), 'just a word');
   assert.equal(await openSealed(ann.privateKey, host.publicJwk, await seal(host.privateKey, ann.publicJwk, null)), null);
 }
+import { HOWTO } from '../games/howto.js';
+for (const id of Object.keys(GAMES)) { const h = HOWTO[id]; assert.ok(h && h.goal && h.steps?.length >= 2, `${id} has instructions`); }
 console.log('all game tests passed');
