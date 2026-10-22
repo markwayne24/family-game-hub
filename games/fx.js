@@ -1,7 +1,7 @@
 // Small animation helpers shared by the games. Screens re-render on every update, so animations
 // must be triggered only when something actually changed, not on every render.
 
-const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
+export const reduceMotion = () => matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // True the first time `value` is seen for `name` on this element, so an animation plays once.
 export function fresh(el, name, value) {
@@ -89,6 +89,8 @@ function tone(freq, dur, { type = 'sine', gain = 0.12, delay = 0, to = null } = 
 
 const SOUNDS = {
   pop: () => tone(420, 0.12, { to: 760, type: 'triangle' }),
+  tick: () => tone(1250, 0.03, { type: 'square', gain: 0.035 }),
+  thud: () => tone(130, 0.28, { to: 45, gain: 0.22 }),
   blip: () => tone(660, 0.09, { type: 'triangle', gain: 0.08 }),
   flip: () => tone(380, 0.07, { type: 'triangle', to: 520 }),
   ball: () => { tone(260, 0.1, { type: 'square', gain: 0.05 }); tone(390, 0.12, { type: 'square', gain: 0.05, delay: 0.08 }); },

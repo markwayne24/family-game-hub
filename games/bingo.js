@@ -1,4 +1,4 @@
-import { fresh, memo, confetti, sfx } from './fx.js';
+import { fresh, memo, confetti, sfx, reduceMotion } from './fx.js';
 
 export const LETTERS = ['B', 'I', 'N', 'G', 'O'];
 export const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
@@ -212,5 +212,68 @@ function rerenderAfter(el, game) {
   el._rt = setTimeout(() => { if (el.isConnected && el._latest) game.render(el, el._latest.s, el._latest.ui); }, BALL_MS + 30);
 }
 
-// Placeholder until the animated draw lands in the next change.
-function showBall() {}
+/* ---------- the ball draw ---------- */
+// A full-screen overlay: the ball drops in and bounces, "rolls" through random numbers and colours
+// like a slot machine, then lands on the real number with a ring and spark burst before flying off.
+
+let stopBall = null;
+
+function showBall(n) {
+  stopBall?.();
+  const letter = letterOf(n);
+  const palette = Object.values(COLORS);
+  const o = document.createElement('div');
+  o.className = 'bb-overlay';
+  o.style.setProperty('--c', COLORS[letter]);
+  o.innerHTML = `
+    <div class="bb-rain">${Array.from({ length: 14 }, () => {
+      const size = 10 + Math.random() * 16;
+      return `<i style="left:${Math.random() * 100}%;width:${size}px;height:${size}px;background:${palette[Math.floor(Math.random() * 5)]};animation-delay:${(Math.random() * 0.45).toFixed(2)}s"></i>`;
+    }).join('')}</div>
+    <div class="bb-stage">
+      <div class="bb-ring"></div>
+      <div class="bb-sparks">${Array.from({ length: 18 }, (_, i) => `<i style="--a:${i * 20}deg;--d:${120 + Math.random() * 70}px"></i>`).join('')}</div>
+      <div class="bb-ball"><div class="bb-disc"><span class="bb-letter">${letter}</span><span class="bb-num">${n}</span></div></div>
+    </div>`;
+  document.body.append(o);
+
+  if (reduceMotion()) {
+    sfx('ding');
+    const t = setTimeout(() => o.remove(), 1800);
+    stopBall = () => { clearTimeout(t); o.remove(); };
+    return;
+  }
+
+  const ball = o.querySelector('.bb-ball');
+  const numEl = o.querySelector('.bb-num');
+  const letterEl = o.querySelector('.bb-letter');
+  numEl.textContent = '?';
+  letterEl.textContent = '';
+  const timers = [];
+  let roll = null;
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  at(560, () => sfx('thud'));
+  at(750, () => {
+    ball.classList.add('rolling');
+    let k = 0;
+    roll = setInterval(() => {
+      const r = 1 + Math.floor(Math.random() * 75);
+      numEl.textContent = r;
+      letterEl.textContent = letterOf(r);
+      o.style.setProperty('--c', COLORS[letterOf(r)]);
+      if (k++ % 2 === 0) sfx('tick');
+    }, 70);
+  });
+  at(1700, () => {
+    clearInterval(roll);
+    numEl.textContent = n;
+    letterEl.textContent = letter;
+    o.style.setProperty('--c', COLORS[letter]);
+    ball.classList.remove('rolling');
+    o.classList.add('landed');
+    sfx('ding');
+  });
+  at(2750, () => o.classList.add('leaving'));
+  at(BALL_MS + 50, () => { o.remove(); stopBall = null; });
+  stopBall = () => { timers.forEach(clearTimeout); clearInterval(roll); o.remove(); stopBall = null; };
+}

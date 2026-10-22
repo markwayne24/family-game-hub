@@ -162,7 +162,8 @@ input.bad{border-color:var(--bad);animation:shake .4s ease}
 .bingo div.target{outline:2px dashed var(--accent);outline-offset:-3px}
 .bingo div.win{background:#f59f00;color:#1d1b2e;animation:winGlow 1s ease-in-out infinite}
 .bingo div.shuf{animation:cardShuf .5s ease backwards;animation-delay:calc(var(--i) * 18ms)}
-.bingo.mini{max-width:220px;gap:3px;font-size:.75rem}
+.bingo.mini{max-width:none;width:100%;gap:4px;font-size:.85rem;margin:6px 0}
+.wcard{width:min(100%,260px)}
 .bingo.mini div{border-radius:6px}
 .pv{display:inline-grid;grid-template-columns:repeat(5,8px);gap:1px}
 .pv i{width:8px;height:8px;background:var(--line);border-radius:2px}
@@ -184,3 +185,52 @@ input.bad{border-color:var(--bad);animation:shake .4s ease}
 .nb-row span{text-align:center;background:var(--line);color:var(--mute);border-radius:3px;line-height:1.7}
 .nb-row span.on{background:var(--c);color:#fff}
 .nb-row span.last{outline:2px solid var(--ink);animation:pulse .8s ease-in-out infinite}
+
+/* ---------- Bingo ball draw ---------- */
+@keyframes bbIn{from{opacity:0}to{opacity:1}}
+@keyframes bbOut{from{opacity:1}to{opacity:0}}
+@keyframes bbDrop{
+  0%{transform:translateY(-110vh) rotate(-540deg) scale(.6)}
+  58%{transform:translateY(0) rotate(0) scale(1.08,.9)}
+  72%{transform:translateY(-9%) scale(.96,1.05)}
+  86%{transform:translateY(0) scale(1.03,.97)}
+  100%{transform:none}}
+@keyframes bbShake{
+  0%{transform:translate(0,0) rotate(0)}25%{transform:translate(-5px,3px) rotate(-3deg)}
+  50%{transform:translate(4px,-4px) rotate(3deg)}75%{transform:translate(-3px,-3px) rotate(-2deg)}100%{transform:translate(0,0) rotate(0)}}
+@keyframes bbLand{0%{transform:scale(.85)}50%{transform:scale(1.18)}100%{transform:scale(1)}}
+@keyframes bbHold{0%,100%{transform:scale(1)}50%{transform:scale(1.045)}}
+@keyframes bbExit{to{transform:translateY(-55vh) scale(.25);opacity:0}}
+@keyframes bbRing{0%{transform:scale(1);opacity:.9}100%{transform:scale(2.3);opacity:0}}
+@keyframes bbSpark{
+  from{transform:rotate(var(--a)) translateX(70px) scale(1);opacity:1}
+  to{transform:rotate(var(--a)) translateX(var(--d)) scale(.1);opacity:0}}
+@keyframes bbRain{to{transform:translateY(115vh) rotate(540deg)}}
+
+.bb-overlay{position:fixed;inset:0;z-index:60;display:grid;place-items:center;pointer-events:none;overflow:hidden;
+  background:radial-gradient(circle at 50% 45%,rgba(20,18,31,.72),rgba(20,18,31,.28) 78%);animation:bbIn .25s ease both}
+.bb-overlay.leaving{animation:bbOut .5s ease forwards}
+.bb-rain{position:absolute;inset:0}
+.bb-rain i{position:absolute;top:-40px;border-radius:50%;opacity:.85;animation:bbRain 1.1s ease-in forwards}
+.bb-stage{position:relative;width:min(60vw,260px);aspect-ratio:1;display:grid;place-items:center}
+.bb-ball{position:relative;width:100%;aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 30% 24%,rgba(255,255,255,.7),rgba(255,255,255,0) 36%),
+             radial-gradient(circle at 72% 82%,rgba(0,0,0,.4),rgba(0,0,0,0) 58%),var(--c);
+  box-shadow:0 22px 50px rgba(0,0,0,.5),inset 0 -12px 26px rgba(0,0,0,.3);
+  animation:bbDrop .78s cubic-bezier(.25,.6,.4,1) both}
+.bb-ball.rolling{animation:bbShake .14s linear infinite}
+.bb-overlay.landed .bb-ball{animation:bbLand .7s cubic-bezier(.2,1.5,.4,1) both,bbHold 1.2s ease-in-out .7s infinite;
+  box-shadow:0 22px 50px rgba(0,0,0,.5),inset 0 -12px 26px rgba(0,0,0,.3),0 0 70px var(--c)}
+.bb-overlay.leaving .bb-ball{animation:bbExit .5s ease-in forwards}
+.bb-disc{position:absolute;inset:21%;border-radius:50%;background:#fff;color:#1d1b2e;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;box-shadow:inset 0 3px 9px rgba(0,0,0,.28)}
+.bb-letter{font-size:clamp(1.2rem,6vw,1.9rem);font-weight:900;line-height:1;min-height:1em;color:var(--c)}
+.bb-num{font-size:clamp(2.6rem,15vw,4.4rem);font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.bb-ball.rolling .bb-num{filter:blur(1.3px)}
+.bb-ring{position:absolute;inset:0;border-radius:50%;border:6px solid var(--c);opacity:0}
+.bb-overlay.landed .bb-ring{animation:bbRing .85s ease-out}
+.bb-sparks{position:absolute;inset:0;display:grid;place-items:center}
+.bb-sparks i{position:absolute;width:11px;height:11px;border-radius:50%;background:#ffd43b;opacity:0}
+.bb-sparks i:nth-child(3n+2){background:#fff}
+.bb-sparks i:nth-child(3n){background:var(--c)}
+.bb-overlay.landed .bb-sparks i{animation:bbSpark .85s ease-out forwards}
