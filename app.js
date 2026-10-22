@@ -16,7 +16,7 @@ const store = {
 };
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
-const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set() };
+const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {} };
 
 /* ---------- entry ---------- */
 
@@ -151,7 +151,9 @@ function pushState() {
   const state = g ? (g.view ? g.view(S.raw) : S.raw) : null;
   const priv = g?.priv ? g.priv(S.raw) : undefined;
   S.channel.send({ type: 'broadcast', event: 'state', payload: { game: S.game, state, priv } });
-  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw }));
+  // Games can ask the room to remember things (e.g. Bingo history) after the host moves on to another game.
+  if (g?.remember && S.raw) S.memory[g.id] = g.remember(S.raw);
+  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw, memory: S.memory }));
   // Games with a clock (drawing turns, memory flips) ask the host to fire a 'timeout' action when it runs out.
   clearTimeout(S.timer);
   const at = g?.deadline?.(S.raw);
@@ -164,7 +166,7 @@ function hostHandle(a) {
     if (a.from !== S.me) return;
     const g = GAMES[a.data?.game];
     S.game = g ? g.id : 'lobby';
-    S.raw = g ? g.init(env(), a.data) : null;
+    S.raw = g ? g.init(env(), { ...a.data, memory: S.memory[g.id] }) : null;
   } else {
     const g = GAMES[S.game];
     if (!g) return;
@@ -180,6 +182,7 @@ function enterRoom(code, name, isHost) {
     try {
       const saved = JSON.parse(store.get(`hubState:${code}`) || 'null');
       if (saved && GAMES[saved.game]) { S.game = saved.game; S.raw = saved.raw; }
+      S.memory = saved?.memory ?? {};
       S.banned = new Set(JSON.parse(store.get(`hubBanned:${code}`) || '[]'));
     } catch { /* start fresh */ }
   }

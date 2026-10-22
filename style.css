@@ -264,3 +264,10 @@ input.bad{border-color:var(--bad);animation:shake .4s ease}
 .pending p{margin:0}
 .bb-overlay.secret{background:radial-gradient(circle at 50% 45%,rgba(60,30,120,.8),rgba(20,18,31,.35) 78%)}
 .bb-secret{position:absolute;top:calc(100% + 14px);left:50%;transform:translateX(-50%);white-space:nowrap;color:#fff;font-weight:700;font-size:1.05rem;text-shadow:0 2px 8px rgba(0,0,0,.6)}
+
+/* ---------- Bingo history ---------- */
+.hist{margin:12px 0;background:var(--bg);border-radius:14px;padding:8px 12px}
+.hist summary{cursor:pointer;font-weight:700}
+.hist-table th{text-align:left;font-size:.75rem;color:var(--mute);padding:4px}
+.hist-table td{vertical-align:top;font-size:.9rem}
+.bingo-banner.ended{background:none;color:var(--mute);-webkit-text-fill-color:currentColor;animation:none}

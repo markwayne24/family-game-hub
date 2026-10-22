@@ -83,6 +83,18 @@ function takenKeys(s, env, except) {
   return taken;
 }
 
+const patName = s => (s.pattern === 'custom' ? `Custom (${s.custom.filter(i => i !== 12).length} squares)` : (PATTERNS[s.pattern] ?? PATTERNS.line).name);
+
+// One history entry per finished game (a win, or the host ending it). Abandoned games are not recorded.
+function record(s, env, winners) {
+  const entry = {
+    n: s.history.length + 1,
+    winners: winners.map(w => ({ id: w.id, name: env.players.find(p => p.id === w.id)?.name ?? '?', k: w.k, multi: countOf(s, w.id) > 1 })),
+    pattern: patName(s), mode: s.mode, called: s.called.length, at: env.now,
+  };
+  return [...s.history, entry];
+}
+
 // Draw a number (auto mode) or reveal the rolled one (manual mode), then check everyone's cards.
 function reveal(s, env, n) {
   const called = [...s.called, n];
@@ -93,7 +105,8 @@ function reveal(s, env, n) {
       if (cells) { winners.push({ id: p.id, k, cells }); break; } // one entry per player
     }
   }
-  return { ...s, called, last: n, pending: null, winners, phase: winners.length ? 'over' : 'play' };
+  const next = { ...s, called, last: n, pending: null, winners, phase: winners.length ? 'over' : 'play' };
+  return winners.length ? { ...next, history: record(next, env, winners) } : next;
 }
 
 const nextNumber = s => {
@@ -115,15 +128,22 @@ export const bingo = {
       phase: 'lobby', host: env.hostId,
       pattern: PATTERNS[opts?.pattern] && opts.pattern !== 'custom' ? opts.pattern : 'line', custom: [],
       mode: MODES[opts?.mode] ? opts.mode : 'auto', pending: null,
-      counts: {}, seeds: {}, called: [], last: null, winners: [],
+      counts: {}, seeds: {}, called: [], last: null, winners: [], ended: false,
+      history: opts?.memory?.history ?? [], // survives "new game" and even leaving Bingo for another game
     };
   },
 
   reduce(s, a, env) {
-    s = { counts: {}, custom: [], mode: 'auto', pending: null, host: env.hostId, ...s };
+    s = { counts: {}, custom: [], mode: 'auto', pending: null, host: env.hostId, history: [], ended: false, ...s };
     const isHost = a.from === env.hostId;
     if (a.type === 'reset' && isHost) {
-      return { ...this.init(env, { pattern: s.pattern === 'custom' ? 'line' : s.pattern, mode: s.mode }), pattern: s.pattern, custom: s.custom, counts: s.counts, seeds: s.seeds };
+      // New game: back to the lobby with the same settings and cards. An abandoned game isn't counted.
+      return { ...this.init(env, { pattern: s.pattern === 'custom' ? 'line' : s.pattern, mode: s.mode, memory: { history: s.history } }), pattern: s.pattern, custom: s.custom, counts: s.counts, seeds: s.seeds };
+    }
+    if (a.type === 'clearhistory' && isHost) return { ...s, history: [] };
+    // End game: the host stops it early. It counts as played, with no winner.
+    if (a.type === 'end' && isHost && s.phase === 'play') {
+      return { ...s, phase: 'over', pending: null, winners: [], ended: true, history: record(s, env, []) };
     }
     if (a.type === 'mode' && isHost && MODES[a.data?.mode] && s.pending == null && s.phase !== 'over') return { ...s, mode: a.data.mode };
 
@@ -184,9 +204,11 @@ export const bingo = {
 
   // A rolled-but-unrevealed number is never broadcast: the host's browser reads it from its own state (ui.raw).
   view(s) {
-    const { pending, ...pub } = { counts: {}, custom: [], mode: 'auto', pending: null, ...s };
+    const { pending, ...pub } = { counts: {}, custom: [], mode: 'auto', pending: null, history: [], ended: false, ...s };
     return { ...pub, hasPending: pending != null };
   },
+  // What the room remembers about Bingo after the host moves on to another game.
+  remember: s => ({ history: s.history ?? [] }),
   render(el, s, ui) {
     el._latest = { s, ui };
     const called = new Set(s.called);
@@ -227,6 +249,8 @@ export const bingo = {
     const patNow = `<div class="patnow">${preview(patCells ?? pat.preview)}<span><b>${esc(patName)}</b>${patCells ? '' : '<br><small class="muted">Row, column or diagonal</small>'}</span></div>`;
     const counts = `<div class="cc">${ui.players.map(p => `<span class="chip ${p.id === ui.me ? 'me' : ''}">${esc(p.name)} · 🎴 ${countOf(s, p.id)}</span>`).join('')}</div>`;
     const busy = Date.now() < (el._busyUntil ?? 0);
+    const hist = historyHtml(s, ui, el, phase);
+    const gameNo = s.history.length + (s.phase === 'over' ? 0 : 1);
 
     // ---- host settings (before the game, and the roll mode during it)
     const modeButtons = ui.isHost && s.pending == null && phase !== 'over'
@@ -261,7 +285,8 @@ export const bingo = {
         <h3>Cards per player</h3>${cardsCtl}
         <h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCardsHtml(s, ui, called, target, shuffledAt, null, true)}
         ${ui.isHost ? `<button id="start" class="${customOk(s) ? '' : 'disabled'}" ${customOk(s) ? '' : 'disabled'} style="width:100%;margin-top:10px">Start game</button>`
-          : '<p class="muted">Waiting for the host to start…</p>'}`;
+          : '<p class="muted">Waiting for the host to start…</p>'}
+        ${hist}`;
     } else {
       const letter = s.last ? letterOf(s.last) : '';
       const winCards = phase === 'over' ? s.winners.map(w => `<div class="wcard ${w.id === ui.me ? 'me' : ''}">
@@ -290,16 +315,21 @@ export const bingo = {
       body = `${patNow}
         <div class="lastnum"><span class="lbl">${s.called.length} called</span>
           <div class="big">${s.last ? `<span style="color:${COLORS[letter]}">${letter}</span> ${s.last}` : '—'}</div></div>
-        ${phase === 'over' ? `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
-          <p>${s.winners.map(w => nameOf(w.id)).join(' & ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>` : ''}
+        ${phase === 'over' ? (s.ended
+          ? `<div class="winners"><div class="bingo-banner">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>`
+          : `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
+          <p>${s.winners.map(w => nameOf(w.id)).join(' & ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : ''}
+        ${ui.isHost && phase === 'over' ? '<button id="reset" style="width:100%;margin:8px 0">🔄 New game</button>' : ''}
+        ${phase === 'over' ? hist : ''}
         ${hostPanel}${waiting}
+        ${ui.isHost && s.phase === 'play' ? '<div class="row" style="margin-top:8px"><button class="ghost danger grow" id="endgame">⏹ End game</button><button class="ghost grow" id="newgame">🔄 New game</button></div>' : ''}
         ${numberBoard(s, called)}
         <h3>Cards in play</h3>${counts}
         ${phase === 'over' && myWin && myCount === 1 ? '' : `<h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCardsHtml(s, ui, called, target, shuffledAt, phase === 'over' ? myWin : null, false)}`}
-        ${ui.isHost && phase === 'over' ? '<button id="reset" style="width:100%">Play again</button>' : ''}`;
+        ${phase === 'over' ? '' : hist}`;
     }
 
-    el.innerHTML = `<h2>Bingo</h2>${body}`;
+    el.innerHTML = `<h2>Bingo <small class="muted">· Game ${gameNo}</small></h2>${body}`;
     el.querySelectorAll('[data-pat]').forEach(b => b.onclick = () => ui.act(b.dataset.pat === 'custom' ? 'custom' : 'pattern', b.dataset.pat === 'custom' ? { cells: s.custom } : { id: b.dataset.pat }));
     el.querySelectorAll('[data-cell]').forEach(b => b.onclick = () => {
       const i = +b.dataset.cell;
@@ -313,11 +343,42 @@ export const bingo = {
     el.querySelectorAll('[data-shuf]').forEach(b => b.onclick = () => ui.act('shuffle', b.dataset.shuf === 'all' ? {} : { k: +b.dataset.shuf }));
     el.querySelector('#start')?.addEventListener('click', () => { sfx('pop'); ui.act('start'); });
     el.querySelector('#reset')?.addEventListener('click', () => ui.act('reset'));
+    el.querySelector('#endgame')?.addEventListener('click', () => { if (confirm('End this game now? It counts as played, with no winner.')) ui.act('end'); });
+    el.querySelector('#newgame')?.addEventListener('click', () => { if (confirm('Abandon this game and start a new one? This game will not be counted.')) ui.act('reset'); });
+    el.querySelector('#clearhist')?.addEventListener('click', () => { if (confirm('Clear the Bingo history for this room?')) ui.act('clearhistory'); });
+    const histBox = el.querySelector('[data-hist]');
+    if (histBox) histBox.addEventListener('toggle', () => { el._histOpen = histBox.open; });
     el.querySelector('#call')?.addEventListener('click', () => { el._busyUntil = Date.now() + BALL_MS; rerenderAfter(el, this); ui.act('call'); });
     el.querySelector('#roll')?.addEventListener('click', () => { el._busyUntil = Date.now() + BALL_MS; rerenderAfter(el, this); ui.act('roll'); });
     el.querySelector('#reveal')?.addEventListener('click', () => ui.act('reveal'));
   },
 };
+
+// Every finished game in this room: who won, which pattern, how many numbers, plus a wins tally.
+function historyHtml(s, ui, el, phase) {
+  if (!s.history.length) return '';
+  const esc = ui.esc;
+  const n = s.history.length;
+  const tally = {};
+  for (const h of s.history) {
+    for (const w of h.winners) {
+      const t = (tally[w.id] ??= { name: w.name, wins: 0 });
+      t.wins++;
+      t.name = ui.players.find(p => p.id === w.id)?.name ?? t.name;
+    }
+  }
+  const chips = Object.values(tally).sort((a, b) => b.wins - a.wins)
+    .map(t => `<span class="chip">🏆 ${esc(t.name)} × ${t.wins}</span>`).join('');
+  const rows = [...s.history].reverse().map(h => `<tr>
+      <td><b>#${h.n}</b></td>
+      <td>${h.winners.length ? h.winners.map(w => `🏆 ${esc(w.name)}${w.multi ? ` <small class="muted">(card ${w.k + 1})</small>` : ''}`).join('<br>') : '<span class="muted">Ended · no winner</span>'}</td>
+      <td>${esc(h.pattern)}<br><small class="muted">${h.called} numbers · ${new Date(h.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small></td></tr>`).join('');
+  const open = el._histOpen ?? phase === 'over';
+  return `<details class="hist" data-hist ${open ? 'open' : ''}><summary>📜 History · ${n} game${n > 1 ? 's' : ''} played</summary>
+    ${chips ? `<div class="cc">${chips}</div>` : ''}
+    <table class="table hist-table"><tr><th>Game</th><th>Winner</th><th>Pattern</th></tr>${rows}</table>
+    ${ui.isHost ? '<button class="ghost" id="clearhist" style="margin-top:6px">Clear history</button>' : ''}</details>`;
+}
 
 // All of the viewer's cards, each with its own shuffle button before the game and highlighting after.
 function myCardsHtml(s, ui, called, target, shuffledAt, win, lobby) {
