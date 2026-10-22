@@ -72,20 +72,40 @@ const nameOfPattern = id => PATTERNS[id]?.name ?? id;
 function record(s, env, winners) {
   const entry = {
     n: s.history.length + 1,
-    winners: winners.map(w => ({ id: w.id, name: env.players.find(p => p.id === w.id)?.name ?? '?', k: w.k, multi: countOf(s, w.id) > 1, how: w.pattern ? nameOfPattern(w.pattern) : null })),
+    winners: winners.map(w => ({ id: w.id, name: env.players.find(p => p.id === w.id)?.name ?? s.names?.[w.id] ?? '?', k: w.k, multi: countOf(s, w.id) > 1, how: w.pattern ? nameOfPattern(w.pattern) : null })),
     pattern: patName(s), patterns: s.patterns.length, mode: s.mode, called: s.called.length, at: env.now,
   };
   return [...s.history, entry];
+}
+
+// A player whose connection drops stays in the game for a while: their card keeps filling in and they can still win.
+export const GRACE_MS = 5 * 60 * 1000;
+
+// Remember who is here (and what they are called) every time the host handles something.
+function touch(s, env) {
+  if (!env.players.length) return s;
+  const seen = { ...(s.seen ?? {}) };
+  const names = { ...(s.names ?? {}) };
+  for (const p of env.players) { seen[p.id] = env.now; names[p.id] = p.name; }
+  return { ...s, seen, names };
+}
+
+// Everyone connected now, plus anyone seen within the grace period (a dropped connection, a phone that went to sleep).
+function inRoom(s, env) {
+  const here = new Set(env.players.map(p => p.id));
+  const recent = Object.entries(s.seen ?? {}).filter(([, t]) => t > 0 && env.now - t <= GRACE_MS).map(([id]) => id);
+  return { ids: [...new Set([...here, ...recent])], here };
 }
 
 // Draw a number (auto mode) or reveal the rolled one (manual mode), then check everyone's cards.
 function reveal(s, env, n) {
   const called = [...s.called, n];
   const winners = [];
-  for (const p of env.players) {
-    for (let k = 0; k < countOf(s, p.id); k++) {
-      const hit = matchPatterns(cardOf(s, p.id, k), called, s.patterns, s.custom);
-      if (hit) { winners.push({ id: p.id, k, cells: hit.cells, pattern: hit.id }); break; } // one entry per player
+  const { ids, here } = inRoom(s, env);
+  for (const id of ids) {
+    for (let k = 0; k < countOf(s, id); k++) {
+      const hit = matchPatterns(cardOf(s, id, k), called, s.patterns, s.custom);
+      if (hit) { winners.push({ id, k, cells: hit.cells, pattern: hit.id, offline: !here.has(id) }); break; } // one entry per player
     }
   }
   const next = { ...s, called, last: n, pending: null, winners, phase: winners.length ? 'over' : 'play' };
@@ -120,6 +140,7 @@ export const bingo = {
   reduce(s, a, env) {
     s = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, host: env.hostId, history: [], ended: false, ...s };
     if (!s.patterns) s = { ...s, patterns: [s.pattern ?? 'line'] }; // a game saved before several patterns existed
+    s = touch(s, env);
     const isHost = a.from === env.hostId;
     if (a.type === 'reset' && isHost) {
       // New game: back to the lobby with the same settings and cards. An abandoned game isn't counted.
@@ -164,12 +185,12 @@ export const bingo = {
       if (a.type === 'start' && isHost && customOk(s)) {
         const seeds = { ...s.seeds };
         const seen = new Set();
-        for (const p of env.players) {
-          for (let k = 0; k < countOf(s, p.id); k++) {
-            let seed = seeds[cid(p.id, k)] ?? 0;
-            while (seen.has(cardKey(cardFor(cid(p.id, k), seed)))) seed = randomSeed();
-            seeds[cid(p.id, k)] = seed;
-            seen.add(cardKey(cardFor(cid(p.id, k), seed)));
+        for (const id of inRoom(s, env).ids) {
+          for (let k = 0; k < countOf(s, id); k++) {
+            let seed = seeds[cid(id, k)] ?? 0;
+            while (seen.has(cardKey(cardFor(cid(id, k), seed)))) seed = randomSeed();
+            seeds[cid(id, k)] = seed;
+            seen.add(cardKey(cardFor(cid(id, k), seed)));
           }
         }
         return { ...s, seeds, phase: 'play', called: [], last: null, winners: [], pending: null };
@@ -193,9 +214,11 @@ export const bingo = {
 
   // A rolled-but-unrevealed number is never broadcast: the host's browser reads it from its own state (ui.raw).
   view(s) {
-    const { pending, ...pub } = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, history: [], ended: false, ...s };
+    const { pending, seen, ...pub } = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, history: [], ended: false, names: {}, ...s };
     return { ...pub, patterns: pub.patterns ?? [pub.pattern ?? 'line'], hasPending: pending != null };
   },
+  // The host removed this player from the room: they no longer count, even within the grace period.
+  drop: (s, id) => ({ ...s, seen: { ...(s.seen ?? {}), [id]: 0 } }),
   // What the room remembers about Bingo after the host moves on to another game.
   remember: s => ({ history: s.history ?? [] }),
   render(el, s, ui) {
@@ -239,7 +262,7 @@ export const bingo = {
 
     const esc = ui.esc;
     const ps = ui.players;
-    const nameOf = id => esc(ui.nameOf(id));
+    const nameOf = id => esc(ps.find(p => p.id === id)?.name ?? s.names?.[id] ?? ui.nameOf(id)); // a winner may have dropped out
     const defaultCount = s.defaultCount ?? 1;
     const busy = Date.now() < (el._busyUntil ?? 0);
     const hist = historyHtml(s, ui, el, phase);
@@ -379,7 +402,7 @@ export const bingo = {
     } else {
       const letter = s.last ? letterOf(s.last) : '';
       const winCards = phase === 'over' ? s.winners.map(w => `<div class="wcard ${w.id === ui.me ? 'me' : ''}">
-          <div class="wname">${w.id === ui.me ? '🏆 You' : `🎉 ${nameOf(w.id)}`}${countOf(s, w.id) > 1 ? ` · card ${w.k + 1}` : ''}${multiPat ? ` · ${esc(nameOfPattern(w.pattern))}` : ''}</div>
+          <div class="wname">${w.id === ui.me ? '🏆 You' : `🎉 ${nameOf(w.id)}`}${w.offline ? ' <small class="muted">· was offline</small>' : ''}${countOf(s, w.id) > 1 ? ` · card ${w.k + 1}` : ''}${multiPat ? ` · ${esc(nameOfPattern(w.pattern))}` : ''}</div>
           ${cardHtml(cardOf(s, w.id, w.k), called, { win: new Set(w.cells), mini: true })}</div>`).join('') : '';
       const secretPanel = ui.isHost && phase === 'play' && s.mode === 'manual' && secret
         ? `<div class="secret"><div class="muted">🤫 Only you can see this number</div>
@@ -392,7 +415,7 @@ export const bingo = {
           : '<p class="muted">The host calls the numbers. Your cards mark themselves and you win automatically!</p>') : '';
       const result = phase === 'over' ? (s.ended
         ? '<div class="winners"><div class="bingo-banner ended">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>'
-        : `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
+        : `<div class="winners"><div class="bingo-banner">${myWin ? (myWin.offline ? 'BINGO! You won while you were away! 🎉' : 'BINGO! You win! 🎉') : 'BINGO! 🎉'}</div>
             <p>${s.winners.map(w => `${nameOf(w.id)}${multiPat ? ` <small class="muted">(${esc(nameOfPattern(w.pattern))})</small>` : ''}`).join(' &amp; ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : '';
       body = `${patNow}
         <div class="lastnum"><span class="lbl">${s.called.length} called</span>

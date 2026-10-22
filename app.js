@@ -283,6 +283,9 @@ function kick(id) {
   S.banned.add(id);
   store.set(`hubBanned:${S.code}`, JSON.stringify([...S.banned]));
   S.channel.send({ type: 'broadcast', event: 'kick', payload: { id } });
+  // Games that keep absent players in the game for a while (Bingo) should let go of this one now.
+  const g = GAMES[S.game];
+  if (g?.drop && S.raw) { S.raw = g.drop(S.raw, id); pushState(); }
 }
 
 function leaveRoom() {
@@ -323,7 +326,8 @@ function allowSleep() {
 function resync() {
   if (!S.channel) return;
   S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
-  if (S.isHost) pushState();
+  // Anything sent while we were away is gone, so ask the host for the current game (any action makes it re-send everything).
+  if (S.isHost) pushState(); else act('hello');
 }
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible' && S.channel) { keepAwake(); resync(); }

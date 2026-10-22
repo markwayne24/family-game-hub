@@ -7,6 +7,8 @@ Bingo: players shuffle their own cards (always unique) until the host starts. Th
 
 Names: everyone sees their own name at the top of their screen. If two players pick the same name, the later joiner gets a stable 5-digit ID, like "Nicole (31351)" (and is told why), so the host can tell who won.
 
+Dropped connections: the host's game keeps every number that is called, so a player who drops out and comes back sees their card filled in exactly as if they never left. In Bingo a player who drops out stays in the game for 5 minutes and can still win while offline (the host and everyone see "was offline"); a returning phone asks the host for the current game straight away.
+
 Phones: built for phones first. Big tap targets, no sideways scrolling, no iPhone zoom on inputs, safe-area padding, and touch drawing. The screen is kept awake while you are in a room (the host's phone runs the game, so if it sleeps the game would freeze), the invite button opens the phone's share sheet, and the room re-syncs when a phone wakes up.
 
 Host tools: pick a game and its options (question pack, word difficulty, prompt type), remove players, close the room. Refreshing a tab rejoins the same room (guests) or resumes the room and game (host). Sound effects have a mute button.

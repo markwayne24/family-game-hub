@@ -303,8 +303,8 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   assert.equal(bg.view(shown).hasPending, false);
   // the next roll never repeats a revealed or pending number
   for (let i = 0; i < 74; i++) { const r = bg.reduce(shown, A('h', 'roll'), env()); assert.ok(r.pending !== n); }
-  const noPlayers = { players: [], hostId: 'h', now: 0 }; // nobody can win, so the draw runs to the end
-  let seq = shown; for (let i = 0; i < 74; i++) { seq = bg.reduce(seq, A('h', 'roll'), noPlayers); seq = bg.reduce(seq, A('h', 'reveal'), noPlayers); }
+  const noPlayers = { players: [], hostId: 'h', now: 0 }; // nobody here and nobody recently seen, so nobody can win and the draw runs to the end
+  let seq = { ...shown, seen: {} }; for (let i = 0; i < 74; i++) { seq = bg.reduce(seq, A('h', 'roll'), noPlayers); seq = bg.reduce(seq, A('h', 'reveal'), noPlayers); }
   assert.equal(new Set(seq.called).size, 75); assert.equal(bg.reduce(seq, A('h', 'roll'), noPlayers).pending ?? null, null); // all 75 drawn, no repeats
   // revealing the number that completes a card wins, same as instant mode
   let m = bg.reduce(bg.init(env(), { mode: 'manual' }), A('h', 'start'), env());
@@ -613,5 +613,69 @@ import { PRESET_IDS, PATTERN_IDS, GROUPS, matchPatterns, needAny, cleanPatterns,
   const legacy = { phase: 'play', pattern: 'x', seeds: {}, called: [], last: null, winners: [] };
   assert.deepEqual(bg.view(legacy).patterns, ['x']);
   assert.equal(bg.reduce(legacy, A('h', 'call'), env()).called.length, 1);
+}
+
+
+// ---- bingo: a player whose connection drops
+import { GRACE_MS } from '../games/bingo.js';
+{
+  const away = P.filter(p => p.id !== 'a');                      // Ann's connection has dropped
+  const at = (players, now) => ({ players, hostId: 'h', now });
+  const callAt = (state, n, e) => { // draw exactly `n`, with the room as seen by the host at that moment
+    const left = ALL.filter(x => !state.called.includes(x));
+    const orig = Math.random; Math.random = () => (left.indexOf(n) + 0.5) / left.length;
+    try { return bg.reduce(state, A('h', 'call'), e); } finally { Math.random = orig; }
+  };
+  const g = bg.reduce(bg.init(at(P, 1000), { pattern: 'line' }), A('h', 'start'), at(P, 1000));
+  const top = row0(cardOf(g, 'a'));
+  const nearly = { ...g, called: top.slice(0, 4) };
+
+  // 1. offline for a minute when her line completes: she still wins, and everyone can see her name
+  const won = callAt(nearly, top[4], at(away, 61_000));
+  const w = won.winners.find(x => x.id === 'a');
+  assert.ok(w, 'a dropped player can still win'); assert.equal(w.offline, true);
+  assert.equal(won.phase, 'over'); assert.equal(won.history[0].winners.find(x => x.id === 'a').name, 'Ann'); // name remembered, not "?"
+  assert.equal(won.names.a, 'Ann');
+  // the players who are still connected are not marked offline
+  const bothWin = callAt({ ...g, called: top.slice(0, 4) }, top[4], at(P, 61_000));
+  assert.equal(bothWin.winners.find(x => x.id === 'a').offline, false);
+
+  // 2. gone for longer than the grace period: no longer counted
+  const tooLong = callAt(nearly, top[4], at(away, 1000 + GRACE_MS + 1));
+  assert.ok(!tooLong.winners.some(x => x.id === 'a'));
+  // ...but exactly at the limit still counts
+  assert.ok(callAt(nearly, top[4], at(away, 1000 + GRACE_MS)).winners.some(x => x.id === 'a'));
+
+  // 3. she was away past the limit, comes back, and wins on the next call with the numbers that were rolled while she was gone
+  const missed = callAt({ ...g, called: top.slice(0, 3) }, top[3], at(away, 1000 + GRACE_MS + 5000));
+  assert.equal(missed.phase, 'play'); assert.deepEqual(missed.called, top.slice(0, 4)); // the host kept every number
+  assert.deepEqual(cardOf(missed, 'a'), cardOf(g, 'a')); // her card is exactly the same
+  const back = callAt(missed, top[4], at(P, 1000 + GRACE_MS + 10_000));
+  assert.ok(back.winners.some(x => x.id === 'a' && !x.offline));
+
+  // 4. a player the host removed doesn't count, even inside the grace period
+  const removed = bg.drop(nearly, 'a');
+  assert.ok(!callAt(removed, top[4], at(away, 61_000)).winners.some(x => x.id === 'a'));
+  assert.ok(bg.drop(g, 'zzz').seen.zzz === 0); // harmless for someone we never saw
+
+  // 5. "hello" (a reconnecting phone asking for the current game) changes nothing about the game
+  const hello = bg.reduce(nearly, A('a', 'hello'), at(P, 2000));
+  assert.deepEqual(hello.called, nearly.called); assert.equal(hello.phase, 'play'); assert.deepEqual(hello.patterns, nearly.patterns);
+
+  // 6. last-seen times stay on the host; players only get the names
+  assert.ok(!('seen' in bg.view(g))); assert.equal(bg.view(g).names.a, 'Ann');
+  assert.ok(Object.keys(g.seen).length === 3 && g.seen.a === 1000);
+
+  // 7. someone who joins a game in progress is tracked too, and an old saved game (no seen/names) still works
+  const late = [...P, { id: 'new', name: 'Newbie' }];
+  assert.equal(bg.reduce(g, A('h', 'call'), at(late, 5000)).names.new, 'Newbie');
+  assert.equal(bg.reduce({ phase: 'play', patterns: ['line'], seeds: {}, called: [], last: null, winners: [] }, A('h', 'call'), at(P, 0)).called.length, 1);
+
+  // 8. cards handed out at the start include a player who has just dropped, and stay unique
+  const lobby = bg.init(at(P, 1000), {});
+  const seenLobby = bg.reduce(lobby, A('a', 'hello'), at(P, 1000));
+  const starts = bg.reduce(seenLobby, A('h', 'start'), at(away, 2000));
+  assert.ok(starts.seeds['a#0'] !== undefined, 'Ann (just dropped) still gets her card dealt');
+  assert.equal(new Set(['h', 'a', 'b'].map(id => cardOf(starts, id).join())).size, 3);
 }
 console.log('all game tests passed');
