@@ -223,6 +223,7 @@ function buildShell() {
       <button class="ghost" id="mute" aria-label="Sound on/off"></button>
       <button class="ghost" id="copy">Copy invite link</button>
     </div>
+    <div class="whoami" id="whoami"></div>
     <div id="banner"></div>
     <div class="card" id="stage"></div>
     <div class="row">
@@ -394,12 +395,14 @@ function render() {
   app.querySelector('#close').style.display = S.isHost ? '' : 'none';
   app.querySelector('#leave').style.display = S.isHost ? 'none' : '';
   // Two people with the same name: the later joiner becomes "Name 2". Their join time is kept so seats and turn order don't change.
-  const wanted = resolveName(ps, S.me, S.baseName);
+  const wanted = resolveName(ps, S.me, S.baseName, S.name);
   if (wanted !== S.name) {
     S.name = wanted;
     S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
   }
-  const renamed = S.name !== S.baseName ? `<div class="banner">Someone already has the name “${esc(S.baseName)}”, so you appear as “${esc(S.name)}”.</div>` : '';
+  const renamed = S.name !== S.baseName ? `<div class="banner">Someone already has the name “${esc(S.baseName)}”, so you appear as “${esc(S.name)}”. The number lets the host tell you apart.</div>` : '';
+  // Always show people their own name, as everyone else sees it.
+  app.querySelector('#whoami').innerHTML = `${S.isHost ? '👑' : '👤'} You are <b>${esc(S.name)}</b>`;
   app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed;
   renderPlayers(ps);
   if (S.seen.size && ps.some(p => !S.seen.has(p.id) && p.id !== S.me)) sfx('blip');

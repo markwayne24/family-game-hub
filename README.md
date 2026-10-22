@@ -5,7 +5,7 @@ Games: Tic-Tac-Toe, Connect 4, Trivia (4 question packs + your own), Bingo, Rock
 
 Bingo: players shuffle their own cards (always unique) until the host starts. The host can give players extra cards (everyone sees the card counts), pick a preset win pattern or draw a custom one square by square, and choose how numbers are drawn: instant (everyone sees it) or private roll (only the host sees it until they reveal it). Wins are detected automatically and the winning cells light up gold; every revealed number plays an animated ball draw. The host can end a game early or start a new one, and every finished game goes into a history (winners, pattern, numbers called, games played, wins per player) that lasts for the whole room session.
 
-Names: if two players pick the same name, the later joiner is shown as "Name 2" (and told why), so scores and winners are never ambiguous.
+Names: everyone sees their own name at the top of their screen. If two players pick the same name, the later joiner gets a stable 5-digit ID, like "Nicole (31351)" (and is told why), so the host can tell who won.
 
 Phones: built for phones first. Big tap targets, no sideways scrolling, no iPhone zoom on inputs, safe-area padding, and touch drawing. The screen is kept awake while you are in a room (the host's phone runs the game, so if it sleeps the game would freeze), the invite button opens the phone's share sheet, and the room re-syncs when a phone wakes up.
 

@@ -331,3 +331,6 @@ summary{min-height:44px;display:flex;align-items:center}
 .c4{gap:0;padding:6px}
 .c4cell{border-radius:0}
 .c4cell .piece{width:calc(100% - 6px);height:calc(100% - 6px);margin:3px}
+
+/* ---------- who am I ---------- */
+.whoami{display:inline-block;margin:2px 0 8px;padding:6px 14px;border-radius:99px;background:var(--line);font-size:.95rem}
