@@ -393,6 +393,21 @@ const setup = (n, roles, cfg = {}, mod = 'none') => {
   for (const id of s2.order) s2 = step(s2, e, id, 'vote', { target: id === s2.order[0] ? s2.order[1] : s2.order[0] });
   assert.ok(W.view(s2).tally.votes);
 }
+{
+  // with a moderator the game waits for them: everyone voting does not end the vote, and "ready" does not open it
+  let { e, s } = setup(6, { h: 'wolf' }, {}, 'host');
+  let v = { ...s, phase: 'vote', votes: {}, round: 1, muted: {} };
+  for (const id of v.order) v = step(v, e, id, 'vote', { target: id === 'p1' ? 'p2' : 'p1' });
+  assert.equal(v.phase, 'vote'); assert.equal(Object.keys(v.votes).length, v.order.length); // everyone voted, still waiting
+  const r = step(v, e, 'h', 'advance'); assert.equal(r.phase, 'result'); assert.equal(r.tally.eliminated, 'p1');
+  let d = { ...s, phase: 'day', ready: {} };
+  for (const id of d.order) d = step(d, e, id, 'ready');
+  assert.equal(d.phase, 'day'); assert.equal(step(d, e, 'h', 'advance').phase, 'vote');
+  // ... while the no-moderator game still moves by itself
+  let a = setup(6, { h: 'wolf' }, {}, 'none'); let av = { ...a.s, phase: 'vote', votes: {}, round: 1, muted: {} };
+  for (const id of av.order) av = step(av, a.e, id, 'vote', { target: id === 'p1' ? 'p2' : 'p1' });
+  assert.equal(av.phase, 'result');
+}
 console.log('werewolf new-role tests passed');
 {
   // ---- people who drop out

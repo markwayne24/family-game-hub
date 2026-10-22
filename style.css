@@ -582,3 +582,11 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 /* Werewolf: every main action is a full-width button */
 .ww #cupidgo,.ww #heal,.ww #ready,.ww #witchdone,.ww #hide,.ww #peeknight,.ww #peekresult{display:block;width:100%;min-height:48px;margin:10px 0 0}
 .ww #peek{display:block;width:100%}
+
+/* Werewolf: "everyone is done" prompt for the moderator */
+.ww-done{background:#d3f9d8;color:#0b5d1e;border:1px solid #8ce99a;border-radius:12px;padding:10px 12px;text-align:center;animation:donePop .45s ease both}
+.ww.night .ww-done{background:#12381f;color:#b2f2bb;border-color:#2f9e44}
+.ww-ctl .ww-main.ww-ready{animation:readyPulse 1.4s ease-in-out infinite}
+.ww-wait{text-align:center}
+@keyframes donePop{from{transform:translateY(8px) scale(.96);opacity:0}to{transform:none;opacity:1}}
+@keyframes readyPulse{0%,100%{box-shadow:0 0 0 0 #2f9e4488}50%{box-shadow:0 0 0 10px #2f9e4400}}

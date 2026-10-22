@@ -262,7 +262,7 @@ function presence(s, env) {
 // After somebody is no longer waited for, the night or the vote may be complete.
 function settle(s, env) {
   if (s.phase === 'night' && !s.paused) { const acted = allActed(s); if (acted !== s.acted) return { ...s, acted }; }
-  if (s.phase === 'vote' && !s.paused && Object.keys(s.votes).length && votesDone(s)) return resolveVote(s, env);
+  if (s.phase === 'vote' && !s.paused && auto(s) && Object.keys(s.votes).length && votesDone(s)) return resolveVote(s, env);
   return s;
 }
 
@@ -457,7 +457,7 @@ export const werewolf = {
     if (s.phase === 'day' && a.type === 'ready') {
       const ready = { ...s.ready, [me]: true };
       const next = { ...s, ready };
-      return Object.keys(ready).filter(id => s.alive[id]).length > aliveIds(s).length / 2 ? enter(next, 'vote', env, { candidates: null, runoff: false }) : next;
+      return auto(s) && Object.keys(ready).filter(id => s.alive[id]).length > aliveIds(s).length / 2 ? enter(next, 'vote', env, { candidates: null, runoff: false }) : next;
     }
     if (s.phase === 'vote' && a.type === 'vote') {
       const t = a.data?.target;
@@ -465,7 +465,7 @@ export const werewolf = {
       if (t !== 'skip' && !(typeof t === 'string' && s.alive[t] && t !== me)) return s;
       if (t !== 'skip' && s.candidates && !s.candidates.includes(t)) return s; // second round: only the tied players
       const next = { ...s, votes: { ...s.votes, [me]: t } };
-      return votesDone(next) ? resolveVote(next, env) : next;
+      return votesDone(next) && auto(next) ? resolveVote(next, env) : next; // with a moderator, they press the button themselves
     }
 
     return s;
@@ -946,17 +946,28 @@ export const werewolf = {
     /* ---- shared bottom part ---- */
     const showRoster = s.phase !== 'lobby' && s.phase !== 'end' && s.order.length;
     const modBlock = isMod && s.phase !== 'lobby' && s.phase !== 'end' ? modScript() : '';
+    // With a moderator, tell them when everyone is done so they know it's time to press the button.
+    const moderated = s.config.mod !== 'none';
+    const needVote = aliveIdsOf(s).filter(id => !s.muted?.[id] && !s.stale.includes(id));
+    const readyN2 = Object.keys(s.ready ?? {}).filter(id => s.alive[id]).length;
+    const doneMsg = !moderated ? ''
+      : s.phase === 'night' && s.acted ? 'Everyone has finished their night actions.'
+      : s.phase === 'vote' && needVote.length && needVote.every(id => s.voted.includes(id)) ? (s.runoff ? 'Everyone has voted in the runoff.' : 'Everyone has voted.')
+      : s.phase === 'day' && readyN2 > aliveIdsOf(s).length / 2 ? 'Most players are ready to vote.' : '';
+    if (doneMsg && controls && fresh(el, 'doneAlert', `${s.phase}${s.round}${s.runoff ? 'r' : ''}`)) { sfx('ding'); try { navigator.vibrate?.(200); } catch { /* not supported */ } }
+    const doneBanner = doneMsg && controls && nextLabel ? `<div class="ww-done">✅ <b>${doneMsg}</b><br><small>Press “${nextLabel}” when you are ready.</small></div>` : '';
+
     // One clear main action, and the smaller ones in a tidy row under it.
     const inGameNow = s.phase !== 'lobby' && s.phase !== 'end';
     const running = controls && inGameNow && !s.paused;
-    const main = running && nextLabel && isMod ? `<button id="adv" class="ww-main">▶ ${nextLabel}</button>`
+    const main = running && nextLabel && isMod ? `<button id="adv" class="ww-main ${doneMsg ? 'ww-ready' : ''}">▶ ${nextLabel}</button>`
       : controls && s.phase === 'end' && ui.isHost ? '<button id="reset" class="ww-main">🔁 Play again</button>' : '';
     const small = [];
     if (running) small.push('<button class="ghost" id="pause">⏸ Pause</button>');
     if (running && nextLabel && !isMod) small.push(`<button id="adv" class="ghost">⏭ ${nextLabel}</button>`);
     if (ui.isHost && !isMod && ['night', 'day', 'vote'].includes(s.phase) && s.config.mod === 'none' && !s.paused) small.push('<button class="ghost" data-add="30">⏱ +30s</button>');
     if (ui.isHost && inGameNow) small.push('<button class="ghost danger" id="reset">✖ End game</button>');
-    const bar = main || small.length ? `<div class="ww-ctl ${isMod && inGameNow ? 'stick' : ''}">${main}${small.length ? `<div class="ww-ctl2">${small.join('')}</div>` : ''}</div>` : '';
+    const bar = main || small.length ? `<div class="ww-ctl ${isMod && inGameNow ? 'stick' : ''}">${doneBanner}${main}${small.length ? `<div class="ww-ctl2">${small.join('')}</div>` : ''}</div>` : '';
 
     // A paused game covers the whole screen, wherever you have scrolled to.
     let veil = document.getElementById('ww-pause');
@@ -969,7 +980,7 @@ export const werewolf = {
     } else veil?.remove();
     el.innerHTML = `<div class="ww ${theme} ${ghostOn ? 'ghosted' : ''} ${s.paused ? 'paused' : ''}"><h2>🐺 Werewolf</h2>${pauseBlock}${dropBlock}
       ${showRoster ? `<p class="muted">${aliveIdsOf(s).length} alive of ${s.order.length}</p>${roster()}` : ''}
-      ${modBlock}${ghost}${body}
+      ${modBlock}${doneMsg && !controls && inGame ? `<p class="muted ww-wait">✅ ${doneMsg} Waiting for the ${s.config.mod === 'player' ? 'moderator' : 'host'} to continue…</p>` : ''}${ghost}${body}
       ${bar}</div>`;
 
     /* ---- wiring ---- */
