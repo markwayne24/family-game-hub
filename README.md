@@ -63,3 +63,5 @@ Werewolf vote privacy: the host can turn **Show who voted for whom** off in the 
 
 ### Room bar and menu
 A fixed bar stays at the top of every screen with the room code, the 🔊 sound switch (for everyone) and a ⚙ menu. The host's menu holds every host control: invite link, back to the game list, player limit, what happens when people join mid-game, and close room. Other players' menu has Leave room. A paused Werewolf game covers the whole screen for everyone, wherever they have scrolled to.
+
+Werewolf in face-to-face mode: at dawn and during the day every living player has the same "Peek at my night result" button (the seer sees who they inspected, the doctor sees a successful save, everyone else sees "nothing to report").

@@ -515,7 +515,7 @@ export const werewolf = {
       }
       if (stealth && live) { mine.pick = s.night.picks[id] ?? null; mine.done = mine.pick !== null; }
       if (role === 'seer') mine.seerLog = s.seerLog;
-      if (role === 'doctor') { mine.lastProtect = s.lastProtect; mine.saved = s.phase === 'dawn' && s.savedLast?.by === 'doctor' ? s.savedLast.id : null; }
+      if (role === 'doctor') { mine.lastProtect = s.lastProtect; mine.saved = (s.phase === 'dawn' || s.phase === 'day') && s.savedLast?.by === 'doctor' ? s.savedLast.id : null; }
       if (role === 'witch' && s.witch) {
         mine.witch = s.witch;
         if (live) Object.assign(mine, { attack: wolfTarget(s), healing: s.night.heal, poisoning: s.night.poison, witchDone: s.night.witchDone });
@@ -562,6 +562,7 @@ export const werewolf = {
     }
     if (s.phase === 'lobby' || s.phase === 'roles' || s.phase === 'end') d.myVote = null;
     if (s.phase !== 'night') d.peek = false;
+    if (s.phase === 'night' || s.phase === 'lobby') d.peekR = false;
     if (s.phase === 'lobby') d.show = false; // a fresh game starts with the role hidden
     if (fresh(el, 'round', `${s.round}${s.phase === 'vote' ? 'v' : ''}${s.runoff ? 'r' : ''}`)) d.myVote = null;
     if (fresh(el, 'scriptStep', `${s.phase}${s.round}`)) d.mstep = 0;
@@ -611,6 +612,20 @@ export const werewolf = {
       `<button ${attr}="${id}" class="${picked === id || (Array.isArray(picked) && picked.includes(id)) ? 'sel' : ''}" ${locked.includes(id) ? 'disabled' : ''}>${name(id)}</button>`).join('')}</div>`;
     const others = (pred = () => true) => aliveIdsOf(s).filter(id => id !== ui.me && pred(id));
     const sky = s.phase === 'night' ? nightSky({ eyes: role === 'wolf' && alive && !s.config.stealth }) : theme === 'day' ? daySky() : '';
+
+    /* ---- face-to-face mode: everyone gets the same "peek at my night result" button, so the seer's answer isn't a tell ---- */
+    const resultPeek = () => {
+      if (!(s.config.stealth && inGame && alive && !isMod)) return '';
+      let card = '';
+      if (d.peekR) {
+        const last = (me?.seerLog ?? []).find(l => l.round === s.round);
+        const txt = role === 'seer'
+          ? (last ? `🔮 You inspected <b>${name(last.id)}</b>: ${last.wolf ? '🐺 a werewolf!' : 'not a werewolf.'}` : '🔮 Your pick did not count last night (you cannot inspect yourself).')
+          : role === 'doctor' && me?.saved ? `🩺 You saved <b>${name(me.saved)}</b> from the wolves!` : '🌙 Nothing to report from your night.';
+        card = `<div class="role ww-peek-card">${txt}</div>`;
+      }
+      return `<button class="ghost" id="peekresult">👁 Peek at my night result</button>${card}`;
+    };
 
     /* ---- the card showing my role ---- */
     const roleCard = () => {
@@ -675,6 +690,13 @@ export const werewolf = {
     };
     const nextLabel = { roles: 'Start the night', night: 'Dawn breaks', dawn: 'Start the day', day: 'Open the vote', vote: 'Count the votes', result: 'Next night' }[s.phase];
 
+    // Players should never see a guessed screen while their secret role is still on its way.
+    const waitingForRole = (inGame || ui.me === s.moderator) && !me && s.phase !== 'lobby' && s.phase !== 'end';
+    if (waitingForRole) {
+      if (!d.helloT) d.helloT = setInterval(() => { if (!el.isConnected || el._d !== d || !d.waiting) { clearInterval(d.helloT); d.helloT = null; return; } d.ui.act('hello'); }, 3000);
+    }
+    d.waiting = waitingForRole;
+
     let body = '';
     /* ---------------- lobby ---------------- */
     if (s.phase === 'lobby') {
@@ -713,6 +735,11 @@ export const werewolf = {
       const board = Object.values(s.stats ?? {}).sort((a, b) => b.wins - a.wins || b.survived - a.survived);
       if (board.length) body += `<h3>🏆 Leaderboard</h3><table class="table"><tr class="muted"><td></td><td>Wins</td><td>Played</td><td>Survived</td></tr>${board.map(x => `<tr><td>${ui.esc(x.name)}</td><td><b>${x.wins}</b></td><td>${x.played}</td><td>${x.survived}</td></tr>`).join('')}</table>`;
       if (s.history.length) body += `<p class="muted">Past games: ${s.history.map(h => `#${h.n} ${{ wolves: '🐺', village: '🏡', lovers: '💘', tanner: '🎭' }[h.winner]} (${h.rounds} nights)`).join(' · ')}</p>`;
+    }
+
+    /* ---------------- still getting my secret role ---------------- */
+    else if (waitingForRole) {
+      body = '<div class="ww-sleep">🔐<p>Getting your secret role…</p><p class="muted">If this takes more than a few seconds, check your connection. We keep asking the host.</p></div>';
     }
 
     /* ---------------- role reveal ---------------- */
@@ -805,7 +832,7 @@ export const werewolf = {
       body = `${sky}<h3>☀️ Morning of day ${s.round}</h3>
         ${died.length ? died.map(id => `<p class="status-pop"><b>💀 ${name(id)}</b> ${why(id)}${tag(id)}</p>`).join('') : '<p class="status-pop"><b>😮 Nobody died tonight!</b></p>'}
         ${me?.saved ? `<p class="banner">🛡️ Your protection saved <b>${name(me.saved)}</b> tonight!</p>` : ''}
-        ${shot ? `<p>${shot}</p>` : ''}${hunter}${roleCard()}${timer}`;
+        ${shot ? `<p>${shot}</p>` : ''}${hunter}${roleCard()}${resultPeek()}${timer}`;
     }
 
     /* ---------------- day ---------------- */
@@ -813,7 +840,7 @@ export const werewolf = {
       const readyN = Object.keys(s.ready).filter(id => s.alive[id]).length;
       const aliveN = aliveIdsOf(s).length;
       const mutedNames = Object.keys(s.muted ?? {}).filter(id => s.alive[id]);
-      body = `${sky}<h3>🗣️ Day ${s.round}: discuss!</h3>${mutedNames.length ? `<p class="banner">🔇 ${mutedNames.map(name).join(', ')} skipped the night and can't vote today.</p>` : ''}<p class="muted">Who is acting suspicious? Talk it out loud.</p>${roleCard()}${timer}
+      body = `${sky}<h3>🗣️ Day ${s.round}: discuss!</h3>${mutedNames.length ? `<p class="banner">🔇 ${mutedNames.map(name).join(', ')} skipped the night and can't vote today.</p>` : ''}<p class="muted">Who is acting suspicious? Talk it out loud.</p>${roleCard()}${resultPeek()}${timer}
         ${alive && inGame ? (s.ready[ui.me] ? '<p class="muted">You are ready to vote.</p>' : '<button id="ready">✋ I\'m ready to vote</button>') : ''}
         <p class="muted">${readyN}/${aliveN} ready · majority starts the vote</p>`;
     }
@@ -940,27 +967,30 @@ export const werewolf = {
       ${buttons.length ? `<div class="row ww-ctl ${isMod && s.phase !== 'end' ? 'stick' : ''}">${buttons.join('')}</div>` : ''}</div>`;
 
     /* ---- wiring ---- */
+    // Delayed callbacks must redraw with the newest data, never with the `ui` they were created with.
+    const redraw = () => { if (el.isConnected && el._d === d) this.render(el, d.s, d.ui); };
     const on = (sel, fn) => el.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => fn(b)));
     on('[data-k]', b => ui.act('config', { [b.dataset.k]: JSON.parse(b.dataset.v) }));
     on('#start', () => ui.act('start'));
-    on('#peek', () => { d.show = true; this.render(el, d.s, ui); });
-    on('#hide', () => { d.show = false; this.render(el, d.s, ui); });
+    on('#peek', () => { d.show = true; redraw(); });
+    on('#hide', () => { d.show = false; redraw(); });
     on('[data-wolf]', b => sfx('blip') || ui.act('wolf', { target: b.dataset.wolf }));
     on('[data-decoy]', b => {
       sfx('blip');
       d.decoy = { round: s.round, pick: b.dataset.decoy, ready: false };
-      this.render(el, d.s, ui);
-      setTimeout(() => { if (d.decoy?.round === s.round) { d.decoy.ready = true; if (el.isConnected) this.render(el, d.s, ui); } }, 2500);
+      redraw();
+      setTimeout(() => { if (d.decoy?.round === s.round) { d.decoy.ready = true; redraw(); } }, 2500);
     });
     on('[data-pick]', b => sfx('blip') || ui.act('pick', { target: b.dataset.pick }));
-    on('#peeknight', () => { d.peek = true; clearTimeout(d.peekT); d.peekT = setTimeout(() => { d.peek = false; if (el.isConnected) this.render(el, d.s, ui); }, 4000); this.render(el, d.s, ui); });
+    on('#peekresult', () => { d.peekR = true; clearTimeout(d.peekRT); d.peekRT = setTimeout(() => { d.peekR = false; redraw(); }, 5000); redraw(); });
+    on('#peeknight', () => { d.peek = true; clearTimeout(d.peekT); d.peekT = setTimeout(() => { d.peek = false; redraw(); }, 4000); redraw(); });
     on('[data-seer]', b => sfx('blip') || ui.act('seer', { target: b.dataset.seer }));
     on('[data-doc]', b => sfx('blip') || ui.act('doctor', { target: b.dataset.doc }));
     on('[data-guard]', b => sfx('blip') || ui.act('guard', { target: b.dataset.guard }));
     on('[data-lover]', b => {
       const id = b.dataset.lover;
       d.lovePick = d.lovePick.includes(id) ? d.lovePick.filter(x => x !== id) : [...d.lovePick, id].slice(-2);
-      sfx('blip'); this.render(el, d.s, ui);
+      sfx('blip'); redraw();
     });
     on('#cupidgo', () => { sfx('love'); ui.act('cupid', { a: d.lovePick[0], b: d.lovePick[1] }); });
     on('#heal', () => { sfx('potion'); ui.act('witchHeal', { target: me.attack }); });
@@ -973,7 +1003,7 @@ export const werewolf = {
     on('#mnext', () => {
       const lines = s.phase === 'night' ? nightLines() : scriptLines[s.phase] ?? [];
       d.mstep = Math.min(d.mstep + 1, lines.length - 1);
-      sfx(lines[d.mstep]?.[2] ?? 'blip'); this.render(el, d.s, ui);
+      sfx(lines[d.mstep]?.[2] ?? 'blip'); redraw();
     });
     on('[data-timer]', b => ui.act('timer', { sec: Number(b.dataset.timer) }));
     on('[data-add]', b => ui.act('timer', { add: Number(b.dataset.add) }));
