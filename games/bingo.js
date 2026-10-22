@@ -1,4 +1,5 @@
 import { fresh, memo, confetti, sfx, reduceMotion } from './fx.js';
+import { search, paginate } from './list.js';
 
 export const LETTERS = ['B', 'I', 'N', 'G', 'O'];
 export const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
@@ -82,6 +83,18 @@ function takenKeys(s, env, except) {
   }
   return taken;
 }
+
+// How many squares a card still needs for the pattern (0 = it has won). Used for the "needs N" tab badges.
+export function needCount(card, called, pattern, custom = []) {
+  const set = new Set(called);
+  const missing = cells => cells.filter(i => card[i] !== 0 && !set.has(card[i])).length;
+  const cells = pattern === 'custom' ? custom : (PATTERNS[pattern] ?? PATTERNS.line).cells;
+  return cells ? missing(cells) : Math.min(...LINES.map(missing));
+}
+
+// Up to this many players the host sees a plain list; beyond it, search and pages take over.
+const SMALL_ROOM = 8;
+const PER_PAGE = 8;
 
 const patName = s => (s.pattern === 'custom' ? `Custom (${s.custom.filter(i => i !== 12).length} squares)` : (PATTERNS[s.pattern] ?? PATTERNS.line).name);
 
@@ -214,6 +227,8 @@ export const bingo = {
   remember: s => ({ history: s.history ?? [] }),
   render(el, s, ui) {
     el._latest = { s, ui };
+    // Screen-only state (open sections, search boxes, pages, selected card tab) lives on the element, not in the game.
+    const U = (el._ui ??= { tab: 0, open: {}, giveq: '', allq: '', allPage: 0, ovrPage: 0 });
     const called = new Set(s.called);
     const prevCalled = memo(el, 'called', s.called);
     const newNum = prevCalled !== undefined && s.called.length > prevCalled.length && s.last;
@@ -241,98 +256,188 @@ export const bingo = {
     const myWin = phase === 'over' ? s.winners.find(w => w.id === ui.me) : null;
     const pat = PATTERNS[s.pattern] ?? PATTERNS.line;
     const patCells = s.pattern === 'custom' ? s.custom : pat.cells;
-    const patName = s.pattern === 'custom' ? `Custom (${s.custom.filter(i => i !== 12).length} squares)` : pat.name;
     const target = new Set(patCells ?? []);
     if (phase === 'over' && fresh(el, 'over', s.called.length)) {
-      if (myWin) { confetti(); sfx('win'); } else sfx('ding');
+      if (myWin) { confetti(); sfx('win'); U.tab = myWin.k; } else sfx('ding');
     }
+    U.tab = Math.min(U.tab, myCount - 1);
 
     const esc = ui.esc;
+    const ps = ui.players;
     const nameOf = id => esc(ui.nameOf(id));
-    const patNow = `<div class="patnow">${preview(patCells ?? pat.preview)}<span><b>${esc(patName)}</b>${patCells ? '' : '<br><small class="muted">Row, column or diagonal</small>'}</span></div>`;
-    const counts = `<div class="cc">${ui.players.map(p => `<span class="chip ${p.id === ui.me ? 'me' : ''}">${esc(p.name)} · 🎴 ${countOf(s, p.id)}</span>`).join('')}</div>`;
+    const defaultCount = s.defaultCount ?? 1;
     const busy = Date.now() < (el._busyUntil ?? 0);
     const hist = historyHtml(s, ui, el, phase);
     const gameNo = s.history.length + (s.phase === 'over' ? 0 : 1);
+    const pager = (key, pg) => (pg.pages > 1
+      ? `<div class="pager"><button class="ghost small" data-pg="${key}:-1" ${pg.page === 0 ? 'disabled' : ''}>‹ Prev</button><span class="muted">Page ${pg.page + 1} of ${pg.pages}</span><button class="ghost small" data-pg="${key}:1" ${pg.page >= pg.pages - 1 ? 'disabled' : ''}>Next ›</button></div>` : '');
 
-    // ---- host settings (before the game, and the roll mode during it)
+    const patNow = `<div class="patnow">${preview(patCells ?? pat.preview)}<span><b>${esc(patName(s))}</b>${patCells ? '' : '<br><small class="muted">Row, column or diagonal</small>'}</span></div>`;
+
+    // ---- the viewer's own cards: one at a time with tabs when there are several
+    const myCards = () => {
+      const lobby = phase === 'lobby';
+      const needs = Array.from({ length: myCount }, (_, k) => needCount(cardOf(s, ui.me, k), called, s.pattern, s.custom));
+      const best = Math.min(...needs);
+      const tabs = myCount > 1
+        ? `<div class="tabs" role="tablist">${needs.map((need, k) => `<button role="tab" class="tab ${k === U.tab ? 'on' : ''}" data-tab="${k}">Card ${k + 1}${
+            lobby ? '' : `<small>${need === 0 ? '✓ bingo' : `needs ${need}${need === best ? ' ⭐' : ''}`}</small>`}</button>`).join('')}</div>` : '';
+      const cards = Array.from({ length: myCount }, (_, k) => {
+        const winning = myWin && myWin.k === k ? new Set(myWin.cells) : null;
+        return `<div class="mycard" data-card="${k}" ${k === U.tab ? '' : 'hidden'}>${cardHtml(cardOf(s, ui.me, k), called, { target, win: winning, shuffled: shuffledAt.has(k) })}${
+          lobby ? `<button class="ghost" data-shuf="${k}">🔀 Shuffle ${myCount > 1 ? 'this card' : 'my card'}</button>` : ''}</div>`;
+      }).join('');
+      return `${tabs}<div class="mycards">${cards}</div>${lobby && myCount > 1 ? '<button class="ghost" data-shuf="all" style="width:100%;margin-top:8px">🔀 Shuffle all my cards</button>' : ''}`;
+    };
+
+    // ---- everyone: a short summary of who holds how many cards, with a searchable list for big rooms
+    const roomSummary = () => {
+      const total = ps.reduce((n, p) => n + countOf(s, p.id), 0);
+      const holders = [...ps].sort((a, b) => countOf(s, b.id) - countOf(s, a.id) || a.name.localeCompare(b.name));
+      const multi = holders.filter(p => countOf(s, p.id) > 1);
+      const shown = ps.length <= SMALL_ROOM ? holders : (multi.length ? multi : holders).slice(0, 5);
+      const chips = shown.map(p => `<span class="chip ${p.id === ui.me ? 'me' : ''}">${esc(p.name)} · 🎴 ${countOf(s, p.id)}</span>`).join('')
+        + (ps.length > shown.length ? `<span class="chip">+${ps.length - shown.length} more</span>` : '');
+      let everyone = '';
+      if (ps.length > SMALL_ROOM) {
+        const pg = paginate(search(holders, U.allq), U.allPage, PER_PAGE);
+        U.allPage = pg.page;
+        everyone = `<button class="ghost small" data-toggle="all">${U.open.all ? 'Hide list' : `See everyone (${ps.length})`}</button>${U.open.all
+          ? `<div class="biglist"><input type="search" data-keep="allq" value="${esc(U.allq)}" placeholder="Search players…" autocomplete="off">
+              ${pg.items.map(p => `<div class="prow"><span>${esc(p.name)}</span><b>🎴 ${countOf(s, p.id)}</b></div>`).join('') || '<p class="muted">No players match.</p>'}${pager('all', pg)}</div>` : ''}`;
+      }
+      return `<div class="roomsum"><b>👥 ${ps.length} player${ps.length === 1 ? '' : 's'} · 🎴 ${total} card${total === 1 ? '' : 's'} in play</b>
+        <div class="cc">${chips}</div>${everyone}</div>`;
+    };
+
+    // ---- host setup, collapsed into three sections that each summarise their current value
     const modeButtons = ui.isHost && s.pending == null && phase !== 'over'
       ? `<div class="modes">${Object.entries(MODES).map(([k, d]) =>
           `<button class="mode ${k === s.mode ? 'sel' : ''}" data-mode="${k}">${k === 'auto' ? '⚡' : '🤫'}<small>${esc(d)}</small></button>`).join('')}</div>`
       : `<p class="muted">${esc(MODES[s.mode])}</p>`;
-
-    let body;
-    if (phase === 'lobby') {
-      const picker = ui.isHost
-        ? `<div class="pats">${Object.entries(PATTERNS).map(([k, p]) =>
-            `<button class="pat ${k === s.pattern ? 'sel' : ''}" data-pat="${k}">${preview(k === 'custom' ? s.custom : p.cells ?? p.preview)}<small>${p.name}</small></button>`).join('')}</div>`
-        : patNow;
-      const editor = ui.isHost && s.pattern === 'custom'
+    const section = (key, title, summary, content) => `<details class="sec" data-sec="${key}" ${U.open[key] ? 'open' : ''}>
+        <summary><span>${title}</span><small>${esc(summary)}</small></summary><div class="sec-body">${content}</div></details>`;
+    const stepper = p => `<div class="cs-row"><span>${nameOf(p.id)}</span>
+        <button class="ghost" data-cnt="${esc(p.id)}" data-d="-1" ${countOf(s, p.id) <= 1 ? 'disabled' : ''} aria-label="Fewer cards">−</button><b>${countOf(s, p.id)}</b>
+        <button class="ghost" data-cnt="${esc(p.id)}" data-d="1" ${countOf(s, p.id) >= MAX_CARDS ? 'disabled' : ''} aria-label="More cards">+</button>
+        ${s.counts[p.id] !== undefined ? `<button class="ghost small" data-reset="${esc(p.id)}" title="Back to the default" aria-label="Back to the default">↺</button>` : ''}</div>`;
+    const hostSetup = () => {
+      const picker = `<div class="pats">${Object.entries(PATTERNS).map(([k, p]) =>
+        `<button class="pat ${k === s.pattern ? 'sel' : ''}" data-pat="${k}">${preview(k === 'custom' ? s.custom : p.cells ?? p.preview)}<small>${p.name}</small></button>`).join('')}</div>`;
+      const editor = s.pattern === 'custom'
         ? `<div class="editor"><p class="muted">Tap the squares players must complete to win. The ★ is free.</p>
             <div class="bingo">${LETTERS.map(l => `<div class="bh" style="background:${COLORS[l]}">${l}</div>`).join('')}${
               Array.from({ length: 25 }, (_, i) => i === 12
                 ? '<div class="cell hit">★</div>'
                 : `<button class="cell ed ${s.custom.includes(i) ? 'on' : ''}" data-cell="${i}" aria-pressed="${s.custom.includes(i)}"></button>`).join('')}</div>
             <div class="row"><button class="ghost" data-fill="none">Clear</button><button class="ghost" data-fill="all">Select all</button></div>
-            ${customOk(s) ? '' : '<p class="err">Pick at least one square to continue.</p>'}</div>`
-        : '';
-      const cardsCtl = ui.isHost
-        ? `<div class="cardset"><div class="cs-all"><span>Everyone:</span>${[1, 2, 3].map(n => `<button class="ghost" data-all="${n}">${n} card${n > 1 ? 's' : ''}</button>`).join('')}</div>
-            ${ui.players.map(p => `<div class="cs-row"><span>${nameOf(p.id)}</span>
-              <button class="ghost" data-cnt="${esc(p.id)}" data-d="-1" ${countOf(s, p.id) <= 1 ? 'disabled' : ''}>−</button><b>${countOf(s, p.id)}</b>
-              <button class="ghost" data-cnt="${esc(p.id)}" data-d="1" ${countOf(s, p.id) >= MAX_CARDS ? 'disabled' : ''}>+</button></div>`).join('')}</div>`
-        : counts;
-      body = `<p class="muted">Shuffle your cards until you like them. Once the host starts, cards are locked.</p>
-        <h3>Win pattern</h3>${picker}${editor}
-        <h3>How numbers are drawn</h3>${modeButtons}
-        <h3>Cards per player</h3>${cardsCtl}
-        <h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCardsHtml(s, ui, called, target, shuffledAt, null, true)}
-        ${ui.isHost ? `<button id="start" class="${customOk(s) ? '' : 'disabled'}" ${customOk(s) ? '' : 'disabled'} style="width:100%;margin-top:10px">Start game</button>`
-          : '<p class="muted">Waiting for the host to start…</p>'}
-        ${hist}`;
+            ${customOk(s) ? '' : '<p class="err">Pick at least one square to continue.</p>'}</div>` : '';
+
+      // Cards per player scales with the number of exceptions, not the number of players.
+      const overrides = ps.filter(p => s.counts[p.id] !== undefined);
+      let perPlayer;
+      if (ps.length <= SMALL_ROOM) {
+        perPlayer = ps.map(stepper).join('');
+      } else {
+        const pg = paginate(overrides, U.ovrPage, 5);
+        U.ovrPage = pg.page;
+        const q = U.giveq.trim();
+        const matches = q ? search(ps, q) : [];
+        perPlayer = `<h4>Players with a different number (${overrides.length})</h4>${
+          overrides.length ? pg.items.map(stepper).join('') + pager('ovr', pg) : '<p class="muted">Nobody yet. Everyone has the default.</p>'}
+          <h4>Give cards to a specific player</h4>
+          <input type="search" data-keep="giveq" value="${esc(U.giveq)}" placeholder="Type a name…" autocomplete="off">
+          ${matches.slice(0, 5).map(stepper).join('') || `<p class="muted">${q ? 'No players match.' : 'Type a name to find a player. The top 5 matches are shown.'}</p>`}
+          ${matches.length > 5 ? `<p class="muted">+${matches.length - 5} more matches. Keep typing to narrow it down.</p>` : ''}`;
+      }
+      const cardsContent = `<div class="cs-all"><span>Everyone gets:</span>${[1, 2, 3, 4].map(n =>
+          `<button class="${n === defaultCount ? '' : 'ghost'}" data-all="${n}">${n}</button>`).join('')}</div>
+        <p class="muted">Also applies to anyone who joins later.</p><div class="cardset">${perPlayer}</div>`;
+      return `<div class="setup"><h3>⚙️ Host setup</h3>${
+        section('pattern', '🎯 Win pattern', patName(s), picker + editor)}${
+        section('mode', '🎲 Number draw', s.mode === 'auto' ? 'Instant' : 'Private roll', modeButtons)}${
+        section('cards', '🎴 Cards per player', `${defaultCount} each${overrides.length ? ` · ${overrides.length} different` : ''}`, cardsContent)}</div>`;
+    };
+
+    // ---- the host's main buttons stay pinned to the bottom of the screen
+    let bar = '';
+    if (ui.isHost) {
+      if (phase === 'lobby') {
+        bar = `<button id="start" class="grow" ${customOk(s) ? '' : 'disabled'}>Start game</button>`;
+      } else if (phase === 'over') {
+        bar = '<button id="reset" class="grow">🔄 New game</button>';
+      } else {
+        const primary = s.mode === 'auto'
+          ? `<button id="call" class="grow" ${busy ? 'disabled' : ''}>${busy ? 'Drawing…' : 'Call next number'}</button>`
+          : secret ? '<button id="reveal" class="grow">📣 Reveal to everyone</button>'
+          : `<button id="roll" class="grow" ${busy ? 'disabled' : ''}>${busy ? 'Drawing…' : '🎲 Roll a number'}</button>`;
+        bar = `${primary}${s.phase === 'play' ? '<button class="ghost danger" id="endgame" title="End game" aria-label="End game">⏹</button><button class="ghost" id="newgame" title="New game" aria-label="New game">🔄</button>' : ''}`;
+      }
+    }
+    const actionbar = bar ? `<div class="actionbar">${bar}</div>` : '';
+
+    let body;
+    if (phase === 'lobby') {
+      body = `${patNow}
+        <p class="muted" style="margin:2px 0 6px">🎲 ${esc(MODES[s.mode])}</p>
+        <h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCards()}
+        ${ui.isHost ? hostSetup() : ''}
+        <h3>Players &amp; cards</h3>${roomSummary()}
+        ${ui.isHost ? '' : '<p class="muted">Waiting for the host to start… You can shuffle your card until then.</p>'}
+        ${hist}${actionbar}`;
     } else {
       const letter = s.last ? letterOf(s.last) : '';
       const winCards = phase === 'over' ? s.winners.map(w => `<div class="wcard ${w.id === ui.me ? 'me' : ''}">
           <div class="wname">${w.id === ui.me ? '🏆 You' : `🎉 ${nameOf(w.id)}`}${countOf(s, w.id) > 1 ? ` · card ${w.k + 1}` : ''}</div>
           ${cardHtml(cardOf(s, w.id, w.k), called, { win: new Set(w.cells), mini: true })}</div>`).join('') : '';
-
-      // The host's roll controls
-      let hostPanel = '';
-      if (ui.isHost && phase !== 'over') {
-        if (s.mode === 'auto') {
-          hostPanel = `<button id="call" style="width:100%" ${busy ? 'disabled' : ''}>${busy ? 'Drawing…' : 'Call next number'}</button>`;
-        } else if (secret) {
-          const L = letterOf(secret);
-          hostPanel = `<div class="secret"><div class="muted">🤫 Only you can see this number</div>
-            <div class="big"><span style="color:${COLORS[L]}">${L}</span> ${secret}</div>
-            <p class="muted">Announce it, then reveal it to everyone.</p>
-            <button id="reveal" style="width:100%">📣 Reveal to everyone</button></div>`;
-        } else {
-          hostPanel = `<button id="roll" style="width:100%" ${busy ? 'disabled' : ''}>${busy ? 'Drawing…' : '🎲 Roll a number'}</button>`;
-        }
-        hostPanel += modeButtons.includes('data-mode') ? `<details class="mini-mode"><summary>Change draw mode</summary>${modeButtons}</details>` : '';
-      }
+      const secretPanel = ui.isHost && phase === 'play' && s.mode === 'manual' && secret
+        ? `<div class="secret"><div class="muted">🤫 Only you can see this number</div>
+            <div class="big"><span style="color:${COLORS[letterOf(secret)]}">${letterOf(secret)}</span> ${secret}</div>
+            <p class="muted">Announce it, then tap “Reveal to everyone” below.</p></div>` : '';
+      const modeMini = ui.isHost && phase === 'play' && s.pending == null
+        ? `<details class="mini-mode"><summary>Change draw mode</summary>${modeButtons}</details>` : '';
       const waiting = !ui.isHost && phase !== 'over'
         ? (s.hasPending ? '<div class="pending"><span>?</span><p>The host rolled a number… wait for the announcement!</p></div>'
           : '<p class="muted">The host calls the numbers. Your cards mark themselves and you win automatically!</p>') : '';
+      const result = phase === 'over' ? (s.ended
+        ? '<div class="winners"><div class="bingo-banner ended">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>'
+        : `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
+            <p>${s.winners.map(w => nameOf(w.id)).join(' &amp; ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : '';
       body = `${patNow}
         <div class="lastnum"><span class="lbl">${s.called.length} called</span>
           <div class="big">${s.last ? `<span style="color:${COLORS[letter]}">${letter}</span> ${s.last}` : '—'}</div></div>
-        ${phase === 'over' ? (s.ended
-          ? `<div class="winners"><div class="bingo-banner ended">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>`
-          : `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
-          <p>${s.winners.map(w => nameOf(w.id)).join(' & ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : ''}
-        ${ui.isHost && phase === 'over' ? '<button id="reset" style="width:100%;margin:8px 0">🔄 New game</button>' : ''}
-        ${phase === 'over' ? hist : ''}
-        ${hostPanel}${waiting}
-        ${ui.isHost && s.phase === 'play' ? '<div class="row" style="margin-top:8px"><button class="ghost danger grow" id="endgame">⏹ End game</button><button class="ghost grow" id="newgame">🔄 New game</button></div>' : ''}
+        ${result}${phase === 'over' ? hist : ''}${secretPanel}${waiting}${modeMini}
         ${numberBoard(s, called)}
-        <h3>Cards in play</h3>${counts}
-        ${phase === 'over' && myWin && myCount === 1 ? '' : `<h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCardsHtml(s, ui, called, target, shuffledAt, phase === 'over' ? myWin : null, false)}`}
-        ${phase === 'over' ? '' : hist}`;
+        ${phase === 'over' && myWin && myCount === 1 ? '' : `<h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCards()}`}
+        <h3>Players &amp; cards</h3>${roomSummary()}
+        ${phase === 'over' ? '' : hist}${actionbar}`;
     }
 
+    // Keep the cursor in a search box while the screen redraws around it.
+    const focused = document.activeElement;
+    const focusKey = focused && el.contains(focused) ? focused.dataset?.keep : null;
+    const caret = focusKey ? focused.selectionStart : null;
+
     el.innerHTML = `<h2>Bingo <small class="muted">· Game ${gameNo}</small></h2>${body}`;
+
+    if (focusKey) {
+      const input = el.querySelector(`[data-keep="${focusKey}"]`);
+      if (input) { input.focus(); try { input.setSelectionRange(caret, caret); } catch { /* not a text field */ } }
+    }
+    const redraw = () => this.render(el, el._latest.s, el._latest.ui);
+    el.querySelectorAll('[data-keep]').forEach(inp => inp.addEventListener('input', () => {
+      U[inp.dataset.keep] = inp.value;
+      if (inp.dataset.keep === 'allq') U.allPage = 0;
+      redraw();
+    }));
+    el.querySelectorAll('details[data-sec]').forEach(d => d.addEventListener('toggle', () => { U.open[d.dataset.sec] = d.open; }));
+    el.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => { U.tab = +b.dataset.tab; redraw(); });
+    el.querySelectorAll('[data-toggle]').forEach(b => b.onclick = () => { U.open[b.dataset.toggle] = !U.open[b.dataset.toggle]; redraw(); });
+    el.querySelectorAll('[data-pg]').forEach(b => b.onclick = () => {
+      const [key, d] = b.dataset.pg.split(':');
+      if (key === 'all') U.allPage += +d; else U.ovrPage += +d;
+      redraw();
+    });
     el.querySelectorAll('[data-pat]').forEach(b => b.onclick = () => ui.act(b.dataset.pat === 'custom' ? 'custom' : 'pattern', b.dataset.pat === 'custom' ? { cells: s.custom } : { id: b.dataset.pat }));
     el.querySelectorAll('[data-cell]').forEach(b => b.onclick = () => {
       const i = +b.dataset.cell;
@@ -342,6 +447,7 @@ export const bingo = {
       ui.act('custom', { cells: b.dataset.fill === 'all' ? Array.from({ length: 25 }, (_, i) => i).filter(i => i !== 12) : [] }));
     el.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => ui.act('mode', { mode: b.dataset.mode }));
     el.querySelectorAll('[data-cnt]').forEach(b => b.onclick = () => ui.act('cards', { id: b.dataset.cnt, count: countOf(s, b.dataset.cnt) + +b.dataset.d }));
+    el.querySelectorAll('[data-reset]').forEach(b => b.onclick = () => ui.act('cards', { id: b.dataset.reset, count: defaultCount }));
     el.querySelectorAll('[data-all]').forEach(b => b.onclick = () => ui.act('cards', { id: '*', count: +b.dataset.all }));
     el.querySelectorAll('[data-shuf]').forEach(b => b.onclick = () => ui.act('shuffle', b.dataset.shuf === 'all' ? {} : { k: +b.dataset.shuf }));
     el.querySelector('#start')?.addEventListener('click', () => { sfx('pop'); ui.act('start'); });
@@ -349,11 +455,11 @@ export const bingo = {
     el.querySelector('#endgame')?.addEventListener('click', () => { if (confirm('End this game now? It counts as played, with no winner.')) ui.act('end'); });
     el.querySelector('#newgame')?.addEventListener('click', () => { if (confirm('Abandon this game and start a new one? This game will not be counted.')) ui.act('reset'); });
     el.querySelector('#clearhist')?.addEventListener('click', () => { if (confirm('Clear the Bingo history for this room?')) ui.act('clearhistory'); });
-    const histBox = el.querySelector('[data-hist]');
-    if (histBox) histBox.addEventListener('toggle', () => { el._histOpen = histBox.open; });
     el.querySelector('#call')?.addEventListener('click', () => { el._busyUntil = Date.now() + BALL_MS; rerenderAfter(el, this); ui.act('call'); });
     el.querySelector('#roll')?.addEventListener('click', () => { el._busyUntil = Date.now() + BALL_MS; rerenderAfter(el, this); ui.act('roll'); });
     el.querySelector('#reveal')?.addEventListener('click', () => ui.act('reveal'));
+    const histBox = el.querySelector('[data-hist]');
+    if (histBox) histBox.addEventListener('toggle', () => { el._histOpen = histBox.open; });
   },
 };
 
@@ -381,18 +487,6 @@ function historyHtml(s, ui, el, phase) {
     ${chips ? `<div class="cc">${chips}</div>` : ''}
     <table class="table hist-table"><tr><th>Game</th><th>Winner</th><th>Pattern</th></tr>${rows}</table>
     ${ui.isHost ? '<button class="ghost" id="clearhist" style="margin-top:6px">Clear history</button>' : ''}</details>`;
-}
-
-// All of the viewer's cards, each with its own shuffle button before the game and highlighting after.
-function myCardsHtml(s, ui, called, target, shuffledAt, win, lobby) {
-  const n = countOf(s, ui.me);
-  const cards = Array.from({ length: n }, (_, k) => {
-    const winning = win && win.k === k ? new Set(win.cells) : null;
-    return `<div class="mycard">${n > 1 ? `<div class="cardlabel">Card ${k + 1} of ${n}</div>` : ''}
-      ${cardHtml(cardOf(s, ui.me, k), called, { target, win: winning, shuffled: shuffledAt.has(k) })}
-      ${lobby ? `<button class="ghost" data-shuf="${k}">🔀 Shuffle ${n > 1 ? 'this card' : 'my card'}</button>` : ''}</div>`;
-  }).join('');
-  return `<div class="mycards">${cards}</div>${lobby && n > 1 ? '<button class="ghost" data-shuf="all" style="width:100%;margin-top:8px">🔀 Shuffle all my cards</button>' : ''}`;
 }
 
 /* ---------- pieces of the screen ---------- */

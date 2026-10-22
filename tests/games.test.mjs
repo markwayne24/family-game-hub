@@ -489,4 +489,29 @@ import { search, paginate } from '../games/list.js';
   assert.equal(countOf({ counts: {} }, 'x'), 1);
   assert.equal(bg.view({ phase: 'lobby', pattern: 'line', seeds: {} }).defaultCount, 1);
 }
+
+
+// ---- bingo: "needs N" badges
+import { needCount } from '../games/bingo.js';
+{
+  const card = cardOf(bg.init(env(), {}), 'z');
+  const row = [0, 1, 2, 3, 4].map(i => card[i]);
+  assert.equal(needCount(card, [], 'blackout'), 24); // the free square doesn't count
+  assert.equal(needCount(card, [], 'corners'), 4);
+  assert.equal(needCount(card, [], 'line'), 4); // any line: the middle row/column/diagonals use the free square
+  assert.equal(needCount(card, row, 'line'), 0);
+  assert.equal(needCount(card, row.slice(0, 3), 'line'), 2);
+  assert.equal(needCount(card, [card[0], card[24]], 'corners'), 2);
+  assert.equal(needCount(card, [], 'custom', [0, 6, 24]), 3);
+  assert.equal(needCount(card, [card[0], card[6]], 'custom', [0, 6, 24]), 1);
+  assert.equal(needCount(card, [], 'custom', [12]), 0); // centre-only needs nothing (and can't be started anyway)
+  // consistent with winCells: needs 0 exactly when the card wins
+  for (const k of Object.keys(PATTERNS)) {
+    if (k === 'custom') continue;
+    const cells = PATTERNS[k].cells ?? [0, 1, 2, 3, 4];
+    const nums = cells.map(i => card[i]).filter(Boolean);
+    assert.equal(needCount(card, nums, k) === 0, winCells(card, nums, k) !== null, k);
+    if (nums.length) assert.equal(needCount(card, nums.slice(1), k), k === 'line' ? 1 : 1, `${k} one short`);
+  }
+}
 console.log('all game tests passed');

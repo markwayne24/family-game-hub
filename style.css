@@ -279,3 +279,28 @@ button.small{padding:4px 10px;font-size:.85rem}
 .pager{justify-content:center;gap:10px;margin-top:8px}
 input[type=search]{-webkit-appearance:none}
 [hidden]{display:none!important}
+
+/* ---------- Bingo layout: tabs, host setup sections, pinned action bar ---------- */
+.tabs{display:flex;gap:6px;overflow-x:auto;padding-bottom:6px;margin:6px 0;-webkit-overflow-scrolling:touch}
+.tab{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;gap:1px;background:var(--line);color:var(--ink);padding:8px 14px}
+.tab small{font-size:.7rem;font-weight:600;color:var(--mute)}
+.tab.on{background:var(--accent);color:#fff}
+.tab.on small{color:#fff}
+.setup{margin:14px 0}
+.setup h3{margin-bottom:6px}
+details.sec{background:var(--bg);border-radius:14px;padding:4px 12px;margin:8px 0}
+details.sec>summary{display:flex;justify-content:space-between;align-items:center;gap:8px;cursor:pointer;padding:10px 0;font-weight:700;list-style:none}
+details.sec>summary::-webkit-details-marker{display:none}
+details.sec>summary::after{content:'▾';color:var(--mute);margin-left:4px}
+details.sec[open]>summary::after{content:'▴'}
+details.sec>summary small{margin-left:auto;font-weight:500;color:var(--mute);text-align:right}
+.sec-body{padding:4px 0 12px}
+.sec-body h4{margin:12px 0 6px;font-size:.9rem;color:var(--mute)}
+.cs-all button{min-width:42px}
+.roomsum{background:var(--bg);border-radius:14px;padding:10px 12px;margin:6px 0}
+.biglist{margin-top:8px}
+.actionbar{position:sticky;bottom:0;z-index:5;display:flex;gap:8px;align-items:center;margin-top:12px;padding:12px 0 6px;
+  background:linear-gradient(to bottom,transparent,var(--card) 28%)}
+.actionbar button.grow{padding:14px;font-size:1.05rem}
+.actionbar button.ghost{padding:12px 14px;background:var(--card)}
+.mini-mode summary{cursor:pointer}
