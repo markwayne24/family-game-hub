@@ -230,4 +230,153 @@ for (let g = 0; g < 200; g++) {
   assert.deepEqual(s.dawn.died, []);
 }
 console.log('werewolf stealth tests passed');
+
+// ---- new roles and rules
+// a night with fixed roles: h wolf, p1 seer? (set per test)
+const setup = (n, roles, cfg = {}, mod = 'none') => {
+  let e = mk(n), s = W.init(e);
+  s = step(s, e, 'h', 'config', { mod, ...cfg });
+  s = step(s, e, 'h', 'start');
+  const order = s.order;
+  s = { ...s, roles: Object.fromEntries(order.map(id => [id, roles[id] ?? 'villager'])), witch: Object.values(roles).includes('witch') ? { heal: true, poison: true } : null };
+  s = W.reduce(s, A('h', 'advance'), e); // roles -> night
+  return { e, s };
+};
+{
+  // role counts with the new roles
+  assert.deepEqual(roleCounts(8, { wolves: 'auto', seer: true, doctor: true, hunter: false, bodyguard: true, witch: true, cupid: true, tanner: true }),
+    { wolf: 2, seer: 1, doctor: 1, bodyguard: 1, witch: 1, cupid: 1, tanner: 1, villager: 0 });
+  // face-to-face turns off roles that need two choices
+  let e = mk(7), s = W.init(e);
+  s = step(s, e, 'h', 'config', { witch: true, cupid: true }); assert.ok(s.config.witch && s.config.cupid);
+  s = step(s, e, 'h', 'config', { stealth: true }); assert.ok(!s.config.witch && !s.config.cupid);
+  assert.ok(!step(s, e, 'h', 'config', { witch: true }).config.witch);
+}
+{
+  // bodyguard takes the bite
+  let { e, s } = setup(6, { h: 'wolf', p1: 'bodyguard', p2: 'villager' });
+  s = step(s, e, 'h', 'wolf', { target: 'p2' }); s = step(s, e, 'p1', 'guard', { target: 'p1' }); assert.equal(s.night.guard, null); // not self
+  s = step(s, e, 'p1', 'guard', { target: 'p2' }); assert.equal(s.acted, true);
+  let d = step(s, { ...e, now: s.minUntil }, 'h', 'timeout');
+  assert.deepEqual(d.dawn.died, ['p1']); assert.equal(d.alive.p2, true); assert.equal(d.deaths[0].how, 'guard');
+  // a doctor's save on the same target means the bodyguard lives
+  ({ e, s } = setup(7, { h: 'wolf', p1: 'bodyguard', p2: 'doctor', p3: 'villager' }));
+  s = step(s, e, 'h', 'wolf', { target: 'p3' }); s = step(s, e, 'p1', 'guard', { target: 'p3' }); s = step(s, e, 'p2', 'doctor', { target: 'p3' });
+  d = step(s, { ...e, now: s.minUntil }, 'h', 'timeout');
+  assert.deepEqual(d.dawn.died, []); assert.equal(W.priv(d).p2.saved, 'p3'); assert.ok(!('saved' in W.priv(d).p1) || W.priv(d).p1.saved === undefined);
+  assert.ok(!JSON.stringify(W.view(d)).includes('savedLast'));
+}
+{
+  // witch: heal only the wolves' victim, once; poison once; she must finish before the night can end early
+  let { e, s } = setup(7, { h: 'wolf', p1: 'witch', p2: 'villager', p3: 'villager' });
+  assert.equal(W.priv(s).p1.attack, null); // wolves haven't decided yet
+  assert.deepEqual(step(s, e, 'p1', 'witchHeal', { target: 'p2' }).night.heal, null);
+  s = step(s, e, 'h', 'wolf', { target: 'p2' });
+  assert.equal(W.priv(s).p1.attack, 'p2'); assert.ok(!('attack' in W.priv(s).p2));
+  assert.equal(step(s, e, 'p1', 'witchHeal', { target: 'p3' }).night.heal, null); // only the actual victim
+  assert.equal(step(s, e, 'p2', 'witchHeal', { target: 'p2' }).night.heal, null); // only the witch
+  assert.equal(s.acted, false);
+  s = step(s, e, 'p1', 'witchHeal', { target: 'p2' }); assert.equal(s.night.heal, 'p2'); assert.equal(s.acted, false);
+  s = step(s, e, 'p1', 'witchPoison', { target: 'p3' }); s = step(s, e, 'p1', 'witchPass'); assert.equal(s.acted, true);
+  let d = step(s, { ...e, now: s.minUntil }, 'h', 'timeout');
+  assert.deepEqual(d.dawn.died, ['p3']); assert.equal(d.deaths[0].how, 'poison'); assert.deepEqual(d.witch, { heal: false, poison: false });
+  assert.ok(!JSON.stringify(W.view(d)).includes('"witch":{'));
+  // next night: potions are gone, nothing to wait for
+  d = { ...d, hunter: null }; d = step(d, { ...e, now: d.until }, 'h', 'timeout'); assert.equal(d.phase, 'day');
+}
+{
+  // cupid: lovers on night one, die together, and win together against everybody
+  let { e, s } = setup(7, { h: 'wolf', p1: 'cupid', p2: 'villager', p3: 'villager' });
+  assert.equal(W.priv(s).p1.needLovers, true);
+  assert.equal(step(s, e, 'p1', 'cupid', { a: 'p2', b: 'p2' }).lovers, null);
+  assert.equal(step(s, e, 'p2', 'cupid', { a: 'p2', b: 'h' }).lovers, null);
+  s = step(s, e, 'p1', 'cupid', { a: 'p2', b: 'h' }); assert.deepEqual(s.lovers, ['p2', 'h']);
+  assert.equal(W.priv(s).p2.lover, 'h'); assert.equal(W.priv(s).h.lover, 'p2'); assert.ok(!('lover' in W.priv(s).p3));
+  assert.ok(!('lovers' in W.view(s)) || W.view(s).lovers === null);
+  assert.equal(step(s, e, 'p1', 'cupid', { a: 'p3', b: 'p4' }).lovers[0], 'p2'); // only once
+  // wolf dies -> the villager lover dies too
+  let k = { ...s, phase: 'vote', votes: {}, round: 1 };
+  for (const id of k.order) if (k.alive[id]) k = step(k, e, id, 'vote', { target: id === 'h' ? 'p3' : 'h' });
+  assert.equal(k.tally.eliminated, 'h'); assert.equal(k.alive.p2, false); assert.equal(k.deaths.find(x => x.id === 'p2').how, 'love');
+  // lovers win if they're the last two and on opposite sides
+  const w = { ...s, alive: { ...Object.fromEntries(s.order.map(i => [i, false])), p2: true, h: true } };
+  assert.equal(winnerOf(w), 'lovers');
+  assert.equal(winnerOf({ ...w, lovers: ['p2', 'p3'], alive: { ...w.alive, h: false, p3: true } }), 'village'); // same team: normal win
+}
+{
+  // tanner: voted out -> the tanner wins alone
+  let { e, s } = setup(6, { h: 'wolf', p1: 'tanner' });
+  s = { ...s, phase: 'vote', votes: {}, round: 1, until: null };
+  for (const id of s.order) s = step(s, e, id, 'vote', { target: id === 'p1' ? 'h' : 'p1' });
+  assert.equal(s.tally.eliminated, 'p1');
+  s = step(s, e, 'h', 'advance'); assert.equal(s.phase, 'end'); assert.equal(s.winner, 'tanner');
+  assert.deepEqual(s.history[0].winners, ['p1']);
+  assert.equal(s.stats.p1.wins, 1); assert.equal(s.stats.h.wins, 0); assert.equal(s.stats.h.played, 1);
+  // stats survive a reset and a switch to another game
+  assert.equal(step(s, e, 'h', 'reset').stats.p1.wins, 1);
+  assert.equal(W.init(e, { memory: W.remember(s) }).stats.p1.wins, 1);
+  // the recap and lovers stay secret until the end
+  assert.deepEqual(W.view({ ...s, phase: 'day' }).recap, []); assert.ok(W.view(s).recap.length >= 1);
+}
+{
+  // runoff vote on a tie, only between the tied players; open voting shows votes live
+  let e = mk(7), s = W.init(e);
+  s = step(s, e, 'h', 'config', { runoff: true, openVotes: true }); s = step(s, e, 'h', 'start'); s = { ...s, phase: 'vote', votes: {}, round: 1, muted: {} };
+  const [a, b, c, d2, f, g, i] = s.order;
+  assert.equal(W.view(s).liveVotes && Object.keys(W.view(s).liveVotes).length, 0);
+  const votes = { [a]: b, [b]: a, [c]: b, [d2]: a, [f]: 'skip', [g]: 'skip' };
+  for (const [from, to] of Object.entries(votes)) s = step(s, e, from, 'vote', { target: to });
+  assert.deepEqual(W.view(s).liveVotes[a], b);
+  s = step(s, e, i, 'vote', { target: 'skip' });
+  assert.equal(s.phase, 'vote'); assert.equal(s.runoff, true); assert.deepEqual(s.candidates.sort(), [a, b].sort()); assert.deepEqual(s.votes, {});
+  assert.equal(step(s, e, c, 'vote', { target: d2 }).votes[c], undefined); // not a candidate
+  for (const id of s.order) s = step(s, e, id, 'vote', { target: id === a ? b : a });
+  assert.equal(s.phase, 'result'); assert.equal(s.tally.runoff, true); assert.equal(s.tally.eliminated, a === a ? s.tally.eliminated : null);
+  // a second tie eliminates nobody
+  let r = W.init(e); r = step(r, e, 'h', 'config', { runoff: true }); r = step(r, e, 'h', 'start'); r = { ...r, phase: 'vote', votes: {}, round: 1, runoff: true, candidates: [a, b] };
+  r = step(r, e, a, 'vote', { target: b }); r = step(r, e, b, 'vote', { target: a });
+  r = step(r, { ...e, now: 5e6 }, 'h', 'advance'); assert.equal(r.tally.eliminated, null);
+}
+{
+  // moderator timer: start, extend, stop; only the moderator
+  let { e, s } = setup(6, { h: 'wolf' }, {}, 'host');
+  assert.equal(s.until, null); assert.equal(W.deadline(s), null);
+  assert.deepEqual(step(s, e, 'p1', 'timer', { sec: 60 }).until, null);
+  let t = step(s, e, 'h', 'timer', { sec: 60 }); assert.equal(t.until, e.now + 60000); assert.equal(W.deadline(t), e.now + 60000);
+  t = step(t, e, 'h', 'timer', { add: 30 }); assert.equal(t.until, e.now + 90000);
+  assert.equal(step(t, e, 'h', 'timer', { sec: 99999 }).until, t.until); // out of range
+  assert.equal(step(t, e, 'h', 'timer', { sec: 0 }).until, null);
+  // when time runs out the game moves on
+  assert.equal(step(t, { ...e, now: t.until }, 'h', 'timeout').phase, 'dawn');
+  // a night that is fully acted still honours the moderator's timer
+  t = { ...t, acted: true }; assert.equal(W.deadline(t), t.until);
+}
+{
+  // random full games with every role turned on always finish
+  for (let g = 0; g < 200; g++) {
+    let e = mk(10), s = step(W.init(e), e, 'h', 'config', { hunter: true, bodyguard: true, witch: true, cupid: true, tanner: true, runoff: g % 2 === 0 });
+    s = step(s, e, 'h', 'start'); let guard = 0;
+    const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+    while (s.phase !== 'end' && guard++ < 600) {
+      const live = s.order.filter(i => s.alive[i]);
+      if (s.phase === 'night') for (const id of live) {
+        const r = s.roles[id], oth = live.filter(x => x !== id);
+        if (r === 'wolf') s = step(s, e, id, 'wolf', { target: pick(live.filter(x => s.roles[x] !== 'wolf')) });
+        if (r === 'seer') s = step(s, e, id, 'seer', { target: pick(oth) });
+        if (r === 'doctor') s = step(s, e, id, 'doctor', { target: pick(live.filter(x => x !== s.lastProtect)) });
+        if (r === 'bodyguard') s = step(s, e, id, 'guard', { target: pick(oth) });
+        if (r === 'cupid') s = step(s, e, id, 'cupid', { a: oth[0], b: oth[1] });
+        if (r === 'witch') { const at = W.priv(s)[id]?.attack; if (at && Math.random() < .5) s = step(s, e, id, 'witchHeal', { target: at }); if (Math.random() < .3) s = step(s, e, id, 'witchPoison', { target: pick(oth) }); s = step(s, e, id, 'witchPass'); }
+      }
+      if (s.phase === 'vote') for (const id of live) s = step(s, e, id, 'vote', { target: Math.random() < 0.2 ? 'skip' : pick((s.candidates ?? live).filter(x => x !== id && s.alive[x]).concat(['skip'])) });
+      if (s.hunter) s = step(s, e, s.hunter.id, 'shoot', { target: pick(s.order.filter(x => s.alive[x])) });
+      e = { ...e, now: (W.deadline(s) ?? e.now) + 1 };
+      s = step(s, e, 'h', 'timeout');
+      if (s.phase === 'day') s = step(s, e, 'h', 'timeout');
+    }
+    assert.equal(s.phase, 'end', 'game must finish'); assert.ok(['village', 'wolves', 'lovers', 'tanner'].includes(s.winner));
+    assert.equal(W.view(s).recap.length, s.recap.length);
+  }
+}
+console.log('werewolf new-role tests passed');
 console.log('werewolf tests passed');

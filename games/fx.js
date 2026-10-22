@@ -179,7 +179,16 @@ const SOUNDS_SPOOKY = {
   shield: () => { tone(1046, 0.5, { gain: 0.09 }); tone(1568, 0.7, { gain: 0.07, delay: 0.12 }); },
   mystic: () => { tone(494, 0.7, { to: 740, gain: 0.07 }); tone(740, 0.9, { to: 988, gain: 0.05, delay: 0.15 }); },
 };
-Object.assign(SOUNDS, SOUNDS_SPOOKY);
+Object.assign(SOUNDS, SOUNDS_SPOOKY, {
+  farewell: () => [392, 349, 311, 262].forEach((f, i) => tone(f, 0.55, { delay: i * 0.32, type: 'triangle', gain: 0.09 })),
+  bang: () => { noise(0.25, { freq: 900, to: 200, q: 0.6, gain: 0.35 }); tone(90, 0.25, { to: 35, gain: 0.3 }); },
+  drumroll: () => Array.from({ length: 14 }, (_, i) => tone(110 + (i % 2) * 14, 0.07, { type: 'triangle', gain: 0.05 + i * 0.006, delay: i * 0.09 })),
+  vote: () => tone(720, 0.06, { type: 'square', gain: 0.04 }),
+  birds: () => [[2400, 0], [3000, 0.12], [2700, 0.26], [3300, 0.4]].forEach(([f, d]) => tone(f, 0.09, { to: f * 1.25, gain: 0.025, delay: d })),
+  heartbreak: () => { tone(520, 0.9, { to: 210, type: 'sine', gain: 0.1 }); tone(392, 0.9, { to: 160, type: 'sine', gain: 0.07, delay: 0.1 }); },
+  love: () => [659, 784, 988].forEach((f, i) => tone(f, 0.4, { delay: i * 0.14, gain: 0.07 })),
+  potion: () => { tone(300, 0.15, { to: 700, gain: 0.07 }); tone(500, 0.12, { to: 900, gain: 0.05, delay: 0.12 }); noise(0.3, { freq: 3000, q: 3, gain: 0.04, delay: 0.1 }); },
+});
 
 export function sfx(name) {
   if (muted) return;

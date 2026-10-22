@@ -451,3 +451,66 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww.night summary,.ww.night h2,.ww.night h3{color:#e8ecff}
 .ww.night .muted{color:#a9b4de}
 .ww.night .banner{background:#3a3320}
+
+/* Werewolf: daytime, dusk and the ghost view */
+.ww.day{background:linear-gradient(#fff4d6,#ffe3b3 45%,var(--card));border-radius:16px;padding:12px;margin:-4px;color:#2b2140;animation:sunrise 2.2s ease both}
+.ww.day .muted{color:#7a6a58}
+.ww.day .chip{background:#fff3d1}
+.ww.day .chip.me{outline-color:#f08c00}
+.ww.dusk{background:linear-gradient(#a3568a,#6a4a8f 50%,#3a2f66);border-radius:16px;padding:12px;margin:-4px;color:#fff}
+.ww.dusk .muted{color:#f3e6ff}
+.ww.dusk .chip{background:#ffffff33;color:#fff}
+.ww.dusk button.ghost{color:#fff;border-color:#fff9}
+.ww.dusk .table td{color:#fff}
+@media (prefers-color-scheme:dark){
+  .ww.day{background:linear-gradient(#4a3b1f,#2e2a3e 50%,var(--card));color:#fdf3dc}
+  .ww.day .muted{color:#d8c9aa}
+  .ww.day .chip{background:#5c4a24;color:#fff}
+}
+@keyframes sunrise{from{filter:brightness(.55) saturate(.6)}to{filter:none}}
+.ww.ghosted{filter:grayscale(.6)}
+.ww-ghost{background:#0002;border-radius:12px;padding:8px 12px;margin:8px 0}
+.ww-recap{padding-left:1.2em;margin:6px 0}
+.ww-recap li{margin:6px 0}
+.ww-line{font-size:1.15rem;margin:4px 0}
+.ww-timers{margin:8px 0}
+.ww-live{display:grid;gap:4px;margin:8px 0}
+
+/* day sky */
+.ww-sky.day{background:linear-gradient(#7cc4ff,#cfeeff 70%,#fff3c4)}
+.ww-sky .sun{position:absolute;right:16%;top:12px;width:50px;height:50px;border-radius:50%;background:radial-gradient(circle,#fff7b0,#ffd43b 65%);box-shadow:0 0 36px 12px #ffd43b88;animation:moonGlow 4s ease-in-out infinite}
+.ww-sky .cloud{position:absolute;top:18px;font-size:2rem;opacity:.9;animation:batFly 22s linear infinite;filter:none}
+.ww-sky .cloud.c2{top:56px;font-size:1.5rem;animation-duration:30s;animation-delay:-10s}
+.ww-sky .bird{position:absolute;top:40px;font-size:1rem;filter:none;animation:batFly 9s linear infinite}
+.ww-sky .bird.b2{top:70px;animation-duration:12s;animation-delay:-5s}
+.ww-sky.day .hill{filter:none;animation:none;font-size:2.4rem}
+.ww-sky.day .hill::after{background:#5fb85f}
+
+/* wolf eyes, only on a wolf's own screen */
+.ww-sky .eye{position:absolute;width:7px;height:4px;border-radius:50%;background:#ffd43b;box-shadow:0 0 8px 3px #ffb300;animation:blink 4s infinite}
+.ww-sky .eye.e1{left:56%;bottom:26px}.ww-sky .eye.e2{left:calc(56% + 14px);bottom:26px}
+.ww-sky .eye.e3{left:78%;bottom:42px;animation-delay:1.3s}.ww-sky .eye.e4{left:calc(78% + 12px);bottom:42px;animation-delay:1.3s}
+@keyframes blink{0%,44%,48%,100%{opacity:1;transform:scaleY(1)}46%{opacity:.2;transform:scaleY(.1)}}
+
+/* doctor's save toast */
+.ww-toast{position:fixed;left:50%;top:22%;transform:translateX(-50%);z-index:70;text-align:center;color:#fff;background:#0b1d4acc;border:2px solid #ffd43b;border-radius:18px;padding:14px 22px;box-shadow:0 0 40px #ffd43b88;animation:pop .5s ease both}
+.ww-toast.out{animation:bbOut .5s ease both}
+.ww-toast .shield{font-size:3rem;animation:pulse 1s ease-in-out infinite}
+.ww-toast p{margin:4px 0 0;font-weight:700}
+
+/* vote reveal */
+.ww-tally{display:grid;gap:4px;margin:8px 0}
+.ww-tally .tv.rd{opacity:0;animation:slideIn .35s var(--d) ease forwards}
+.ww-bars.rd,.ww-verdict.rd{opacity:0;animation:fadeUp .6s var(--d) ease forwards}
+.ww-bars{margin:10px 0}
+.tb{display:grid;grid-template-columns:minmax(70px,30%) 1fr 28px;gap:8px;align-items:center;margin:4px 0}
+.tb i{display:block;height:14px;border-radius:99px;background:var(--accent);width:var(--w)}
+.ww-bars.rd .tb i{animation:grow 1s var(--d) ease both}
+@keyframes grow{from{width:0}}
+.ww-verdict{margin:12px 0;text-align:center}
+.ww-farewell{display:inline-block;padding:12px 20px;border-radius:16px;background:#0004;font-size:1.25rem}
+.ww-verdict.out .ww-farewell{border:2px solid #e8212c;animation:stamp .6s var(--d,0s) ease both}
+.ww-verdict.out.rd .ww-farewell{animation:stamp .6s calc(var(--d) + .1s) ease both}
+.ww.dusk .role{background:#ffffff26;color:#fff}
+.ww.dusk h2,.ww.dusk h3,.ww.dusk summary{color:#fff}
+.ww.dusk .ww-ghost{background:#0004}

@@ -47,3 +47,10 @@ Werewolf atmosphere: the night screen has a moonlit sky with a howling wolf, bat
 **Face-to-face mode** (Werewolf option): when everyone sits in the same room, tapping on a phone at night gives wolves away. With this on, every player gets the identical night screen and must pick someone. A wolf's pick is the kill vote, the seer's pick is inspected (answer arrives at dawn), the doctor's pick is protected, and everyone else's pick is a decoy. A "peek" button explains what your own pick does. Players who skip the night can't vote the next day.
 
 Villagers and the hunter get a decoy job at night in normal mode too (a seer-style or doctor-style screen whose pick does nothing, never sent to anyone), so an idle phone doesn't give them away.
+
+### Werewolf: more roles and rules
+- **Roles:** 🛡️ Bodyguard (dies in place of the person they guard), 🧙‍♀️ Witch (one heal and one poison per game; sees who the wolves chose once the pack has decided), 💘 Cupid (picks two lovers on night one; they die together and win together if they are the last two on opposite sides), 🎭 Tanner (wins alone if voted out). Witch and Cupid are off in face-to-face mode (they need two choices).
+- **Voting:** optional open voting (votes visible live) and a runoff vote on a tie. Votes are read out one by one with a count-up and a farewell for the player who is out.
+- **Atmosphere:** sunrise and dusk themes, a daytime sky with birds, glowing wolf eyes on a wolf's own night screen, a golden shield scene for the doctor when a save works, a hunter's bang, and a ghost view with a timeline for players who are out.
+- **After the game:** a night-by-night recap of what everyone did and a leaderboard (wins, games, survived) that carries across rematches.
+- **Moderator tools:** a read-aloud script (one line per step, with a sound), and a countdown the moderator can start, extend or stop. When it runs out the game moves on.
