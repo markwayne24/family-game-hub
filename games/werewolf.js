@@ -509,7 +509,20 @@ export const werewolf = {
         act = me.done
           ? '<h3>🩺 Protection set</h3><p class="muted">Now wait for the morning.</p>'
           : `<h3>🩺 Who do you protect tonight?</h3><p class="muted">Can be yourself, but not the same person as last night.</p>${targets(aliveIdsOf(s), 'data-doc', null, me.lastProtect ? [me.lastProtect] : [])}`;
-      } else act = '<div class="ww-sleep">😴<p>Eyes closed. The night is quiet…</p></div>';
+      } else {
+        // Villagers and the hunter get a decoy job that looks like the seer's or doctor's, so a quiet phone doesn't give them away.
+        const kind = [...ui.me].reduce((h, c) => h + c.charCodeAt(0), s.round) % 2 ? 'seer' : 'doctor';
+        const dc = d.decoy?.round === s.round ? d.decoy : null;
+        if (kind === 'seer') {
+          act = dc
+            ? `<h3>🔮 You looked at ${name(dc.pick)}</h3>${dc.ready ? '<p><b>🌫️ The vision is cloudy. Nothing clear tonight.</b></p>' : '<p class="muted">Reading the stars…</p>'}`
+            : `<h3>🔮 Who do you want to inspect?</h3>${targets(others(), 'data-decoy', null)}`;
+        } else {
+          act = dc
+            ? '<h3>🩺 Protection set</h3><p class="muted">Now wait for the morning.</p>'
+            : `<h3>🩺 Who do you protect tonight?</h3><p class="muted">Can be yourself, but not the same person as last night.</p>${targets(aliveIdsOf(s), 'data-decoy', null)}`;
+        }
+      }
       body = `${nightSky()}<h3>🌙 Night ${s.round}</h3>${roleCard()}${act}${timer}`;
     }
 
@@ -599,6 +612,12 @@ export const werewolf = {
     on('#peek', () => { d.show = true; this.render(el, d.s, ui); });
     on('#hide', () => { d.show = false; this.render(el, d.s, ui); });
     on('[data-wolf]', b => sfx('blip') || ui.act('wolf', { target: b.dataset.wolf }));
+    on('[data-decoy]', b => {
+      sfx('blip');
+      d.decoy = { round: s.round, pick: b.dataset.decoy, ready: false };
+      this.render(el, d.s, ui);
+      setTimeout(() => { if (d.decoy?.round === s.round) { d.decoy.ready = true; if (el.isConnected) this.render(el, d.s, ui); } }, 2500);
+    });
     on('[data-pick]', b => sfx('blip') || ui.act('pick', { target: b.dataset.pick }));
     on('#peeknight', () => { d.peek = true; clearTimeout(d.peekT); d.peekT = setTimeout(() => { d.peek = false; if (el.isConnected) this.render(el, d.s, ui); }, 4000); this.render(el, d.s, ui); });
     on('[data-seer]', b => sfx('blip') || ui.act('seer', { target: b.dataset.seer }));
