@@ -342,7 +342,8 @@ function render() {
     }
   }
   if (g && S.state) {
-    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps, nameOf, act, esc, priv: S.priv });
+    // `raw` is the host's own full game state; it never leaves the host's browser, so games can keep host-only info there.
+    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps, nameOf, act, esc, priv: S.priv, raw: S.isHost ? S.raw : null });
   }
 }
 

@@ -286,11 +286,12 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   const rolled = bg.reduce(b, A('h', 'roll'), env());
   const n = rolled.pending; assert.ok(n >= 1 && n <= 75);
   assert.equal(rolled.called.length, 0); // rolling announces nothing
-  // players never receive the number; only the host does
+  // players never receive the number, and neither does anyone on the network until it is revealed
   const pub = bg.view(rolled);
   assert.ok(!('pending' in pub) && pub.hasPending === true);
   assert.ok(!JSON.stringify(pub).includes(`"last":${n}`));
-  assert.deepEqual(bg.priv(rolled), { h: { pending: n } }); assert.deepEqual(bg.priv(b), {});
+  assert.equal(bg.priv, undefined); // nothing addressed to anyone: the host reads its own state, the number never hits the wire
+  assert.ok(!JSON.stringify(pub).includes('pending'));
   assert.equal(bg.view(b).hasPending, false);
   // can't roll again or switch mode until it is revealed; non-host can't reveal
   assert.equal(bg.reduce(rolled, A('h', 'roll'), env()).pending, n);

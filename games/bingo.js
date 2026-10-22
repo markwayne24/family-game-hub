@@ -182,13 +182,11 @@ export const bingo = {
     return s;
   },
 
-  // A rolled-but-unrevealed number is only sent to the host (see priv).
+  // A rolled-but-unrevealed number is never broadcast: the host's browser reads it from its own state (ui.raw).
   view(s) {
     const { pending, ...pub } = { counts: {}, custom: [], mode: 'auto', pending: null, ...s };
     return { ...pub, hasPending: pending != null };
   },
-  priv: s => (s.pending != null ? { [s.host]: { pending: s.pending } } : {}),
-
   render(el, s, ui) {
     el._latest = { s, ui };
     const called = new Set(s.called);
@@ -201,7 +199,7 @@ export const bingo = {
       rerenderAfter(el, this);
     }
     // The host's private roll plays the same ball animation, just for them.
-    const secret = ui.isHost ? (ui.priv?.pending ?? null) : null;
+    const secret = ui.isHost ? (ui.raw?.pending ?? null) : null;
     const prevSecret = memo(el, 'secret', secret);
     if (secret && prevSecret !== undefined && secret !== prevSecret) showBall(secret, { secret: true });
 
