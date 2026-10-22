@@ -316,7 +316,7 @@ export const bingo = {
         <div class="lastnum"><span class="lbl">${s.called.length} called</span>
           <div class="big">${s.last ? `<span style="color:${COLORS[letter]}">${letter}</span> ${s.last}` : '—'}</div></div>
         ${phase === 'over' ? (s.ended
-          ? `<div class="winners"><div class="bingo-banner">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>`
+          ? `<div class="winners"><div class="bingo-banner ended">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>`
           : `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
           <p>${s.winners.map(w => nameOf(w.id)).join(' & ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : ''}
         ${ui.isHost && phase === 'over' ? '<button id="reset" style="width:100%;margin:8px 0">🔄 New game</button>' : ''}
