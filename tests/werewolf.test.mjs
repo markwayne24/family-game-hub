@@ -378,5 +378,20 @@ const setup = (n, roles, cfg = {}, mod = 'none') => {
     assert.equal(W.view(s).recap.length, s.recap.length);
   }
 }
+{
+  // the host can keep who-voted-for-whom private
+  const e = mk(6); let s = W.init(e);
+  s = step(s, e, 'h', 'config', { showVotes: false }); assert.equal(s.config.showVotes, false);
+  s = step(s, e, 'h', 'start'); s = { ...s, phase: 'vote', votes: {}, round: 1, muted: {} };
+  const [a, b, c, d2, f, g] = s.order;
+  for (const [from, to] of [[a, b], [b, a], [c, b], [d2, b], [f, 'skip'], [g, a]]) s = step(s, e, from, 'vote', { target: to });
+  assert.equal(s.phase, 'result'); assert.equal(s.tally.skips, 1);
+  const v = W.view(s); assert.equal(v.tally.votes, null); assert.equal(v.tally.counts[b], 3); assert.equal(v.tally.eliminated, b);
+  assert.ok(!JSON.stringify(v).includes(`"${a}":"${b}"`));
+  // default: votes are shown
+  let s2 = step(step(W.init(e), e, 'h', 'start'), e, 'h', 'noop'); s2 = { ...s2, phase: 'vote', votes: {}, round: 1, muted: {} };
+  for (const id of s2.order) s2 = step(s2, e, id, 'vote', { target: id === s2.order[0] ? s2.order[1] : s2.order[0] });
+  assert.ok(W.view(s2).tally.votes);
+}
 console.log('werewolf new-role tests passed');
 console.log('werewolf tests passed');

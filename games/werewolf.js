@@ -28,9 +28,9 @@ export const TIMERS = { nightSec: [30, 45, 60], daySec: [60, 120, 180, 300], vot
 
 const DEFAULTS = {
   mod: 'none', moderator: null, wolves: 'auto', seer: true, doctor: true, hunter: false, bodyguard: false, witch: false, cupid: false, tanner: false,
-  reveal: true, ghost: false, stealth: false, openVotes: false, runoff: false, nightSec: 45, daySec: 180, voteSec: 60,
+  reveal: true, ghost: false, stealth: false, openVotes: false, showVotes: true, runoff: false, nightSec: 45, daySec: 180, voteSec: 60,
 };
-const FLAGS = [...SPECIALS, 'reveal', 'ghost', 'stealth', 'openVotes', 'runoff'];
+const FLAGS = [...SPECIALS, 'reveal', 'ghost', 'stealth', 'openVotes', 'showVotes', 'runoff'];
 
 export const autoWolves = n => (n <= 7 ? 1 : Math.floor(n / 4));
 
@@ -199,7 +199,7 @@ function resolveVote(s, env) {
   // A tie either goes to a second vote between the tied players (if the host wants that) or eliminates nobody.
   if (leaders.length > 1 && s.config.runoff && !s.runoff) return enter({ ...s, runoff: true, candidates: leaders }, 'vote', env);
   const eliminated = top > 0 && leaders.length === 1 ? leaders[0] : null;
-  let next = { ...s, shots: [], tally: { counts, votes: s.votes, eliminated, round: s.round, runoff: !!s.runoff } };
+  let next = { ...s, shots: [], tally: { counts, votes: s.votes, skips: Object.entries(s.votes).filter(([v, x]) => x === 'skip' && s.alive[v] && !s.muted?.[v]).length, eliminated, round: s.round, runoff: !!s.runoff } };
   next.recap = [...s.recap, { kind: 'vote', round: s.round, counts, votes: s.votes, eliminated, runoff: !!s.runoff }];
   if (eliminated) next = kill(next, eliminated, 'vote', env);
   return enter(next, 'result', env);
@@ -374,16 +374,18 @@ export const werewolf = {
   view(s) {
     const { roles, night, seerLog, lastProtect, votes, host, lovers, witch, savedLast, recap, ...pub } = s;
     const over = s.phase === 'end';
+    const secret = !s.config.showVotes; // the host can keep who-voted-for-whom private
+    const hide = x => (secret && x ? { ...x, votes: null } : x);
     const revealed = {};
     for (const id of s.order) if (over || (!s.alive[id] && s.config.reveal)) revealed[id] = roles[id];
     const composition = {};
     for (const id of s.order) composition[roles[id]] = (composition[roles[id]] ?? 0) + 1;
     return {
-      ...pub, revealed, composition: s.phase === 'lobby' ? {} : composition,
+      ...pub, tally: hide(pub.tally), revealed, composition: s.phase === 'lobby' ? {} : composition,
       voted: s.phase === 'vote' ? Object.keys(votes) : [],
       liveVotes: s.config.openVotes && s.phase === 'vote' ? votes : null,
       locked: s.config.stealth && s.phase === 'night' ? Object.keys(night.picks ?? {}).filter(id => s.alive[id]).length : null,
-      recap: over ? recap : [], lovers: over ? lovers : null,
+      recap: over ? recap.map(e => (e.kind === 'vote' ? hide(e) : e)) : [], lovers: over ? lovers : null,
     };
   },
 
@@ -582,7 +584,7 @@ export const werewolf = {
           <h3>Werewolves</h3><div class="chips">${pick('wolves', 'auto', 'Auto', c.wolves === 'auto')}${[1, 2, 3, 4].map(k => pick('wolves', k, k, c.wolves === k)).join('')}</div>
           <h3>Roles</h3><div class="chips">${SPECIALS.map(role).join('')}</div>
           ${c.stealth ? '<p class="muted">Witch and Cupid need two choices, so they are off in face-to-face mode.</p>' : ''}
-          <h3>Rules</h3><div class="chips">${tog('reveal', 'Show role of the dead')}${tog('ghost', 'Dead players see all roles')}${tog('openVotes', 'Open voting (see votes live)')}${tog('runoff', 'Runoff vote on a tie')}${tog('stealth', '🕵️ Face-to-face mode')}</div>
+          <h3>Rules</h3><div class="chips">${tog('reveal', 'Show role of the dead')}${tog('ghost', 'Dead players see all roles')}${tog('showVotes', 'Show who voted for whom')}${tog('openVotes', 'Open voting (see votes live)')}${tog('runoff', 'Runoff vote on a tie')}${tog('stealth', '🕵️ Face-to-face mode')}</div>
           ${c.stealth ? '<p class="muted">Sitting together? At night everyone gets the same screen and must pick a player, so nobody can tell who the wolves, seer or doctor are. Only the right picks count. Anyone who skips the night can\'t vote the next day.</p>' : ''}
           ${c.mod === 'none' ? `<h3>Timers</h3>
             <p class="muted">Night</p><div class="chips">${TIMERS.nightSec.map(v => pick('nightSec', v, `${v}s`, c.nightSec === v)).join('')}</div>
@@ -590,7 +592,7 @@ export const werewolf = {
             <p class="muted">Voting</p><div class="chips">${TIMERS.voteSec.map(v => pick('voteSec', v, `${v}s`, c.voteSec === v)).join('')}</div>` : ''}`;
       } else {
         body = `<p><b>${MODERATORS[c.mod].emoji} ${MODERATORS[c.mod].name}</b>${modName ? `: ${ui.esc(modName)}` : ''}</p><p class="muted">${MODERATORS[c.mod].blurb}</p>
-          <p class="muted">Roles: ${SPECIALS.filter(k => c[k]).map(k => `${R(k).emoji} ${R(k).name}`).join(', ') || 'none'}${c.stealth ? ' · 🕵️ Face-to-face mode' : ''}${c.openVotes ? ' · open voting' : ''}${c.runoff ? ' · runoff on ties' : ''}</p>`;
+          <p class="muted">Roles: ${SPECIALS.filter(k => c[k]).map(k => `${R(k).emoji} ${R(k).name}`).join(', ') || 'none'}${c.stealth ? ' · 🕵️ Face-to-face mode' : ''}${c.openVotes ? ' · open voting' : ''}${c.showVotes ? '' : ' · secret votes'}${c.runoff ? ' · runoff on ties' : ''}</p>`;
       }
       body += `<div class="ww-comp"><b>${n >= MIN_PLAYERS ? n : '5+'} players:</b> ${comp}</div>
         ${why ? `<p class="muted">${ui.esc(why)}</p>` : ''}
@@ -723,7 +725,8 @@ export const werewolf = {
     else if (s.phase === 'result') {
       const t = s.tally;
       const entries = Object.entries(t?.votes ?? {}).filter(([f]) => !s.muted?.[f]);
-      const anim = fresh(el, 'tally', `${s.round}${t?.runoff ? 'r' : ''}`) && entries.length > 0;
+      const hidden = !t?.votes; // the host keeps votes private
+      const anim = fresh(el, 'tally', `${s.round}${t?.runoff ? 'r' : ''}`) && (entries.length > 0 || (hidden && Object.keys(t?.counts ?? {}).length > 0));
       const step = 0.45;
       const countAt = entries.length * step + 0.3;
       const verdictAt = countAt + 1.6;
@@ -735,14 +738,14 @@ export const werewolf = {
       const delay = (sec) => (anim ? `style="--d:${sec}s"` : '');
       const lines = Object.entries(t?.counts ?? {}).sort((a, b) => b[1] - a[1]);
       const max = Math.max(1, ...lines.map(([, k]) => k));
-      const skips = entries.filter(([, v]) => v === 'skip').length;
+      const skips = hidden ? t?.skips ?? 0 : entries.filter(([, v]) => v === 'skip').length;
       const shot = (s.shots ?? []).map(x => `🏹 ${name(x.by)} shot ${name(x.target)}${tag(x.target)}`).join('<br>');
       let hunter = '';
       if (s.hunter) hunter = s.hunter.id === ui.me
         ? `<h3>🏹 Take your last shot!</h3>${targets(others(), 'data-shoot', null)}`
         : `<p>🏹 <b>${name(s.hunter.id)}</b> was the hunter, and is taking a last shot…</p>`;
       body = `<h3>🗳️ The votes${t?.runoff ? ' (runoff)' : ''}</h3>
-        <div class="ww-tally">${entries.map(([f, to], i) => `<div class="tv ${anim ? 'rd' : ''}" style="--d:${(i * step).toFixed(2)}s">${name(f)} → <b>${to === 'skip' ? 'skip' : name(to)}</b></div>`).join('') || '<p class="muted">Nobody voted.</p>'}</div>
+        <div class="ww-tally">${hidden ? '<p class="muted">🔒 The host keeps individual votes secret. Here are the totals.</p>' : ''}${entries.map(([f, to], i) => `<div class="tv ${anim ? 'rd' : ''}" style="--d:${(i * step).toFixed(2)}s">${name(f)} → <b>${to === 'skip' ? 'skip' : name(to)}</b></div>`).join('') || (hidden ? '' : '<p class="muted">Nobody voted.</p>')}</div>
         <div class="ww-bars ${anim ? 'rd' : ''}" ${delay(countAt)}>${lines.map(([id, k]) => `<div class="tb"><span>${name(id)}</span><i style="--w:${(k / max) * 100}%"></i><b>${k}</b></div>`).join('')}${skips ? `<p class="muted">Skipped: ${skips}</p>` : ''}</div>
         <div class="ww-verdict ${anim ? 'rd' : ''} ${t?.eliminated ? 'out' : ''}" ${delay(verdictAt)}>${t?.eliminated
           ? `<div class="ww-farewell">💀 <b>${name(t.eliminated)}</b> is out${tag(t.eliminated)}<br><small>“It wasn't me…” Farewell, ${name(t.eliminated)}.</small></div>`

@@ -515,3 +515,8 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww.dusk .role{background:#ffffff26;color:#fff}
 .ww.dusk h2,.ww.dusk h3,.ww.dusk summary{color:#fff}
 .ww.dusk .ww-ghost{background:#0004}
+
+/* Werewolf: the skip button under the vote grid */
+.ww .votes + button.ghost,.ww .votes + .ww-skip{display:block;width:100%;margin-top:10px;min-height:44px}
+.ww .votes + button.ghost + .bar,.ww .votes + button.ghost + p{margin-top:14px}
+.ww-peek{margin-bottom:12px}

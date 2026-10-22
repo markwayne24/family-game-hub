@@ -54,3 +54,5 @@ Villagers and the hunter get a decoy job at night in normal mode too (a seer-sty
 - **Atmosphere:** sunrise and dusk themes, a daytime sky with birds, glowing wolf eyes on a wolf's own night screen, a golden shield scene for the doctor when a save works, a hunter's bang, and a ghost view with a timeline for players who are out.
 - **After the game:** a night-by-night recap of what everyone did and a leaderboard (wins, games, survived) that carries across rematches.
 - **Moderator tools:** a read-aloud script (one line per step, with a sound), and a countdown the moderator can start, extend or stop. When it runs out the game moves on.
+
+Werewolf vote privacy: the host can turn **Show who voted for whom** off in the lobby. The result then shows only the totals (and the number of skips), and the individual votes are never sent to players.
