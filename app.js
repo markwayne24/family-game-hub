@@ -5,7 +5,8 @@ import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
 import { resolveName } from './games/names.js';
 import { search, paginate } from './games/list.js';
-import { admit, summary, freeHeld } from './games/capacity.js';
+import { admit, summary, freeHeld, RESERVE_MS } from './games/capacity.js';
+import { lateMode, takePart, watchers, LATE_MODES } from './games/participants.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById('app');
@@ -20,7 +21,8 @@ const store = {
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
 const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0, pq: '', ppage: 0, pOpen: false,
-  maxPlayers: 0, admitted: {}, blocked: new Set(), fullSent: new Map(), room: { max: 0, used: 0, held: 0, full: false }, roomSig: '', limitOpen: false, subscribed: false };
+  maxPlayers: 0, admitted: {}, blocked: new Set(), fullSent: new Map(), room: { max: 0, used: 0, held: 0, full: false }, roomSig: '', limitOpen: false, subscribed: false,
+  late: 'auto', participants: null, spectators: new Set() };
 
 /* ---------- entry ---------- */
 
@@ -152,7 +154,9 @@ function players() {
   return S.blocked.size ? all.filter(p => !S.blocked.has(p.id)) : all;
 }
 const nameOf = id => players().find(p => p.id === id)?.name ?? '(waiting)';
-const env = () => ({ players: players(), hostId: S.me, now: Date.now() });
+// Games only see the people taking part; people watching a game in progress are left out until the next one.
+const participating = () => (S.spectators.size ? players().filter(p => !S.spectators.has(p.id)) : players());
+const env = () => ({ players: participating(), hostId: S.me, now: Date.now() });
 const act = (type, data) => S.channel.send({ type: 'broadcast', event: 'action', payload: { from: S.me, type, data } });
 
 function pushState() {
@@ -162,7 +166,7 @@ function pushState() {
   S.channel.send({ type: 'broadcast', event: 'state', payload: { game: S.game, state, priv, room: S.room } });
   // Games can ask the room to remember things (e.g. Bingo history) after the host moves on to another game.
   if (g?.remember && S.raw) S.memory[g.id] = g.remember(S.raw);
-  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw, memory: S.memory, limit: S.maxPlayers, admitted: S.admitted }));
+  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw, memory: S.memory, limit: S.maxPlayers, admitted: S.admitted, late: S.late, parts: S.participants ? [...S.participants] : null }));
   // Games with a clock (drawing turns, memory flips) ask the host to fire a 'timeout' action when it runs out.
   clearTimeout(S.timer);
   const at = g?.deadline?.(S.raw);
@@ -171,6 +175,7 @@ function pushState() {
 
 // Runs on the host only; everyone's actions go through here.
 function hostHandle(a) {
+  if (S.spectators.has(a.from) && a.type !== 'hello') return; // people watching can't act until the next game
   if (a.type === 'select') {
     if (a.from !== S.me) return;
     const g = GAMES[a.data?.game];
@@ -197,6 +202,8 @@ function enterRoom(code, name, isHost) {
       S.memory = saved?.memory ?? {};
       S.maxPlayers = saved?.limit ?? 0;
       S.admitted = saved?.admitted ?? {};
+      S.late = saved?.late ?? 'auto';
+      S.participants = saved?.parts ? new Set(saved.parts) : null;
       S.banned = new Set(JSON.parse(store.get(`hubBanned:${code}`) || '[]'));
     } catch { /* start fresh */ }
   }
@@ -246,11 +253,16 @@ function buildShell() {
     <div class="card" id="players">
       <div class="row"><div class="muted grow" id="pcount"></div><button class="ghost small" id="limitbtn" hidden></button><button class="ghost small" id="pmore" hidden></button></div>
       <div id="limitpanel" hidden>
-        <p class="muted" style="margin:6px 0">Most players allowed in this room (you count as one). Players already in are never removed.</p>
+        <h4 class="sethead">Player limit</h4>
+        <p class="muted" style="margin:0 0 6px">Most players allowed in this room (you count as one). Players already in are never removed.</p>
         <div class="chips presets">${[0, 4, 6, 8, 10, 12, 15, 20, 30, 50].map(n => `<button class="chip pick" data-limit="${n}">${n ? n : 'No limit'}</button>`).join('')}</div>
         <div class="row"><input id="limitnum" type="number" min="2" max="500" inputmode="numeric" placeholder="Other number" aria-label="Other player limit"><button class="ghost" id="limitset">Set</button></div>
         <p class="muted" id="limitnote"></p>
         <button class="ghost small" id="freeheld" hidden>Free the held seats now</button>
+        <h4 class="sethead">People who join during a game</h4>
+        <div class="chips presets">${Object.entries(LATE_MODES).map(([k, label]) => `<button class="chip pick" data-late="${k}">${label}</button>`).join('')}</div>
+        <p class="muted" id="latenote"></p>
+        <button class="ghost small" id="letin" hidden>Let the watchers join now</button>
       </div>
       <div class="chips" id="chips"></div>
       <div id="pfull" hidden>
@@ -262,6 +274,8 @@ function buildShell() {
   S.stageView = null;
   app.querySelector('#limitbtn').onclick = () => { S.limitOpen = !S.limitOpen; render(); };
   app.querySelectorAll('[data-limit]').forEach(b => b.onclick = () => setLimit(+b.dataset.limit));
+  app.querySelectorAll('[data-late]').forEach(b => b.onclick = () => setLate(b.dataset.late));
+  app.querySelector('#letin').onclick = letWatchersIn;
   app.querySelector('#limitset').onclick = () => {
     const n = Math.floor(+app.querySelector('#limitnum').value);
     if (n >= 2 && n <= 500) { setLimit(n); app.querySelector('#limitnum').value = ''; }
@@ -329,9 +343,37 @@ function enforceLimit() {
       S.channel.send({ type: 'broadcast', event: 'full', payload: { id, max: S.maxPlayers } });
     }
   }
-  S.room = summary(S.admitted, players(), S.maxPlayers);
-  const sig = `${S.room.max}/${S.room.used}/${S.room.held}/${players().length}`;
+  refreshParticipants();
+  S.room = { ...summary(S.admitted, players(), S.maxPlayers), watching: [...S.spectators], late: S.late };
+  const sig = `${S.room.max}/${S.room.used}/${S.room.held}/${players().length}/${S.late}/${[...S.spectators].sort().join(',')}`;
   if (sig !== S.roomSig) { S.roomSig = sig; pushState(); } // everyone's totals changed
+}
+
+// While a game is running, people who arrived after it began watch (if the setting says so). Everyone present when it began,
+// plus anyone who only dropped out for a moment, is a player. Outside a running game nobody is held back.
+function refreshParticipants() {
+  const g = GAMES[S.game];
+  const running = !!(g && S.raw && g.inProgress?.(S.raw));
+  if (!running || lateMode(S.late, g) === 'join') { S.participants = null; S.spectators = new Set(); return; }
+  const here = connected().filter(p => !S.blocked.has(p.id));
+  S.participants ??= takePart(S.admitted, here.map(p => p.id), S.me, Date.now(), RESERVE_MS);
+  S.spectators = new Set(watchers(S.participants, here));
+}
+
+function setLate(mode) {
+  if (!LATE_MODES[mode]) return;
+  S.late = mode;
+  enforceLimit();
+  pushState();
+  render();
+}
+
+// The host lets everyone who is watching take part right now.
+function letWatchersIn() {
+  S.participants = takePart(S.admitted, connected().map(p => p.id), S.me, Date.now(), RESERVE_MS);
+  S.roomSig = '';
+  enforceLimit();
+  render();
 }
 
 function setLimit(n) {
@@ -404,12 +446,13 @@ function renderTotals(ps) {
   const spots = room.max ? Math.max(0, room.max - room.used) : 0;
   const total = app.querySelector('#total');
   total.innerHTML = `👥 <b>${n}${room.max ? ` / ${room.max}` : ''}</b> player${n === 1 ? '' : 's'}${
-    room.max ? (room.full ? ' · <span class="fullflag">Room full</span>' : ` · ${spots} spot${spots === 1 ? '' : 's'} left`) : ''}`;
+    room.max ? (room.full ? ' · <span class="fullflag">Room full</span>' : ` · ${spots} spot${spots === 1 ? '' : 's'} left`) : ''}${
+    room.watching?.length ? ` · 👀 ${room.watching.length} watching` : ''}`;
   total.title = room.held ? `${room.held} seat${room.held === 1 ? ' is' : 's are'} held for players who dropped out` : '';
 
   const btn = app.querySelector('#limitbtn');
   btn.hidden = !S.isHost;
-  btn.textContent = `⚙ Limit: ${S.maxPlayers || 'none'}`;
+  btn.textContent = '⚙ Room settings';
   const panel = app.querySelector('#limitpanel');
   panel.hidden = !(S.isHost && S.limitOpen);
   if (!panel.hidden) {
@@ -417,6 +460,14 @@ function renderTotals(ps) {
     const over = S.maxPlayers && room.used > S.maxPlayers;
     app.querySelector('#limitnote').textContent = `${room.used} seat${room.used === 1 ? '' : 's'} in use${room.held ? `, ${room.held} held for players who dropped out` : ''}.${over ? ' Already over the limit: it only blocks new players.' : ''}`;
     app.querySelector('#freeheld').hidden = !room.held;
+    app.querySelectorAll('[data-late]').forEach(b => b.classList.toggle('sel', b.dataset.late === S.late));
+    const watching = room.watching?.length ?? 0;
+    app.querySelector('#latenote').textContent = {
+      auto: 'Automatic: Bingo makes newcomers watch until the next game (their card would start with every called number marked). The other games let them join in.',
+      watch: 'Newcomers watch until the next game, in every game.',
+      join: 'Newcomers always join in, even in Bingo.',
+    }[S.late] + (watching ? ` ${watching} ${watching === 1 ? 'person is' : 'people are'} watching right now.` : '');
+    app.querySelector('#letin').hidden = !watching;
   }
 }
 
@@ -491,10 +542,13 @@ function render() {
     S.name = wanted;
     S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
   }
+  const watching = new Set(S.room.watching ?? []);
+  const spectator = !S.isHost && watching.has(S.me);
+  const watchNote = spectator ? '<div class="banner watch">👀 A game is already in progress, so you\'re watching. You\'ll join the next one!</div>' : '';
   const renamed = S.name !== S.baseName ? `<div class="banner">Someone already has the name “${esc(S.baseName)}”, so you appear as “${esc(S.name)}”. The number lets the host tell you apart.</div>` : '';
   // Always show people their own name, as everyone else sees it.
   app.querySelector('#whoami').innerHTML = `${S.isHost ? '👑' : '👤'} You are <b>${esc(S.name)}</b>`;
-  app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed;
+  app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed + watchNote;
   renderTotals(ps);
   renderPlayers(ps);
   if (S.seen.size && ps.some(p => !S.seen.has(p.id) && p.id !== S.me)) sfx('blip');
@@ -532,9 +586,10 @@ function render() {
       stage.innerHTML = '<h2>Waiting for the host to pick a game…</h2><p class="muted">Hang tight, this screen updates by itself.</p>';
     }
   }
+  stage.classList.toggle('spectating', spectator);
   if (g && S.state) {
     // `raw` is the host's own full game state; it never leaves the host's browser, so games can keep host-only info there.
-    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps, nameOf, act, esc, priv: S.priv, raw: S.isHost ? S.raw : null });
+    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps.filter(p => !watching.has(p.id)), watching: ps.filter(p => watching.has(p.id)), spectator, nameOf, act, esc, priv: S.priv, raw: S.isHost ? S.raw : null });
   }
 }
 

@@ -310,7 +310,8 @@ export const bingo = {
           ? `<div class="biglist"><input type="search" data-keep="allq" value="${esc(U.allq)}" placeholder="Search players…" autocomplete="off">
               ${pg.items.map(p => `<div class="prow"><span>${esc(p.name)}</span><b>🎴 ${countOf(s, p.id)}</b></div>`).join('') || '<p class="muted">No players match.</p>'}${pager('all', pg)}</div>` : ''}`;
       }
-      return `<div class="roomsum"><b>👥 ${ps.length} player${ps.length === 1 ? '' : 's'} · 🎴 ${total} card${total === 1 ? '' : 's'} in play</b>
+      const watchingN = ui.watching?.length ?? 0;
+      return `<div class="roomsum"><b>👥 ${ps.length} player${ps.length === 1 ? '' : 's'} · 🎴 ${total} card${total === 1 ? '' : 's'} in play${watchingN ? ` · 👀 ${watchingN} watching` : ''}</b>
         <div class="cc">${chips}</div>${everyone}</div>`;
     };
 
@@ -413,7 +414,7 @@ export const bingo = {
             <p class="muted">Announce it, then tap “Reveal to everyone” below.</p></div>` : '';
       const modeMini = ui.isHost && phase === 'play' && s.pending == null
         ? `<details class="mini-mode"><summary>Change draw mode</summary>${modeButtons}</details>` : '';
-      const waiting = !ui.isHost && phase !== 'over'
+      const waiting = !ui.isHost && phase !== 'over' && !ui.spectator
         ? (s.hasPending ? '<div class="pending"><span>?</span><p>The host rolled a number… wait for the announcement!</p></div>'
           : '<p class="muted">The host calls the numbers. Your cards mark themselves and you win automatically!</p>') : '';
       const result = phase === 'over' ? (s.ended
@@ -425,7 +426,8 @@ export const bingo = {
           <div class="big">${s.last ? `<span style="color:${COLORS[letter]}">${letter}</span> ${s.last}` : '—'}</div></div>
         ${result}${phase === 'over' ? hist : ''}${secretPanel}${waiting}${modeMini}
         ${numberBoard(s, called)}
-        ${phase === 'over' && myWin && myCount === 1 ? '' : `<h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCards()}`}
+        ${ui.spectator ? '<div class="banner watch">👀 You\'re watching this game. You\'ll get your own cards in the next one.</div>'
+          : phase === 'over' && myWin && myCount === 1 ? '' : `<h3>Your card${myCount > 1 ? 's' : ''}</h3>${myCards()}`}
         <h3>Players &amp; cards</h3>${roomSummary()}
         ${phase === 'over' ? '' : hist}${actionbar}`;
     }

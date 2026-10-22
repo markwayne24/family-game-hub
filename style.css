@@ -360,3 +360,9 @@ summary{min-height:44px;display:flex;align-items:center}
 .chip.pick.sel{background:var(--accent);color:#fff}
 #limitpanel{background:var(--bg);border-radius:14px;padding:8px 12px;margin:8px 0}
 #limitpanel .row input{flex:1;width:auto;min-width:0;margin:0}
+
+/* ---------- watching a game in progress ---------- */
+.spectating button,.spectating input,.spectating select,.spectating textarea,.spectating canvas,.spectating summary{pointer-events:none}
+.spectating{opacity:.88}
+.banner.watch{background:#e7f5ff;color:#0b4a7a}
+.sethead{margin:14px 0 6px;font-size:.95rem}
