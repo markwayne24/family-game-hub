@@ -3,6 +3,7 @@ import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 import { GAMES } from './games/index.js';
 import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
+import { resolveName } from './games/names.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById('app');
@@ -16,7 +17,7 @@ const store = {
 };
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
-const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {} };
+const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0 };
 
 /* ---------- entry ---------- */
 
@@ -177,6 +178,9 @@ function hostHandle(a) {
 
 function enterRoom(code, name, isHost) {
   S.code = code;
+  S.baseName = name;
+  S.name = name;
+  S.joinedAt = Date.now();
   S.isHost = isHost;
   if (isHost) {
     try {
@@ -203,7 +207,7 @@ function enterRoom(code, name, isHost) {
     })
     .subscribe(async status => {
       if (status !== 'SUBSCRIBED') return;
-      await S.channel.track({ name, t: Date.now(), host: isHost });
+      await S.channel.track({ name: S.name, t: S.joinedAt, host: isHost });
       if (isHost) pushState();
       render();
     });
@@ -301,7 +305,14 @@ function render() {
   app.querySelector('#lobby').style.display = S.isHost && g ? '' : 'none';
   app.querySelector('#close').style.display = S.isHost ? '' : 'none';
   app.querySelector('#leave').style.display = S.isHost ? 'none' : '';
-  app.querySelector('#banner').innerHTML = ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>';
+  // Two people with the same name: the later joiner becomes "Name 2". Their join time is kept so seats and turn order don't change.
+  const wanted = resolveName(ps, S.me, S.baseName);
+  if (wanted !== S.name) {
+    S.name = wanted;
+    S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
+  }
+  const renamed = S.name !== S.baseName ? `<div class="banner">Someone already has the name “${esc(S.baseName)}”, so you appear as “${esc(S.name)}”.</div>` : '';
+  app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed;
   app.querySelector('#pcount').textContent = `Players (${ps.length})`;
   // Only players who just arrived get the pop-in animation.
   app.querySelector('#chips').innerHTML = ps.map(p =>

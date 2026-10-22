@@ -419,4 +419,26 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   assert.equal(bg.reduce(oldGame, A('h', 'end'), env()).history.length, 1);
   assert.equal(bg.view(oldGame).history.length, 0);
 }
+
+
+// ---- duplicate display names
+import { resolveName, normName } from '../games/names.js';
+{
+  const pl = (...xs) => xs.map(([id, name, t]) => ({ id, name, t }));
+  assert.equal(resolveName(pl(['a', 'Nicole', 1]), 'a', 'Nicole'), 'Nicole'); // alone: keeps the name
+  assert.equal(resolveName(pl(['a', 'Nicole', 1], ['b', 'Nicole', 2]), 'a', 'Nicole'), 'Nicole'); // first to join keeps it
+  assert.equal(resolveName(pl(['a', 'Nicole', 1], ['b', 'Nicole', 2]), 'b', 'Nicole'), 'Nicole 2'); // second becomes "Nicole 2"
+  assert.equal(resolveName(pl(['a', 'Nicole', 1], ['b', 'NICOLE', 2]), 'b', 'NICOLE'), 'NICOLE 2'); // not case-sensitive
+  assert.equal(resolveName(pl(['a', 'Nicole', 1], ['b', 'Nicole 2', 2], ['c', 'Nicole', 3]), 'c', 'Nicole'), 'Nicole 3'); // skips taken suffixes
+  assert.equal(resolveName(pl(['a', 'Nicole', 1], ['b', 'Nicole 2', 2]), 'b', 'Nicole'), 'Nicole 2'); // stable once renamed
+  assert.equal(resolveName(pl(['b', 'Nicole 2', 2]), 'b', 'Nicole'), 'Nicole'); // the original left: gets the plain name back
+  assert.equal(resolveName(pl(['a', 'Ann', 1], ['b', 'Bo', 2]), 'b', 'Bo'), 'Bo'); // different names are untouched
+  assert.equal(resolveName(pl(['a', 'Sam', 5], ['b', 'Sam', 5]), 'a', 'Sam'), 'Sam'); // same join time: lower id wins
+  assert.equal(resolveName(pl(['a', 'Sam', 5], ['b', 'Sam', 5]), 'b', 'Sam'), 'Sam 2');
+  assert.equal(resolveName([], 'x', 'Zed'), 'Zed'); // not in the list yet
+  // everyone ends up with a different name, whatever order they join in
+  const joined = ['id1', 'id2', 'id3', 'id4'].map((id, i) => ({ id, name: 'Nicole', t: 10 + i }));
+  for (let pass = 0; pass < 3; pass++) for (const p of joined) p.name = resolveName(joined, p.id, 'Nicole');
+  assert.equal(new Set(joined.map(p => normName(p.name))).size, 4); assert.deepEqual(joined.map(p => p.name), ['Nicole', 'Nicole 2', 'Nicole 3', 'Nicole 4']);
+}
 console.log('all game tests passed');

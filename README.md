@@ -5,6 +5,8 @@ Games: Tic-Tac-Toe, Connect 4, Trivia (4 question packs + your own), Bingo, Rock
 
 Bingo: players shuffle their own cards (always unique) until the host starts. The host can give players extra cards (everyone sees the card counts), pick a preset win pattern or draw a custom one square by square, and choose how numbers are drawn: instant (everyone sees it) or private roll (only the host sees it until they reveal it). Wins are detected automatically and the winning cells light up gold; every revealed number plays an animated ball draw. The host can end a game early or start a new one, and every finished game goes into a history (winners, pattern, numbers called, games played, wins per player) that lasts for the whole room session.
 
+Names: if two players pick the same name, the later joiner is shown as "Name 2" (and told why), so scores and winners are never ambiguous.
+
 Host tools: pick a game and its options (question pack, word difficulty, prompt type), remove players, close the room. Refreshing a tab rejoins the same room (guests) or resumes the room and game (host). Sound effects have a mute button.
 
 - **Frontend:** static files (no build step), hosted on any static host.
