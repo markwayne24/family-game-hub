@@ -3,7 +3,7 @@
 Multiplayer party games for family and friends. The host creates a room and shares a link; guests join with a name.
 Games: Tic-Tac-Toe, Connect 4, Trivia (4 question packs + your own), Bingo, Rock Paper Scissors, Memory Match, Draw & Guess, Impostor, Hangman, Word Race, Charades.
 
-Bingo: players shuffle their own card (always unique) until the host starts; the host picks a win pattern (any line, four corners, X, L, T, plus, frame, blackout); wins are detected automatically and the winning cells light up gold; every call plays an animated ball draw.
+Bingo: players shuffle their own cards (always unique) until the host starts. The host can give players extra cards (everyone sees the card counts), pick a preset win pattern or draw a custom one square by square, and choose how numbers are drawn: instant (everyone sees it) or private roll (only the host sees it until they reveal it). Wins are detected automatically and the winning cells light up gold; every revealed number plays an animated ball draw.
 
 Host tools: pick a game and its options (question pack, word difficulty, prompt type), remove players, close the room. Refreshing a tab rejoins the same room (guests) or resumes the room and game (host). Sound effects have a mute button.
 
