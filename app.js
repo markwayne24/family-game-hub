@@ -7,6 +7,7 @@ import { resolveName } from './games/names.js';
 import { search, paginate } from './games/list.js';
 import { admit, summary, freeHeld, RESERVE_MS } from './games/capacity.js';
 import { lateMode, takePart, watchers, LATE_MODES } from './games/participants.js';
+import { supported as cryptoSupported, makeKeys, seal, open as openSealed } from './games/secure.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById('app');
@@ -22,7 +23,8 @@ const store = {
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
 const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0, pq: '', ppage: 0, pOpen: false,
   maxPlayers: 0, admitted: {}, blocked: new Set(), fullSent: new Map(), room: { max: 0, used: 0, held: 0, full: false }, roomSig: '', limitOpen: false, subscribed: false,
-  late: 'auto', participants: null, spectators: new Set() };
+  late: 'auto', participants: null, spectators: new Set(),
+  keys: null, stateSeq: 0, sendQ: Promise.resolve(), sealedForMe: null };
 
 /* ---------- entry ---------- */
 
@@ -157,13 +159,45 @@ const nameOf = id => players().find(p => p.id === id)?.name ?? '(waiting)';
 // Games only see the people taking part; people watching a game in progress are left out until the next one.
 const participating = () => (S.spectators.size ? players().filter(p => !S.spectators.has(p.id)) : players());
 const env = () => ({ players: participating(), hostId: S.me, now: Date.now() });
+// What we tell the room about ourselves. `pk` is our public key, so the host can send us private messages.
+const meta = () => ({ name: S.name, t: S.joinedAt, host: S.isHost, pk: S.keys?.publicJwk });
 const act = (type, data) => S.channel.send({ type: 'broadcast', event: 'action', payload: { from: S.me, type, data } });
+
+// Decrypt the private message addressed to us, using the host's public key from the room.
+async function openPrivate() {
+  const seq = ++S.stateSeq;
+  const hostKey = connected().find(p => p.host)?.pk;
+  if (!S.keys || !hostKey || !S.sealedForMe) { render(); return; } // retried when the host's key shows up
+  const value = await openSealed(S.keys.privateKey, hostKey, S.sealedForMe);
+  if (seq !== S.stateSeq) return; // a newer message has arrived since
+  S.priv = value;
+  render();
+}
+
+// Seal each player's private information so only they can read it. A player we have no key for gets nothing until they announce one.
+async function sealFor(entries) {
+  const keys = new Map(connected().map(p => [p.id, p.pk]));
+  const out = {};
+  for (const [id, value] of entries) {
+    const pk = keys.get(id);
+    if (S.keys && pk) out[id] = await seal(S.keys.privateKey, pk, value);
+  }
+  return out;
+}
 
 function pushState() {
   const g = GAMES[S.game];
   const state = g ? (g.view ? g.view(S.raw) : S.raw) : null;
-  const priv = g?.priv ? g.priv(S.raw) : undefined;
-  S.channel.send({ type: 'broadcast', event: 'state', payload: { game: S.game, state, priv, room: S.room } });
+  const privMap = g?.priv && S.raw != null ? g.priv(S.raw) : undefined;
+  S.priv = privMap?.[S.me] ?? null; // the host's own secrets never leave this phone
+  const others = privMap ? Object.entries(privMap).filter(([id]) => id !== S.me) : [];
+  const game = S.game;
+  const room = S.room;
+  // sent in order, because sealing takes a moment and a later state must never overtake an earlier one
+  S.sendQ = S.sendQ.then(async () => {
+    const priv = others.length ? await sealFor(others) : undefined;
+    S.channel?.send({ type: 'broadcast', event: 'state', payload: { game, state, priv, room } });
+  }).catch(err => console.warn('could not send state', err));
   // Games can ask the room to remember things (e.g. Bingo history) after the host moves on to another game.
   if (g?.remember && S.raw) S.memory[g.id] = g.remember(S.raw);
   store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw, memory: S.memory, limit: S.maxPlayers, admitted: S.admitted, late: S.late, parts: S.participants ? [...S.participants] : null }));
@@ -212,11 +246,15 @@ function enterRoom(code, name, isHost) {
   S.channel
     .on('broadcast', { event: 'action' }, ({ payload }) => { if (S.isHost) hostHandle(payload); })
     .on('broadcast', { event: 'state' }, ({ payload }) => {
-      S.game = payload.game; S.state = payload.state; S.priv = payload.priv?.[S.me] ?? null;
+      S.game = payload.game; S.state = payload.state;
       if (payload.room && !S.isHost) S.room = payload.room;
-      render();
+      if (S.isHost) { render(); return; } // the host already has its own secrets
+      S.sealedForMe = payload.priv?.[S.me] ?? null;
+      S.priv = null;
+      if (!S.sealedForMe) { S.stateSeq++; render(); return; }
+      openPrivate(); // render once it has been decrypted, so an old secret never flashes
     })
-    .on('presence', { event: 'sync' }, render)
+    .on('presence', { event: 'sync' }, () => { if (S.sealedForMe && S.priv === null) openPrivate(); render(); })
     .on('broadcast', { event: 'kick' }, ({ payload }) => { if (payload.id === S.me) removedScreen('You were removed from the room by the host.', true); })
     .on('broadcast', { event: 'full' }, ({ payload }) => { if (payload.id === S.me) fullScreen(payload.max); })
     .on('broadcast', { event: 'closed' }, () => { if (!S.isHost) removedScreen('The host closed this room. Thanks for playing!'); })
@@ -228,7 +266,8 @@ function enterRoom(code, name, isHost) {
     .subscribe(async status => {
       if (status !== 'SUBSCRIBED') return;
       S.subscribed = true;
-      await S.channel.track({ name: S.name, t: S.joinedAt, host: isHost });
+      if (!S.keys && cryptoSupported()) S.keys = await makeKeys();
+      await S.channel.track(meta());
       if (isHost) pushState();
       render();
     });
@@ -306,6 +345,7 @@ function buildShell() {
 
 function stopChannel() {
   allowSleep();
+  S.keys = null; S.sealedForMe = null; S.priv = null; // a fresh key next time
   S.subscribed = false;
   clearTimeout(S.timer);
   if (S.channel) sb.removeChannel(S.channel);
@@ -430,7 +470,7 @@ function allowSleep() {
 }
 function resync() {
   if (!S.channel) return;
-  S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
+  S.channel.track(meta());
   // Anything sent while we were away is gone, so ask the host for the current game (any action makes it re-send everything).
   if (S.isHost) pushState(); else act('hello');
 }
@@ -540,7 +580,7 @@ function render() {
   const wanted = resolveName(ps, S.me, S.baseName, S.name);
   if (wanted !== S.name) {
     S.name = wanted;
-    S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
+    S.channel.track(meta());
   }
   const watching = new Set(S.room.watching ?? []);
   const spectator = !S.isHost && watching.has(S.me);

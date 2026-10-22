@@ -801,4 +801,42 @@ import { lateMode, takePart, watchers, LATE_MODES } from '../games/participants.
   let wr2 = GAMES.wordrace.init(env()); assert.equal(run('wordrace', wr2), false);
   wr2 = GAMES.wordrace.reduce(wr2, A('h', 'guess', { word: 'xxxxx' }), env()); assert.equal(run('wordrace', wr2), true);
 }
+
+
+// ---- private messages (encryption)
+import { supported, makeKeys, seal, open as openSealed } from '../games/secure.js';
+{
+  assert.equal(supported(), true);
+  const host = await makeKeys(), ann = await makeKeys(), bo = await makeKeys();
+  assert.ok(host.publicJwk.x && host.publicJwk.y && !host.publicJwk.d, 'only the public half is shared'); // no private part in the shared key
+  assert.notEqual(ann.publicJwk.x, bo.publicJwk.x);
+  const secret = { role: 'seer', word: 'pizza', list: [1, 2, 3], emoji: '🐺 ünï' };
+  const sealedForAnn = await seal(host.privateKey, ann.publicJwk, secret);
+  assert.deepEqual(Object.keys(sealedForAnn).sort(), ['ct', 'iv']);
+  assert.ok(!JSON.stringify(sealedForAnn).includes('seer') && !JSON.stringify(sealedForAnn).includes('pizza'), 'nothing readable on the wire');
+  // the recipient can read it, using the host's public key
+  assert.deepEqual(await openSealed(ann.privateKey, host.publicJwk, sealedForAnn), secret);
+  // and so can the host (for checking), but nobody else
+  assert.deepEqual(await openSealed(host.privateKey, ann.publicJwk, sealedForAnn), secret);
+  assert.equal(await openSealed(bo.privateKey, host.publicJwk, sealedForAnn), null, 'another player cannot read it');
+  assert.equal(await openSealed(bo.privateKey, ann.publicJwk, sealedForAnn), null);
+  // each seal is different even for the same message
+  const again = await seal(host.privateKey, ann.publicJwk, secret);
+  assert.notEqual(again.ct, sealedForAnn.ct); assert.notEqual(again.iv, sealedForAnn.iv);
+  // tampering is detected
+  const bad = { ...sealedForAnn, ct: sealedForAnn.ct.slice(0, -4) + 'AAAA' };
+  assert.equal(await openSealed(ann.privateKey, host.publicJwk, bad), null);
+  assert.equal(await openSealed(ann.privateKey, host.publicJwk, { iv: 'x', ct: 'y' }), null);
+  assert.equal(await openSealed(ann.privateKey, host.publicJwk, undefined), null);
+  // a fresh key (a refreshed phone) can't read what was sealed for the old one, but can read new messages
+  const annAfterRefresh = await makeKeys();
+  assert.equal(await openSealed(annAfterRefresh.privateKey, host.publicJwk, sealedForAnn), null);
+  assert.deepEqual(await openSealed(annAfterRefresh.privateKey, host.publicJwk, await seal(host.privateKey, annAfterRefresh.publicJwk, { ok: 1 })), { ok: 1 });
+  // larger payloads (a moderator's view of every role in a big room)
+  const big = Object.fromEntries(Array.from({ length: 300 }, (_, i) => ['player-' + i, { role: i % 4 ? 'villager' : 'wolf', name: 'Nicole (' + (10000 + i) + ')' }]));
+  assert.deepEqual(await openSealed(bo.privateKey, host.publicJwk, await seal(host.privateKey, bo.publicJwk, big)), big);
+  // values that are not objects
+  assert.equal(await openSealed(ann.privateKey, host.publicJwk, await seal(host.privateKey, ann.publicJwk, 'just a word')), 'just a word');
+  assert.equal(await openSealed(ann.privateKey, host.publicJwk, await seal(host.privateKey, ann.publicJwk, null)), null);
+}
 console.log('all game tests passed');
