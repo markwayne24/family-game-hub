@@ -1,5 +1,6 @@
 import { fresh, memo, confetti, sfx, reduceMotion } from './fx.js';
 import { search, paginate } from './list.js';
+import { PATTERNS, PATTERN_IDS, PRESET_IDS, GROUPS, winCells, needCount, needAny, matchPatterns, previewCells, cleanPatterns } from './patterns.js';
 
 export const LETTERS = ['B', 'I', 'N', 'G', 'O'];
 export const letterOf = n => LETTERS[Math.floor((n - 1) / 15)];
@@ -27,35 +28,7 @@ export function cardFor(id, seed = 0) {
 }
 const cardKey = card => card.join(',');
 
-const range = [0, 1, 2, 3, 4];
-const row = r => range.map(c => r * 5 + c);
-const col = c => range.map(r => r * 5 + c);
-const LINES = [...range.map(row), ...range.map(col), [0, 6, 12, 18, 24], [4, 8, 12, 16, 20]];
-
-// What the host can ask for. `cells: null` means "any complete line" (the classic game).
-export const PATTERNS = {
-  line: { name: 'Any line', cells: null, preview: row(2) },
-  corners: { name: 'Four corners', cells: [0, 4, 20, 24] },
-  x: { name: 'X', cells: [0, 4, 6, 8, 12, 16, 18, 20, 24] },
-  l: { name: 'L shape', cells: [...col(0), 21, 22, 23, 24] },
-  t: { name: 'T shape', cells: [...row(0), 7, 12, 17, 22] },
-  plus: { name: 'Plus', cells: [...row(2), 2, 7, 17, 22] },
-  frame: { name: 'Frame', cells: [...row(0), ...row(4), 5, 10, 15, 9, 14, 19] },
-  blackout: { name: 'Blackout (all)', cells: Array.from({ length: 25 }, (_, i) => i) },
-  custom: { name: 'Custom', cells: [] }, // the host picks the squares; see state.custom
-};
-
-// The cells that make a card a winner for this pattern, or null if it isn't one yet.
-export function winCells(card, called, pattern, custom = []) {
-  const set = new Set(called);
-  const done = i => card[i] === 0 || set.has(card[i]);
-  const cells = pattern === 'custom' ? custom : (PATTERNS[pattern] ?? PATTERNS.line).cells;
-  if (!cells) {
-    const hit = LINES.filter(l => l.every(done));
-    return hit.length ? [...new Set(hit.flat())] : null;
-  }
-  return cells.every(done) ? cells : null;
-}
+export { PATTERNS, winCells, needCount, needAny, matchPatterns };
 
 export const MAX_CARDS = 6;
 export const MODES = {
@@ -70,7 +43,7 @@ const seedOf = (s, id, k) => s.seeds[cid(id, k)] ?? 0;
 export const cardOf = (s, id, k = 0) => cardFor(cid(id, k), seedOf(s, id, k));
 const cardsOf = (s, id) => Array.from({ length: countOf(s, id) }, (_, k) => cardOf(s, id, k));
 const randomSeed = () => 1 + Math.floor(Math.random() * 1e9);
-const customOk = s => s.pattern !== 'custom' || s.custom.some(i => i !== 12);
+const customOk = s => !s.patterns.includes('custom') || s.custom.some(i => i !== 12);
 
 // Every player we know about, so new cards can be checked against all existing ones.
 function knownIds(s, env) {
@@ -84,26 +57,23 @@ function takenKeys(s, env, except) {
   return taken;
 }
 
-// How many squares a card still needs for the pattern (0 = it has won). Used for the "needs N" tab badges.
-export function needCount(card, called, pattern, custom = []) {
-  const set = new Set(called);
-  const missing = cells => cells.filter(i => card[i] !== 0 && !set.has(card[i])).length;
-  const cells = pattern === 'custom' ? custom : (PATTERNS[pattern] ?? PATTERNS.line).cells;
-  return cells ? missing(cells) : Math.min(...LINES.map(missing));
-}
-
 // Up to this many players the host sees a plain list; beyond it, search and pages take over.
 const SMALL_ROOM = 8;
 const PER_PAGE = 8;
 
-const patName = s => (s.pattern === 'custom' ? `Custom (${s.custom.filter(i => i !== 12).length} squares)` : (PATTERNS[s.pattern] ?? PATTERNS.line).name);
+const patName = s => {
+  const ids = s.patterns;
+  if (ids.length === 1) return ids[0] === 'custom' ? `Custom (${s.custom.filter(i => i !== 12).length} squares)` : PATTERNS[ids[0]].name;
+  return PRESET_IDS.every(id => ids.includes(id)) ? 'All patterns' : `${ids.length} patterns`;
+};
+const nameOfPattern = id => PATTERNS[id]?.name ?? id;
 
 // One history entry per finished game (a win, or the host ending it). Abandoned games are not recorded.
 function record(s, env, winners) {
   const entry = {
     n: s.history.length + 1,
-    winners: winners.map(w => ({ id: w.id, name: env.players.find(p => p.id === w.id)?.name ?? '?', k: w.k, multi: countOf(s, w.id) > 1 })),
-    pattern: patName(s), mode: s.mode, called: s.called.length, at: env.now,
+    winners: winners.map(w => ({ id: w.id, name: env.players.find(p => p.id === w.id)?.name ?? '?', k: w.k, multi: countOf(s, w.id) > 1, how: w.pattern ? nameOfPattern(w.pattern) : null })),
+    pattern: patName(s), patterns: s.patterns.length, mode: s.mode, called: s.called.length, at: env.now,
   };
   return [...s.history, entry];
 }
@@ -114,8 +84,8 @@ function reveal(s, env, n) {
   const winners = [];
   for (const p of env.players) {
     for (let k = 0; k < countOf(s, p.id); k++) {
-      const cells = winCells(cardOf(s, p.id, k), called, s.pattern, s.custom);
-      if (cells) { winners.push({ id: p.id, k, cells }); break; } // one entry per player
+      const hit = matchPatterns(cardOf(s, p.id, k), called, s.patterns, s.custom);
+      if (hit) { winners.push({ id: p.id, k, cells: hit.cells, pattern: hit.id }); break; } // one entry per player
     }
   }
   const next = { ...s, called, last: n, pending: null, winners, phase: winners.length ? 'over' : 'play' };
@@ -132,14 +102,15 @@ export const bingo = {
   name: 'Bingo',
   emoji: '🎱',
   options: [
-    { key: 'pattern', label: 'Win pattern', choices: Object.entries(PATTERNS).filter(([k]) => k !== 'custom').map(([k, p]) => [k, p.name]) },
+    { key: 'pattern', label: 'Win pattern', choices: PRESET_IDS.map(k => [k, PATTERNS[k].name]) },
     { key: 'mode', label: 'Number draw', choices: [['auto', 'Instant (everyone sees)'], ['manual', 'Private roll, host reveals']] },
   ],
 
   init(env, opts) {
     return {
       phase: 'lobby', host: env.hostId,
-      pattern: PATTERNS[opts?.pattern] && opts.pattern !== 'custom' ? opts.pattern : 'line', custom: [],
+      // `patterns` is the list of shapes that win (any one of them); the picker sends a single `pattern`, a reset sends the list
+      patterns: cleanPatterns(opts?.patterns) ?? [PATTERNS[opts?.pattern] && opts.pattern !== 'custom' ? opts.pattern : 'line'], custom: [],
       mode: MODES[opts?.mode] ? opts.mode : 'auto', pending: null,
       counts: {}, defaultCount: 1, seeds: {}, called: [], last: null, winners: [], ended: false,
       history: opts?.memory?.history ?? [], // survives "new game" and even leaving Bingo for another game
@@ -148,10 +119,11 @@ export const bingo = {
 
   reduce(s, a, env) {
     s = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, host: env.hostId, history: [], ended: false, ...s };
+    if (!s.patterns) s = { ...s, patterns: [s.pattern ?? 'line'] }; // a game saved before several patterns existed
     const isHost = a.from === env.hostId;
     if (a.type === 'reset' && isHost) {
       // New game: back to the lobby with the same settings and cards. An abandoned game isn't counted.
-      return { ...this.init(env, { pattern: s.pattern === 'custom' ? 'line' : s.pattern, mode: s.mode, memory: { history: s.history } }), pattern: s.pattern, custom: s.custom, counts: s.counts, defaultCount: s.defaultCount, seeds: s.seeds };
+      return { ...this.init(env, { patterns: s.patterns, mode: s.mode, memory: { history: s.history } }), custom: s.custom, counts: s.counts, defaultCount: s.defaultCount, seeds: s.seeds };
     }
     if (a.type === 'clearhistory' && isHost) return { ...s, history: [] };
     // End game: the host stops it early. It counts as played, with no winner.
@@ -161,10 +133,11 @@ export const bingo = {
     if (a.type === 'mode' && isHost && MODES[a.data?.mode] && s.pending == null && s.phase !== 'over') return { ...s, mode: a.data.mode };
 
     if (s.phase === 'lobby') {
-      if (isHost && a.type === 'pattern' && PATTERNS[a.data?.id]) return { ...s, pattern: a.data.id };
+      if (isHost && a.type === 'pattern' && PATTERNS[a.data?.id]) return { ...s, patterns: [a.data.id] }; // just this one
+      if (isHost && a.type === 'patterns') { const ids = cleanPatterns(a.data?.ids); return ids ? { ...s, patterns: ids } : s; } // any of these
       if (isHost && a.type === 'custom') {
         const cells = [...new Set((Array.isArray(a.data?.cells) ? a.data.cells : []).filter(i => Number.isInteger(i) && i >= 0 && i < 25))].sort((x, y) => x - y);
-        return { ...s, pattern: 'custom', custom: cells };
+        return { ...s, custom: cells, patterns: s.patterns.includes('custom') ? s.patterns : cleanPatterns([...s.patterns, 'custom']) };
       }
       if (isHost && a.type === 'cards') {
         const count = Math.min(MAX_CARDS, Math.max(1, Math.floor(+a.data?.count) || 1));
@@ -221,14 +194,14 @@ export const bingo = {
   // A rolled-but-unrevealed number is never broadcast: the host's browser reads it from its own state (ui.raw).
   view(s) {
     const { pending, ...pub } = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, history: [], ended: false, ...s };
-    return { ...pub, hasPending: pending != null };
+    return { ...pub, patterns: pub.patterns ?? [pub.pattern ?? 'line'], hasPending: pending != null };
   },
   // What the room remembers about Bingo after the host moves on to another game.
   remember: s => ({ history: s.history ?? [] }),
   render(el, s, ui) {
     el._latest = { s, ui };
     // Screen-only state (open sections, search boxes, pages, selected card tab) lives on the element, not in the game.
-    const U = (el._ui ??= { tab: 0, open: {}, giveq: '', allq: '', allPage: 0, ovrPage: 0 });
+    const U = (el._ui ??= { tab: 0, open: {}, giveq: '', allq: '', allPage: 0, ovrPage: 0, patTab: 'classic' });
     const called = new Set(s.called);
     const prevCalled = memo(el, 'called', s.called);
     const newNum = prevCalled !== undefined && s.called.length > prevCalled.length && s.last;
@@ -254,9 +227,11 @@ export const bingo = {
     if (shuffledAt.size) sfx('flip');
 
     const myWin = phase === 'over' ? s.winners.find(w => w.id === ui.me) : null;
-    const pat = PATTERNS[s.pattern] ?? PATTERNS.line;
-    const patCells = s.pattern === 'custom' ? s.custom : pat.cells;
-    const target = new Set(patCells ?? []);
+    const ids = s.patterns;
+    const one = ids.length === 1 ? ids[0] : null;
+    const multiPat = ids.length > 1;
+    // dashed squares on the card only when a single shape is in play (with several, the whole card would be dashed)
+    const target = new Set(one && one !== 'line' ? (one === 'custom' ? s.custom : PATTERNS[one].cells) : []);
     if (phase === 'over' && fresh(el, 'over', s.called.length)) {
       if (myWin) { confetti(); sfx('win'); U.tab = myWin.k; } else sfx('ding');
     }
@@ -272,12 +247,15 @@ export const bingo = {
     const pager = (key, pg) => (pg.pages > 1
       ? `<div class="pager"><button class="ghost small" data-pg="${key}:-1" ${pg.page === 0 ? 'disabled' : ''}>‹ Prev</button><span class="muted">Page ${pg.page + 1} of ${pg.pages}</span><button class="ghost small" data-pg="${key}:1" ${pg.page >= pg.pages - 1 ? 'disabled' : ''}>Next ›</button></div>` : '');
 
-    const patNow = `<div class="patnow">${preview(patCells ?? pat.preview)}<span><b>${esc(patName(s))}</b>${patCells ? '' : '<br><small class="muted">Row, column or diagonal</small>'}</span></div>`;
+    const patNow = one
+      ? `<div class="patnow">${preview(previewCells(one, s.custom))}<span><b>${esc(patName(s))}</b>${one === 'line' ? '<br><small class="muted">Row, column or diagonal</small>' : ''}</span></div>`
+      : `<details class="patnow-multi" data-sec="pats" ${U.open.pats ? 'open' : ''}><summary><b>🎯 ${esc(patName(s))}</b><small>win with any one</small></summary>
+          <div class="patlist">${ids.map(id => `<div class="patmini">${preview(previewCells(id, s.custom))}<small>${esc(nameOfPattern(id))}</small></div>`).join('')}</div></details>`;
 
     // ---- the viewer's own cards: one at a time with tabs when there are several
     const myCards = () => {
       const lobby = phase === 'lobby';
-      const needs = Array.from({ length: myCount }, (_, k) => needCount(cardOf(s, ui.me, k), called, s.pattern, s.custom));
+      const needs = Array.from({ length: myCount }, (_, k) => needAny(cardOf(s, ui.me, k), called, s.patterns, s.custom));
       const best = Math.min(...needs);
       const tabs = myCount > 1
         ? `<div class="tabs" role="tablist">${needs.map((need, k) => `<button role="tab" class="tab ${k === U.tab ? 'on' : ''}" data-tab="${k}">Card ${k + 1}${
@@ -322,10 +300,23 @@ export const bingo = {
         <button class="ghost" data-cnt="${esc(p.id)}" data-d="1" ${countOf(s, p.id) >= MAX_CARDS ? 'disabled' : ''} aria-label="More cards">+</button>
         ${s.counts[p.id] !== undefined ? `<button class="ghost small" data-reset="${esc(p.id)}" title="Back to the default" aria-label="Back to the default">↺</button>` : ''}</div>`;
     const hostSetup = () => {
-      const picker = `<div class="pats">${Object.entries(PATTERNS).map(([k, p]) =>
-        `<button class="pat ${k === s.pattern ? 'sel' : ''}" data-pat="${k}">${preview(k === 'custom' ? s.custom : p.cells ?? p.preview)}<small>${p.name}</small></button>`).join('')}</div>`;
-      const editor = s.pattern === 'custom'
-        ? `<div class="editor"><p class="muted">Tap the squares players must complete to win. The ★ is free.</p>
+      const multi = U.multi ?? ids.length > 1;
+      const tabSel = U.patTab ?? 'classic';
+      const inGroup = g => (g === 'custom' ? ['custom'] : PRESET_IDS.filter(id => PATTERNS[id].group === g));
+      const patTabs = [...Object.entries(GROUPS), ['custom', 'Custom']].map(([g, label]) => {
+        const n = inGroup(g).filter(id => ids.includes(id)).length;
+        return `<button role="tab" class="tab ${g === tabSel ? 'on' : ''}" data-pattab="${g}">${label}${n ? `<small>${n} ✓</small>` : ''}</button>`;
+      }).join('');
+      const grid = `<div class="pats">${inGroup(tabSel).map(id => {
+        const on = ids.includes(id);
+        return `<button class="pat ${on ? 'sel' : ''}" data-pat="${id}" aria-pressed="${on}">${on && multi ? '<span class="tick">✓</span>' : ''}${preview(previewCells(id, s.custom))}<small>${esc(PATTERNS[id].name)}</small></button>`;
+      }).join('')}</div>`;
+      const chosen = `<p class="muted">Winning patterns: <b>${ids.slice(0, 5).map(id => esc(nameOfPattern(id))).join(', ')}${ids.length > 5 ? ` +${ids.length - 5} more` : ''}</b></p>`;
+      const controls = `<label class="check"><input type="checkbox" data-multi ${multi ? 'checked' : ''}> Select several patterns (a card wins with any one of them)</label>
+        <div class="row"><button class="ghost small" data-patall>Select all</button><button class="ghost small" data-patone>Reset to “Any line”</button></div>`;
+      const picker = `${controls}${chosen}<div class="tabs pattabs" role="tablist">${patTabs}</div>${grid}`;
+      const editor = tabSel === 'custom'
+        ? `<div class="editor"><p class="muted">Tap the squares players must complete to win. The ★ is free. Drawing here adds it to the winning patterns.</p>
             <div class="bingo">${LETTERS.map(l => `<div class="bh" style="background:${COLORS[l]}">${l}</div>`).join('')}${
               Array.from({ length: 25 }, (_, i) => i === 12
                 ? '<div class="cell hit">★</div>'
@@ -354,7 +345,7 @@ export const bingo = {
           `<button class="${n === defaultCount ? '' : 'ghost'}" data-all="${n}">${n}</button>`).join('')}</div>
         <p class="muted">Also applies to anyone who joins later.</p><div class="cardset">${perPlayer}</div>`;
       return `<div class="setup"><h3>⚙️ Host setup</h3>${
-        section('pattern', '🎯 Win pattern', patName(s), picker + editor)}${
+        section('pattern', '🎯 Win patterns', patName(s), picker + editor)}${
         section('mode', '🎲 Number draw', s.mode === 'auto' ? 'Instant' : 'Private roll', modeButtons)}${
         section('cards', '🎴 Cards per player', `${defaultCount} each${overrides.length ? ` · ${overrides.length} different` : ''}`, cardsContent)}</div>`;
     };
@@ -388,7 +379,7 @@ export const bingo = {
     } else {
       const letter = s.last ? letterOf(s.last) : '';
       const winCards = phase === 'over' ? s.winners.map(w => `<div class="wcard ${w.id === ui.me ? 'me' : ''}">
-          <div class="wname">${w.id === ui.me ? '🏆 You' : `🎉 ${nameOf(w.id)}`}${countOf(s, w.id) > 1 ? ` · card ${w.k + 1}` : ''}</div>
+          <div class="wname">${w.id === ui.me ? '🏆 You' : `🎉 ${nameOf(w.id)}`}${countOf(s, w.id) > 1 ? ` · card ${w.k + 1}` : ''}${multiPat ? ` · ${esc(nameOfPattern(w.pattern))}` : ''}</div>
           ${cardHtml(cardOf(s, w.id, w.k), called, { win: new Set(w.cells), mini: true })}</div>`).join('') : '';
       const secretPanel = ui.isHost && phase === 'play' && s.mode === 'manual' && secret
         ? `<div class="secret"><div class="muted">🤫 Only you can see this number</div>
@@ -402,7 +393,7 @@ export const bingo = {
       const result = phase === 'over' ? (s.ended
         ? '<div class="winners"><div class="bingo-banner ended">Game ended</div><p class="muted">The host ended this game early. No winner this time.</p></div>'
         : `<div class="winners"><div class="bingo-banner">${myWin ? 'BINGO! You win! 🎉' : 'BINGO! 🎉'}</div>
-            <p>${s.winners.map(w => nameOf(w.id)).join(' &amp; ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : '';
+            <p>${s.winners.map(w => `${nameOf(w.id)}${multiPat ? ` <small class="muted">(${esc(nameOfPattern(w.pattern))})</small>` : ''}`).join(' &amp; ')} completed the pattern.</p><div class="wcards">${winCards}</div></div>`) : '';
       body = `${patNow}
         <div class="lastnum"><span class="lbl">${s.called.length} called</span>
           <div class="big">${s.last ? `<span style="color:${COLORS[letter]}">${letter}</span> ${s.last}` : '—'}</div></div>
@@ -438,7 +429,23 @@ export const bingo = {
       if (key === 'all') U.allPage += +d; else U.ovrPage += +d;
       redraw();
     });
-    el.querySelectorAll('[data-pat]').forEach(b => b.onclick = () => ui.act(b.dataset.pat === 'custom' ? 'custom' : 'pattern', b.dataset.pat === 'custom' ? { cells: s.custom } : { id: b.dataset.pat }));
+    el.querySelectorAll('[data-pat]').forEach(b => b.onclick = () => {
+      const id = b.dataset.pat;
+      if (!(U.multi ?? s.patterns.length > 1)) return ui.act('pattern', { id }); // single mode: just this one
+      const next = s.patterns.includes(id) ? s.patterns.filter(x => x !== id) : [...s.patterns, id];
+      if (next.length) ui.act('patterns', { ids: next }); // can't untick the last one
+    });
+    el.querySelectorAll('[data-pattab]').forEach(b => b.onclick = () => { U.patTab = b.dataset.pattab; redraw(); });
+    el.querySelectorAll('[data-multi]').forEach(b => b.onchange = () => {
+      U.multi = b.checked;
+      if (!b.checked && s.patterns.length > 1) ui.act('pattern', { id: s.patterns[0] });
+      redraw();
+    });
+    el.querySelectorAll('[data-patall]').forEach(b => b.onclick = () => {
+      U.multi = true;
+      ui.act('patterns', { ids: [...PRESET_IDS, ...(s.custom.some(i => i !== 12) ? ['custom'] : [])] });
+    });
+    el.querySelectorAll('[data-patone]').forEach(b => b.onclick = () => { U.multi = false; ui.act('pattern', { id: 'line' }); });
     el.querySelectorAll('[data-cell]').forEach(b => b.onclick = () => {
       const i = +b.dataset.cell;
       ui.act('custom', { cells: s.custom.includes(i) ? s.custom.filter(x => x !== i) : [...s.custom, i] });
@@ -480,7 +487,7 @@ function historyHtml(s, ui, el, phase) {
     .map(t => `<span class="chip">🏆 ${esc(t.name)} × ${t.wins}</span>`).join('');
   const rows = [...s.history].reverse().map(h => `<tr>
       <td><b>#${h.n}</b></td>
-      <td>${h.winners.length ? h.winners.map(w => `🏆 ${esc(w.name)}${w.multi ? ` <small class="muted">(card ${w.k + 1})</small>` : ''}`).join('<br>') : '<span class="muted">Ended · no winner</span>'}</td>
+      <td>${h.winners.length ? h.winners.map(w => `🏆 ${esc(w.name)}${w.multi ? ` <small class="muted">(card ${w.k + 1})</small>` : ''}${h.patterns > 1 && w.how ? ` <small class="muted">· ${esc(w.how)}</small>` : ''}`).join('<br>') : '<span class="muted">Ended · no winner</span>'}</td>
       <td>${esc(h.pattern)}<br><small class="muted">${h.called} numbers · ${new Date(h.at).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</small></td></tr>`).join('');
   const open = el._histOpen ?? phase === 'over';
   return `<details class="hist" data-hist ${open ? 'open' : ''}><summary>📜 History · ${n} game${n > 1 ? 's' : ''} played</summary>

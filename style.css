@@ -334,3 +334,19 @@ summary{min-height:44px;display:flex;align-items:center}
 
 /* ---------- who am I ---------- */
 .whoami{display:inline-block;margin:2px 0 8px;padding:6px 14px;border-radius:99px;background:var(--line);font-size:.95rem}
+
+/* ---------- several win patterns ---------- */
+.pat{position:relative}
+.pat .tick{position:absolute;top:4px;right:8px;color:var(--ok);font-weight:900}
+.check{display:flex;gap:10px;align-items:center;margin:4px 0 8px;font-weight:600}
+.check input{width:22px;height:22px;min-height:0;accent-color:var(--accent)}
+.patnow-multi{background:var(--bg);border-radius:14px;padding:4px 12px;margin:6px 0}
+.patnow-multi summary{justify-content:space-between;cursor:pointer}
+.patnow-multi summary small{color:var(--mute);font-weight:500}
+.patlist{display:grid;grid-template-columns:repeat(auto-fill,minmax(84px,1fr));gap:8px;padding:6px 0 10px}
+.patmini{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:.75rem;text-align:center}
+.check{min-height:44px}
+.pats{grid-template-columns:repeat(auto-fill,minmax(88px,1fr))}
+/* all five pattern groups always fit on a phone */
+.pattabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;overflow:visible}
+.pattabs .tab{padding:8px 2px;font-size:.82rem;min-width:0}

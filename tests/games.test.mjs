@@ -180,19 +180,19 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
 }
 { // defaults
   const b = bg.init(env(), {});
-  assert.equal(b.phase, 'lobby'); assert.equal(b.pattern, 'line'); assert.equal(b.mode, 'auto'); assert.equal(b.host, 'h');
+  assert.equal(b.phase, 'lobby'); assert.deepEqual(b.patterns, ['line']); assert.equal(b.mode, 'auto'); assert.equal(b.host, 'h');
   assert.equal(countOf(b, 'a'), 1); // everyone starts with a single card
   assert.equal(bg.init(env(), { pattern: 'blackout', mode: 'manual' }).mode, 'manual');
-  assert.equal(bg.init(env(), { pattern: 'nonsense', mode: 'nope' }).pattern, 'line');
-  assert.equal(bg.init(env(), { pattern: 'custom' }).pattern, 'line'); // custom is drawn in the lobby, not picked up front
+  assert.deepEqual(bg.init(env(), { pattern: 'nonsense', mode: 'nope' }).patterns, ['line']);
+  assert.deepEqual(bg.init(env(), { pattern: 'custom' }).patterns, ['line']); // custom is drawn in the lobby, not picked up front
 }
 { // lobby: shuffle, pattern, host-only controls
   let b = bg.init(env(), {});
   const before = cardOf(b, 'a');
   b = bg.reduce(b, A('a', 'shuffle'), env()); assert.notDeepEqual(cardOf(b, 'a'), before);
-  assert.equal(bg.reduce(b, A('a', 'pattern', { id: 'x' }), env()).pattern, 'line'); // players can't pick
-  assert.equal(bg.reduce(b, A('h', 'pattern', { id: 'x' }), env()).pattern, 'x');
-  assert.equal(bg.reduce(b, A('h', 'pattern', { id: 'bogus' }), env()).pattern, 'line');
+  assert.deepEqual(bg.reduce(b, A('a', 'pattern', { id: 'x' }), env()).patterns, ['line']); // players can't pick
+  assert.deepEqual(bg.reduce(b, A('h', 'pattern', { id: 'x' }), env()).patterns, ['x']);
+  assert.deepEqual(bg.reduce(b, A('h', 'pattern', { id: 'bogus' }), env()).patterns, ['line']);
   assert.equal(bg.reduce(b, A('a', 'start'), env()).phase, 'lobby');
   assert.equal(bg.reduce(b, A('a', 'call'), env()).called.length, 0);
 }
@@ -225,7 +225,8 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
 { // custom pattern
   let b = bg.init(env(), {});
   b = bg.reduce(b, A('h', 'custom', { cells: [0, 6, 6, 24, 99, -1, 'x', 1.5] }), env());
-  assert.equal(b.pattern, 'custom'); assert.deepEqual(b.custom, [0, 6, 24]); // de-duplicated, sorted, junk dropped
+  assert.deepEqual(b.patterns, ['line', 'custom']); assert.deepEqual(b.custom, [0, 6, 24]); // drawing a custom shape adds it to the winners; de-duplicated, sorted, junk dropped
+  b = bg.reduce(b, A('h', 'patterns', { ids: ['custom'] }), env()); assert.deepEqual(b.patterns, ['custom']); // custom only
   assert.deepEqual(bg.reduce(b, A('a', 'custom', { cells: [1] }), env()).custom, [0, 6, 24]); // host only
   const card = cardOf(b, 'a');
   const nums = [0, 6, 24].map(i => card[i]);
@@ -245,15 +246,15 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   assert.deepEqual(done.winners.find(w => w.id === 'a').cells, [0, 6, 24]);
   // custom survives "play again"; picking a preset pattern keeps the drawing for later
   const again = bg.reduce(done, A('h', 'reset'), env());
-  assert.equal(again.pattern, 'custom'); assert.deepEqual(again.custom, [0, 6, 24]);
-  assert.deepEqual(bg.reduce(again, A('h', 'pattern', { id: 'x' }), env()).custom, [0, 6, 24]);
+  assert.deepEqual(again.patterns, ['custom']); assert.deepEqual(again.custom, [0, 6, 24]);
+  assert.deepEqual(bg.reduce(again, A('h', 'pattern', { id: 'x' }), env()).custom, [0, 6, 24]); // picking a preset keeps the drawing for later
 }
 { // start locks cards, pattern, counts
   let b = bg.reduce(bg.init(env(), {}), A('h', 'cards', { id: 'a', count: 2 }), env());
   b = bg.reduce(b, A('h', 'start'), env()); assert.equal(b.phase, 'play');
-  const snap = JSON.stringify([b.seeds, b.counts, b.pattern]);
+  const snap = JSON.stringify([b.seeds, b.counts, b.patterns]);
   for (const act of [A('a', 'shuffle'), A('h', 'pattern', { id: 'x' }), A('h', 'cards', { id: 'a', count: 5 }), A('h', 'custom', { cells: [1] })])
-    assert.equal(JSON.stringify([bg.reduce(b, act, env()).seeds, bg.reduce(b, act, env()).counts, bg.reduce(b, act, env()).pattern]), snap);
+    assert.equal(JSON.stringify([bg.reduce(b, act, env()).seeds, bg.reduce(b, act, env()).counts, bg.reduce(b, act, env()).patterns]), snap);
   assert.equal(bg.reduce(b, A('a', 'call'), env()).called.length, 0); // only host calls
   assert.equal(bg.reduce(b, A('a', 'claim'), env()).winners.length, 0); // no BINGO button any more
 }
@@ -275,7 +276,7 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   assert.ok(forced({ ...b, called: second.slice(0, 3) }, need, 'call').winners.every(x => !(x.id === 'a' && x.k === 1)));
   const again = bg.reduce(one, A('h', 'reset'), env());
   assert.equal(again.phase, 'lobby'); assert.equal(again.called.length, 0); assert.equal(again.winners.length, 0);
-  assert.deepEqual(again.seeds, one.seeds); assert.deepEqual(again.counts, one.counts); assert.equal(again.pattern, one.pattern);
+  assert.deepEqual(again.seeds, one.seeds); assert.deepEqual(again.counts, one.counts); assert.deepEqual(again.patterns, one.patterns);
   assert.equal(bg.reduce(one, A('a', 'reset'), env()).phase, 'over');
 }
 { // private roll
@@ -408,7 +409,7 @@ const row0 = card => [0, 1, 2, 3, 4].map(i => card[i]);
   assert.equal(mw.history[0].winners.find(w => w.id !== 'a')?.multi ?? false, false);
 
   // custom patterns are named by how many squares they use
-  let cu = bg.reduce(bg.init(env(), {}), A('h', 'custom', { cells: [0, 6, 24] }), env());
+  let cu = bg.reduce(bg.reduce(bg.init(env(), {}), A('h', 'custom', { cells: [0, 6, 24] }), env()), A('h', 'patterns', { ids: ['custom'] }), env());
   cu = bg.reduce(cu, A('h', 'start'), env());
   const ca = cardOf(cu, 'a');
   const cuWon = forced({ ...cu, called: [ca[0], ca[6]] }, ca[24], 'call');
@@ -520,5 +521,97 @@ import { needCount } from '../games/bingo.js';
     assert.equal(needCount(card, nums, k) === 0, winCells(card, nums, k) !== null, k);
     if (nums.length) assert.equal(needCount(card, nums.slice(1), k), k === 'line' ? 1 : 1, `${k} one short`);
   }
+}
+
+
+// ---- bingo: the pattern library and picking several patterns
+import { PRESET_IDS, PATTERN_IDS, GROUPS, matchPatterns, needAny, cleanPatterns, previewCells } from '../games/patterns.js';
+{
+  // every preset is a sensible shape
+  assert.equal(PRESET_IDS.length, 38);
+  for (const id of PRESET_IDS) {
+    const p = PATTERNS[id];
+    assert.ok(p.name && GROUPS[p.group], `${id} has a name and a known group`);
+    const cells = previewCells(id);
+    assert.ok(cells.length >= 4 && cells.every(i => Number.isInteger(i) && i >= 0 && i < 25), `${id} cells are on the card`);
+    assert.equal(new Set(cells).size, cells.length, `${id} has no duplicate squares`);
+  }
+  assert.equal(new Set(PRESET_IDS.map(id => PATTERNS[id].name)).size, 38); // names are unique
+  assert.deepEqual(PATTERNS.tree.cells, [2, 6, 7, 8, 10, 11, 12, 13, 14, 17, 22]); // Christmas tree: three tiers and a trunk
+  assert.equal(PATTERNS.heart.cells.length, 16); assert.equal(PATTERNS.star.cells.length, 13); assert.equal(PATTERNS.smalldiamond.cells.length, 4);
+  assert.equal(PATTERNS.blackout.cells.length, 25); assert.equal(PATTERNS.corners.cells.length, 4);
+  // the postage stamp can be in any corner
+  const card = cardOf(bg.init(env(), {}), 'z');
+  for (const block of [[0, 1, 5, 6], [3, 4, 8, 9], [15, 16, 20, 21], [18, 19, 23, 24]]) {
+    assert.deepEqual(winCells(card, block.map(i => card[i]), 'postage').sort((a, b) => a - b), block);
+  }
+  assert.equal(winCells(card, [0, 1, 5].map(i => card[i]), 'postage'), null);
+  // each shape completes exactly when all of its squares are called
+  for (const id of PRESET_IDS) {
+    const cells = PATTERNS[id].cells ?? [0, 1, 2, 3, 4];
+    const nums = cells.map(i => card[i]).filter(Boolean);
+    assert.ok(winCells(card, nums, id), `${id} completes`);
+    if (nums.length) assert.equal(winCells(card, nums.slice(1), id), null, `${id} needs every square`);
+    assert.equal(needCount(card, nums, id), 0); if (nums.length) assert.equal(needCount(card, nums.slice(1), id), 1);
+  }
+  // cleaning a selection
+  assert.deepEqual(cleanPatterns(['x', 'line', 'x', 'bogus']), ['line', 'x']); // valid only, de-duplicated, standard order
+  assert.equal(cleanPatterns([]), null); assert.equal(cleanPatterns(['bogus']), null); assert.equal(cleanPatterns('x'), null); assert.equal(cleanPatterns(undefined), null);
+}
+{ // choosing several patterns
+  let b = bg.init(env(), {});
+  const set = ids => bg.reduce(b, A('h', 'patterns', { ids }), env());
+  assert.deepEqual(set(['tree', 'heart', 'x']).patterns, ['x', 'heart', 'tree']); // kept in the standard order
+  assert.deepEqual(set(['bogus']).patterns, ['line']); assert.deepEqual(set([]).patterns, ['line']); assert.deepEqual(set('x').patterns, ['line']); // invalid: unchanged
+  assert.deepEqual(bg.reduce(b, A('a', 'patterns', { ids: ['x', 'plus'] }), env()).patterns, ['line']); // host only
+  const all = set(PRESET_IDS); assert.equal(all.patterns.length, 38); assert.ok(!all.patterns.includes('custom'));
+  assert.deepEqual(bg.reduce(all, A('h', 'pattern', { id: 'heart' }), env()).patterns, ['heart']); // 'pattern' goes back to just one
+  // labels
+  const label = ids => bg.reduce(bg.reduce(b, A('h', 'patterns', { ids }), env()), A('h', 'start'), env());
+  // locked once the game starts
+  const started = label(['x', 'plus']);
+  assert.deepEqual(bg.reduce(started, A('h', 'patterns', { ids: ['heart'] }), env()).patterns, ['x', 'plus']);
+  // picking several patterns doesn't change the "Custom" rules: it needs a drawn square to start
+  const withCustom = bg.reduce(b, A('h', 'patterns', { ids: ['x', 'custom'] }), env());
+  assert.equal(bg.reduce(withCustom, A('h', 'start'), env()).phase, 'lobby'); // custom picked but empty
+  assert.equal(bg.reduce(bg.reduce(withCustom, A('h', 'custom', { cells: [0, 24] }), env()), A('h', 'start'), env()).phase, 'play');
+  // "select all" with custom drawn includes it; with nothing drawn the host leaves it out (UI), the reducer accepts either
+  assert.ok(bg.reduce(b, A('h', 'patterns', { ids: [...PRESET_IDS, 'custom'] }), env()).patterns.includes('custom'));
+}
+{ // winning with any one of several patterns, and knowing which one
+  let g = bg.reduce(bg.reduce(bg.init(env(), {}), A('h', 'patterns', { ids: ['corners', 'tree', 'heart'] }), env()), A('h', 'start'), env());
+  const ca = cardOf(g, 'a');
+  const tree = PATTERNS.tree.cells.map(i => ca[i]).filter(Boolean);
+  const won = forced({ ...g, called: tree.slice(0, -1) }, tree[tree.length - 1], 'call');
+  const w = won.winners.find(x => x.id === 'a');
+  assert.ok(w, 'a wins with the Christmas tree'); assert.equal(w.pattern, 'tree'); assert.deepEqual(w.cells.slice().sort((p, q) => p - q), PATTERNS.tree.cells);
+  assert.equal(won.history[0].winners.find(x => x.id === 'a').how, 'Christmas tree'); assert.equal(won.history[0].patterns, 3); assert.equal(won.history[0].pattern, '3 patterns');
+  // one square short of every selected pattern: nobody wins
+  const near = forced({ ...g, called: tree.slice(0, -2) }, tree[tree.length - 1], 'call');
+  assert.ok(!near.winners.some(x => x.id === 'a'));
+  // a different selected pattern also wins
+  const corners = [0, 4, 20, 24].map(i => ca[i]);
+  const cw = forced({ ...g, called: corners.slice(0, 3) }, corners[3], 'call');
+  assert.equal(cw.winners.find(x => x.id === 'a').pattern, 'corners');
+  // a pattern that is NOT selected doesn't win
+  const star = PATTERNS.star.cells.map(i => ca[i]).filter(Boolean);
+  const nope = forced({ ...g, called: star.slice(0, -1) }, star[star.length - 1], 'call');
+  assert.ok(!nope.winners.some(x => x.id === 'a' && x.pattern === 'star'));
+  // the closest-pattern count used for the card badges
+  assert.equal(needAny(ca, [], ['corners', 'tree', 'heart']), 4);
+  assert.equal(needAny(ca, [0, 4, 20].map(i => ca[i]), ['corners', 'tree', 'heart']), 1);
+  assert.equal(needAny(ca, [], ['custom'], []), 24);
+  // select-all game: the first completed pattern is reported, and everything still ends the game
+  const everything = bg.reduce(bg.reduce(bg.init(env(), {}), A('h', 'patterns', { ids: PRESET_IDS }), env()), A('h', 'start'), env());
+  const top = row0(cardOf(everything, 'a'));
+  const wonAll = forced({ ...everything, called: top.slice(0, 4) }, top[4], 'call');
+  assert.equal(wonAll.phase, 'over'); assert.equal(wonAll.winners.find(x => x.id === 'a').pattern, 'line');
+  assert.equal(bg.reduce(wonAll, A('h', 'reset'), env()).patterns.length, 38); // New game keeps the selection
+  assert.equal(everything.called.length, 0);
+  assert.equal(bg.view(wonAll).patterns.length, 38);
+  // games saved before several patterns existed still load
+  const legacy = { phase: 'play', pattern: 'x', seeds: {}, called: [], last: null, winners: [] };
+  assert.deepEqual(bg.view(legacy).patterns, ['x']);
+  assert.equal(bg.reduce(legacy, A('h', 'call'), env()).called.length, 1);
 }
 console.log('all game tests passed');
