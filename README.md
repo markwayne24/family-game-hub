@@ -7,6 +7,8 @@ Bingo: players shuffle their own cards (always unique) until the host starts. Th
 
 Names: if two players pick the same name, the later joiner is shown as "Name 2" (and told why), so scores and winners are never ambiguous.
 
+Phones: built for phones first. Big tap targets, no sideways scrolling, no iPhone zoom on inputs, safe-area padding, and touch drawing. The screen is kept awake while you are in a room (the host's phone runs the game, so if it sleeps the game would freeze), the invite button opens the phone's share sheet, and the room re-syncs when a phone wakes up.
+
 Host tools: pick a game and its options (question pack, word difficulty, prompt type), remove players, close the room. Refreshing a tab rejoins the same room (guests) or resumes the room and game (host). Sound effects have a mute button.
 
 - **Frontend:** static files (no build step), hosted on any static host.

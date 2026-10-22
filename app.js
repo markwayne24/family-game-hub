@@ -191,6 +191,7 @@ function enterRoom(code, name, isHost) {
       S.banned = new Set(JSON.parse(store.get(`hubBanned:${code}`) || '[]'));
     } catch { /* start fresh */ }
   }
+  keepAwake();
   S.channel = sb.channel(`room:${code}`, { config: { broadcast: { self: true }, presence: { key: S.me } } });
   S.channel
     .on('broadcast', { event: 'action' }, ({ payload }) => { if (S.isHost) hostHandle(payload); })
@@ -247,14 +248,22 @@ function buildShell() {
   mute.onclick = () => { setMuted(!isMuted()); mute.textContent = isMuted() ? '🔇' : '🔊'; sfx('pop'); };
   app.querySelector('#close').onclick = closeRoom;
   app.querySelector('#leave').onclick = leaveRoom;
-  app.querySelector('#copy').onclick = async e => {
+  // On phones, open the native share sheet (WhatsApp, Messenger, ...); elsewhere copy the link.
+  const copy = app.querySelector('#copy');
+  if (navigator.share) copy.textContent = '📤 Share invite';
+  copy.onclick = async e => {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Family Game Hub', text: `Join my game room! Code: ${S.code}`, url: link }); return; }
+      catch (err) { if (err?.name === 'AbortError') return; }
+    }
     try { await navigator.clipboard.writeText(link); e.target.textContent = 'Copied!'; }
     catch { prompt('Copy this link:', link); }
   };
 }
 
 function stopChannel() {
+  allowSleep();
   clearTimeout(S.timer);
   if (S.channel) sb.removeChannel(S.channel);
   S.channel = null;
@@ -294,6 +303,31 @@ async function closeRoom() {
   const { data: { user } } = await sb.auth.getUser();
   user ? hostHome(user) : loginScreen();
 }
+
+// Phones: keep the screen awake while in a room (the host's phone runs the game, so if it sleeps the game freezes),
+// and re-sync when the phone wakes up or the network comes back.
+let wake = null;
+async function keepAwake() {
+  try {
+    if ('wakeLock' in navigator && !wake) {
+      wake = await navigator.wakeLock.request('screen');
+      wake.addEventListener('release', () => { wake = null; });
+    }
+  } catch { /* unsupported or refused: nothing to do */ }
+}
+function allowSleep() {
+  try { wake?.release(); } catch { /* ignore */ }
+  wake = null;
+}
+function resync() {
+  if (!S.channel) return;
+  S.channel.track({ name: S.name, t: S.joinedAt, host: S.isHost });
+  if (S.isHost) pushState();
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && S.channel) { keepAwake(); resync(); }
+});
+addEventListener('online', resync);
 
 // Small rooms show everyone as chips. Big rooms show the host, you and a few others, with a searchable, paged full list.
 const CHIP_LIMIT = 12;

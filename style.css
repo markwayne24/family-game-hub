@@ -63,7 +63,7 @@ canvas.draw{width:100%;height:auto;border:1px solid var(--line);border-radius:12
 #app>*:nth-child(4){animation-delay:.15s}
 h1{animation:bob 3s ease-in-out infinite}
 button{transition:transform .12s,filter .12s,box-shadow .12s,background-color .2s,opacity .2s}
-button:not(:disabled):hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 6px 14px rgba(108,76,245,.25)}
+@media (hover:hover){button:not(:disabled):hover{transform:translateY(-2px);filter:brightness(1.08);box-shadow:0 6px 14px rgba(108,76,245,.25)}}
 button:not(:disabled):active{transform:scale(.95);box-shadow:none}
 .chip.new{animation:pop .45s ease both}
 .gcard{animation:pop .45s ease backwards}
@@ -304,3 +304,30 @@ details.sec>summary small{margin-left:auto;font-weight:500;color:var(--mute);tex
 .actionbar button.grow{padding:14px;font-size:1.05rem}
 .actionbar button.ghost{padding:12px 14px;background:var(--card)}
 .mini-mode summary{cursor:pointer}
+
+/* ---------- phones: touch targets, zoom, safe areas ---------- */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+button,input,select,textarea,summary,label{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+#app{padding-left:max(16px,env(safe-area-inset-left));padding-right:max(16px,env(safe-area-inset-right));padding-bottom:max(16px,env(safe-area-inset-bottom))}
+/* 16px+ inputs stop iPhones zooming the page when a field is focused */
+input,select,textarea{font-size:16px;min-height:44px}
+button{min-height:44px}
+button.small{min-height:40px;padding:6px 12px}
+summary{min-height:44px;display:flex;align-items:center}
+.cs-row button{min-width:44px}
+.cs-row button.small{min-width:44px;min-height:44px}
+.actionbar{padding-bottom:calc(6px + env(safe-area-inset-bottom))}
+.actionbar button.ghost{min-width:48px}
+.swatch{width:42px;height:42px;min-height:42px}
+/* the remove "x" looks small but its tap area is larger than it looks */
+.chip .x,.prow .x{position:relative;min-width:32px;min-height:32px;padding:0;font-size:1.2rem;line-height:1}
+.chip .x::after,.prow .x::after{content:'';position:absolute;inset:-8px}
+.chip{display:inline-flex;align-items:center}
+.pager button{min-width:44px}
+.key{min-height:44px}
+.c4cell,.mem button,.ttt button{min-height:0}
+.opt select{font-size:16px}
+/* Connect 4: no dead space between columns, so a thumb tap always lands on one */
+.c4{gap:0;padding:6px}
+.c4cell{border-radius:0}
+.c4cell .piece{width:calc(100% - 6px);height:calc(100% - 6px);margin:3px}
