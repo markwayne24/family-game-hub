@@ -801,7 +801,7 @@ export const werewolf = {
     el.innerHTML = `<div class="ww ${theme} ${ghostOn ? 'ghosted' : ''}"><h2>🐺 Werewolf</h2>
       ${showRoster ? `<p class="muted">${aliveIdsOf(s).length} alive of ${s.order.length}</p>${roster()}` : ''}
       ${modBlock}${ghost}${body}
-      ${buttons.length ? `<div class="row ww-ctl">${buttons.join('')}</div>` : ''}</div>`;
+      ${buttons.length ? `<div class="row ww-ctl ${isMod && s.phase !== 'end' ? 'stick' : ''}">${buttons.join('')}</div>` : ''}</div>`;
 
     /* ---- wiring ---- */
     const on = (sel, fn) => el.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => fn(b)));
