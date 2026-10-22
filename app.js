@@ -585,7 +585,7 @@ function renderPlayers(ps) {
 const howtoHtml = x => {
   const h = HOWTO[x.id];
   if (!h) return '';
-  return `<p><b>🎯 Goal:</b> ${esc(h.goal)}</p><ol>${h.steps.map(l => `<li>${esc(l)}</li>`).join('')}</ol>${(h.tips ?? []).map(l => `<p class="muted">💡 ${esc(l)}</p>`).join('')}`;
+  return `<div class="howbody"><p><b>🎯 Goal:</b> ${esc(h.goal)}</p><ol>${h.steps.map(l => `<li>${esc(l)}</li>`).join('')}</ol>${(h.tips ?? []).map(l => `<p class="muted">💡 ${esc(l)}</p>`).join('')}</div>`;
 };
 
 function pickerHtml() {
@@ -635,7 +635,7 @@ function render() {
     stage.innerHTML = '';
     stage._d = null;
     stage._fx = null;
-    stage.classList.remove('enter');
+    stage.classList.remove('enter', 'wwstage');
     void stage.offsetWidth;
     stage.classList.add('enter');
     if (view === 'picker') {
@@ -666,7 +666,8 @@ function render() {
   if (howto.dataset.id !== hid) {
     howto.dataset.id = hid;
     const seen = JSON.parse(store.get('hubHow') || '{}');
-    howto.innerHTML = hid ? `<details class="howto card"${seen[hid] ? '' : ' open'}><summary>❓ How to play ${esc(g.name)}</summary>${howtoHtml(g)}</details>` : '';
+    howto.innerHTML = hid ? `<details class="howto card"${seen[hid] ? '' : ' open'}><summary>❓ How to play ${esc(g.name)}</summary>${howtoHtml(g)}<button class="ghost wide" data-gotit>Got it, let's play</button></details>` : '';
+    howto.querySelector('[data-gotit]')?.addEventListener('click', () => { howto.querySelector('details').open = false; });
     howto.querySelector('details')?.addEventListener('toggle', () => {
       const m = JSON.parse(store.get('hubHow') || '{}');
       if (!howto.querySelector('details').open) { m[hid] = 1; store.set('hubHow', JSON.stringify(m)); }

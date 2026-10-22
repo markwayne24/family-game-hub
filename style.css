@@ -383,10 +383,16 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww-comp{background:var(--line);border-radius:12px;padding:10px 12px;margin:12px 0}
 .ww-script{border:2px dashed var(--accent);border-radius:14px;padding:10px 12px;margin:10px 0}
 .ww-nightlog{background:var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:.95rem}
-.ww-ctl{margin-top:14px}
-.ww-ctl.stick{position:sticky;bottom:0;padding:10px 0 4px;background:linear-gradient(transparent,var(--card) 35%)}
-.ww.night .ww-ctl.stick{background:linear-gradient(transparent,#0f1b3d 35%)}
-.ww-ctl button{box-shadow:0 2px 10px #0003}
+.ww-ctl{margin-top:16px;display:grid;gap:10px}
+.ww-ctl.stick{position:sticky;bottom:0;z-index:5;margin:16px -12px -12px;padding:12px 12px max(12px,env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 20px #0002}
+.ww.night .ww-ctl.stick{background:#0f1b3d;border-top-color:#2a3a74}
+.ww.day .ww-ctl.stick{background:#fff1cf;border-top-color:#f1d9a4}
+.ww.dusk .ww-ctl.stick{background:#4a3a78;border-top-color:#6f5aa5}
+.ww-ctl button{min-height:48px;margin:0}
+.ww-ctl button.ww-main{width:100%;font-size:1.05rem}
+.ww-ctl2{display:flex;gap:8px}
+.ww-ctl2 button{flex:1 1 0;min-width:0;padding:10px 8px;font-size:.95rem;white-space:nowrap}
+.ww #start{width:100%;min-height:50px;margin-top:6px}
 .ww .chip.pick{min-width:44px;justify-content:center}
 
 /* How to play */
@@ -548,3 +554,31 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 #ww-pause h2{margin:.2em 0;font-size:1.8rem}
 #ww-pause p{margin:.4em 0 1.2em;opacity:.85}
 #ww-pause button{min-height:52px;min-width:180px;font-size:1.1rem;background:#ffd43b;color:#1b1b1b}
+
+/* Werewolf card: use the full width on phones (no card-in-card padding) */
+@media (max-width:640px){
+  #stage.wwstage{margin-left:-16px;margin-right:-16px;padding:0;border-radius:0;border-left:0;border-right:0;overflow:visible}
+  #stage.wwstage .ww{border-radius:0;margin:0;padding:16px 16px 20px}
+  #stage.wwstage .ww.night,#stage.wwstage .ww.day,#stage.wwstage .ww.dusk{border-radius:0}
+  .ww-ctl.stick{margin:16px -16px -20px;padding-left:16px;padding-right:16px}
+  .ww-sky{margin:4px 0 12px;border-radius:12px}
+  .ww-players{margin:6px 0 10px}
+  .ww-players + .ww-sky,.ww-players + .ww-script{margin-top:12px}
+}
+@media (min-width:641px){#stage.wwstage .ww.night,#stage.wwstage .ww.day,#stage.wwstage .ww.dusk{margin:-4px}}
+.ww h3{margin:16px 0 8px}
+.ww .votes{margin:8px 0 12px}
+
+/* Room menu spacing */
+#menu .presets{margin:8px 0 12px}
+#menu #limitpanel .row{margin:12px 0 4px}
+#menu #limitpanel .muted#limitnote,#menu #limitpanel .muted#latenote{margin:10px 0 12px;line-height:1.45}
+#menu #limitpanel .sethead{margin:18px 0 8px}
+#menu #limitpanel .sethead:first-child{margin-top:6px}
+
+/* How-to panel: never push the game off screen */
+.howto .howbody{max-height:38vh;max-height:38dvh;overflow:auto;padding-right:4px;border-bottom:1px solid var(--line);margin-bottom:8px;-webkit-overflow-scrolling:touch}
+
+/* Werewolf: every main action is a full-width button */
+.ww #cupidgo,.ww #heal,.ww #ready,.ww #witchdone,.ww #hide,.ww #peeknight,.ww #peekresult{display:block;width:100%;min-height:48px;margin:10px 0 0}
+.ww #peek{display:block;width:100%}

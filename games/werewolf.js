@@ -535,6 +535,7 @@ export const werewolf = {
   render(el, s, ui) {
     const d = el._d ??= { show: false, myVote: null, tick: null, mstep: 0, lovePick: [] };
     d.s = s; d.ui = ui;
+    el.classList.add('wwstage'); // lets the card use the full width on phones
     const dl = this.deadline(s);
     if (d.at !== dl) { d.at = dl; d.total = dl ? Math.max(1000, dl - Date.now()) : 0; }
     if (!d.tick) {
@@ -945,12 +946,17 @@ export const werewolf = {
     /* ---- shared bottom part ---- */
     const showRoster = s.phase !== 'lobby' && s.phase !== 'end' && s.order.length;
     const modBlock = isMod && s.phase !== 'lobby' && s.phase !== 'end' ? modScript() : '';
-    const buttons = [];
+    // One clear main action, and the smaller ones in a tidy row under it.
     const inGameNow = s.phase !== 'lobby' && s.phase !== 'end';
-    if (controls && inGameNow && !s.paused) buttons.push('<button class="ghost" id="pause">⏸ Pause</button>');
-    if (controls && !s.paused && nextLabel && s.phase !== 'lobby' && s.phase !== 'end') buttons.push(`<button id="adv" class="${isMod ? '' : 'ghost'}">${isMod ? '▶ ' : '⏭ Skip ahead: '}${nextLabel}</button>`);
-    if (ui.isHost && !isMod && ['night', 'day', 'vote'].includes(s.phase) && s.config.mod === 'none') buttons.push('<button class="ghost" data-add="30">⏱ +30s</button>');
-    if (ui.isHost && s.phase !== 'lobby') buttons.push(`<button class="ghost" id="reset">${s.phase === 'end' ? '🔁 Play again' : '✖ End game'}</button>`);
+    const running = controls && inGameNow && !s.paused;
+    const main = running && nextLabel && isMod ? `<button id="adv" class="ww-main">▶ ${nextLabel}</button>`
+      : controls && s.phase === 'end' && ui.isHost ? '<button id="reset" class="ww-main">🔁 Play again</button>' : '';
+    const small = [];
+    if (running) small.push('<button class="ghost" id="pause">⏸ Pause</button>');
+    if (running && nextLabel && !isMod) small.push(`<button id="adv" class="ghost">⏭ ${nextLabel}</button>`);
+    if (ui.isHost && !isMod && ['night', 'day', 'vote'].includes(s.phase) && s.config.mod === 'none' && !s.paused) small.push('<button class="ghost" data-add="30">⏱ +30s</button>');
+    if (ui.isHost && inGameNow) small.push('<button class="ghost danger" id="reset">✖ End game</button>');
+    const bar = main || small.length ? `<div class="ww-ctl ${isMod && inGameNow ? 'stick' : ''}">${main}${small.length ? `<div class="ww-ctl2">${small.join('')}</div>` : ''}</div>` : '';
 
     // A paused game covers the whole screen, wherever you have scrolled to.
     let veil = document.getElementById('ww-pause');
@@ -964,7 +970,7 @@ export const werewolf = {
     el.innerHTML = `<div class="ww ${theme} ${ghostOn ? 'ghosted' : ''} ${s.paused ? 'paused' : ''}"><h2>🐺 Werewolf</h2>${pauseBlock}${dropBlock}
       ${showRoster ? `<p class="muted">${aliveIdsOf(s).length} alive of ${s.order.length}</p>${roster()}` : ''}
       ${modBlock}${ghost}${body}
-      ${buttons.length ? `<div class="row ww-ctl ${isMod && s.phase !== 'end' ? 'stick' : ''}">${buttons.join('')}</div>` : ''}</div>`;
+      ${bar}</div>`;
 
     /* ---- wiring ---- */
     // Delayed callbacks must redraw with the newest data, never with the `ui` they were created with.
