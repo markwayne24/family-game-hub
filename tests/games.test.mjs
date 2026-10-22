@@ -459,4 +459,34 @@ import { search, paginate } from '../games/list.js';
   assert.equal(paginate([], 0, 10).pages, 1); assert.equal(paginate([], 0, 10).items.length, 0);
   assert.equal(paginate(people.slice(0, 25), 2, 10).items.length, 5); // partial last page
 }
+
+
+// ---- bingo: room-wide default card count and per-player overrides
+{
+  let b = bg.init(env(), {});
+  assert.equal(b.defaultCount, 1);
+  b = bg.reduce(b, A('h', 'cards', { id: '*', count: 2 }), env());
+  assert.equal(b.defaultCount, 2); assert.deepEqual(b.counts, {});
+  assert.equal(countOf(b, 'a'), 2); assert.equal(countOf(b, 'someone-who-joins-later'), 2); // late joiners get the default too
+  // one player gets a different number: an override
+  b = bg.reduce(b, A('h', 'cards', { id: 'a', count: 4 }), env());
+  assert.equal(countOf(b, 'a'), 4); assert.equal(countOf(b, 'b'), 2); assert.deepEqual(b.counts, { a: 4 });
+  // putting them back to the default removes the override
+  assert.deepEqual(bg.reduce(b, A('h', 'cards', { id: 'a', count: 2 }), env()).counts, {});
+  // changing the default clears overrides, so "Everyone gets 1" really means everyone
+  const reset = bg.reduce(b, A('h', 'cards', { id: '*', count: 1 }), env());
+  assert.equal(countOf(reset, 'a'), 1); assert.equal(countOf(reset, 'b'), 1); assert.deepEqual(reset.counts, {});
+  assert.equal(bg.reduce(b, A('a', 'cards', { id: '*', count: 5 }), env()).defaultCount, 2); // host only
+  assert.equal(bg.reduce(b, A('h', 'cards', { id: '*', count: 99 }), env()).defaultCount, MAX_CARDS);
+  assert.equal(bg.reduce(b, A('h', 'cards', { id: '*', count: 0 }), env()).defaultCount, 1);
+  // a late joiner (not in env.players when the default was set) holds the default number of unique cards, and can win with them
+  const late = { players: [...P, { id: 'late', name: 'Late' }], hostId: 'h', now: 0 };
+  const started = bg.reduce(b, A('h', 'start'), late);
+  assert.equal(new Set([0, 1].map(k => cardOf(started, 'late', k).join())).size, 2);
+  assert.ok(Object.keys(started.seeds).filter(k => k.startsWith('late#')).length === 2);
+  // the default survives New game; old saved games without it still work
+  assert.equal(bg.reduce(bg.reduce(started, A('h', 'end'), late), A('h', 'reset'), late).defaultCount, 2);
+  assert.equal(countOf({ counts: {} }, 'x'), 1);
+  assert.equal(bg.view({ phase: 'lobby', pattern: 'line', seeds: {} }).defaultCount, 1);
+}
 console.log('all game tests passed');

@@ -64,7 +64,7 @@ export const MODES = {
 
 // A player can hold several cards; card k of player `id` is seeded independently so each can be shuffled.
 const cid = (id, k) => `${id}#${k}`;
-export const countOf = (s, id) => s.counts[id] ?? 1;
+export const countOf = (s, id) => s.counts[id] ?? s.defaultCount ?? 1; // per-player override, else the room default
 const seedOf = (s, id, k) => s.seeds[cid(id, k)] ?? 0;
 export const cardOf = (s, id, k = 0) => cardFor(cid(id, k), seedOf(s, id, k));
 const cardsOf = (s, id) => Array.from({ length: countOf(s, id) }, (_, k) => cardOf(s, id, k));
@@ -128,17 +128,17 @@ export const bingo = {
       phase: 'lobby', host: env.hostId,
       pattern: PATTERNS[opts?.pattern] && opts.pattern !== 'custom' ? opts.pattern : 'line', custom: [],
       mode: MODES[opts?.mode] ? opts.mode : 'auto', pending: null,
-      counts: {}, seeds: {}, called: [], last: null, winners: [], ended: false,
+      counts: {}, defaultCount: 1, seeds: {}, called: [], last: null, winners: [], ended: false,
       history: opts?.memory?.history ?? [], // survives "new game" and even leaving Bingo for another game
     };
   },
 
   reduce(s, a, env) {
-    s = { counts: {}, custom: [], mode: 'auto', pending: null, host: env.hostId, history: [], ended: false, ...s };
+    s = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, host: env.hostId, history: [], ended: false, ...s };
     const isHost = a.from === env.hostId;
     if (a.type === 'reset' && isHost) {
       // New game: back to the lobby with the same settings and cards. An abandoned game isn't counted.
-      return { ...this.init(env, { pattern: s.pattern === 'custom' ? 'line' : s.pattern, mode: s.mode, memory: { history: s.history } }), pattern: s.pattern, custom: s.custom, counts: s.counts, seeds: s.seeds };
+      return { ...this.init(env, { pattern: s.pattern === 'custom' ? 'line' : s.pattern, mode: s.mode, memory: { history: s.history } }), pattern: s.pattern, custom: s.custom, counts: s.counts, defaultCount: s.defaultCount, seeds: s.seeds };
     }
     if (a.type === 'clearhistory' && isHost) return { ...s, history: [] };
     // End game: the host stops it early. It counts as played, with no winner.
@@ -155,9 +155,12 @@ export const bingo = {
       }
       if (isHost && a.type === 'cards') {
         const count = Math.min(MAX_CARDS, Math.max(1, Math.floor(+a.data?.count) || 1));
-        const ids = a.data?.id === '*' ? env.players.map(p => p.id) : knownIds(s, env).has(a.data?.id) ? [a.data.id] : [];
-        if (!ids.length) return s;
-        return { ...s, counts: { ...s.counts, ...Object.fromEntries(ids.map(id => [id, count])) } };
+        // '*' sets the room default (also for people who join later) and clears individual overrides.
+        if (a.data?.id === '*') return { ...s, defaultCount: count, counts: {} };
+        if (!knownIds(s, env).has(a.data?.id)) return s;
+        const counts = { ...s.counts, [a.data.id]: count };
+        if (count === (s.defaultCount ?? 1)) delete counts[a.data.id]; // back to the default: no override needed
+        return { ...s, counts };
       }
       if (a.type === 'shuffle') {
         // A shuffled card must never match any other card in the room, including the player's own.
@@ -204,7 +207,7 @@ export const bingo = {
 
   // A rolled-but-unrevealed number is never broadcast: the host's browser reads it from its own state (ui.raw).
   view(s) {
-    const { pending, ...pub } = { counts: {}, custom: [], mode: 'auto', pending: null, history: [], ended: false, ...s };
+    const { pending, ...pub } = { counts: {}, defaultCount: 1, custom: [], mode: 'auto', pending: null, history: [], ended: false, ...s };
     return { ...pub, hasPending: pending != null };
   },
   // What the room remembers about Bingo after the host moves on to another game.
