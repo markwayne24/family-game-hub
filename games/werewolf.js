@@ -534,12 +534,12 @@ export const werewolf = {
 
   render(el, s, ui) {
     const d = el._d ??= { show: false, myVote: null, tick: null, mstep: 0, lovePick: [] };
-    d.s = s;
+    d.s = s; d.ui = ui;
     const dl = this.deadline(s);
     if (d.at !== dl) { d.at = dl; d.total = dl ? Math.max(1000, dl - Date.now()) : 0; }
     if (!d.tick) {
       d.tick = setInterval(() => {
-        if (!el.isConnected) { clearInterval(d.tick); d.tick = null; return; }
+        if (!el.isConnected || el._d !== d) { clearInterval(d.tick); d.tick = null; document.getElementById('ww-pause')?.remove(); return; }
         if (d.s.paused) return; // quiet while paused
         const at = d.at;
         const left = at ? Math.max(0, at - Date.now()) : 0;
@@ -913,19 +913,27 @@ export const werewolf = {
     const dropBlock = s.phase === 'lobby' || s.phase === 'end' ? '' : (controls && s.stale.length
       ? `<div class="banner ww-drop"><b>🔌 Offline for over 2 minutes</b><p class="muted">Wait for them, let the app play for them, or take them out of the game.</p>${s.stale.map(droprow).join('')}</div>` : '')
       + (s.away.filter(id => !controls || !s.stale.includes(id)).length ? `<p class="muted">🔌 ${s.away.filter(id => !controls || !s.stale.includes(id)).map(name).join(', ')} ${s.away.length > 1 ? 'are' : 'is'} offline${s.stale.length && !controls ? '. The host is deciding what to do.' : '. Giving them a couple of minutes to come back.'}</p>` : '');
-    const pauseBlock = s.paused ? `<div class="banner ww-paused">⏸ <b>Game paused.</b> ${controls ? 'Press Resume when everyone is ready.' : 'Waiting for the ' + (s.config.mod === 'player' ? 'moderator' : 'host') + ' to resume.'}</div>` : '';
+    const pauseBlock = '';
 
     /* ---- shared bottom part ---- */
     const showRoster = s.phase !== 'lobby' && s.phase !== 'end' && s.order.length;
     const modBlock = isMod && s.phase !== 'lobby' && s.phase !== 'end' ? modScript() : '';
     const buttons = [];
     const inGameNow = s.phase !== 'lobby' && s.phase !== 'end';
-    if (controls && inGameNow && s.paused) buttons.push('<button id="resume">▶ Resume</button>');
-    else if (controls && inGameNow) buttons.push('<button class="ghost" id="pause">⏸ Pause</button>');
+    if (controls && inGameNow && !s.paused) buttons.push('<button class="ghost" id="pause">⏸ Pause</button>');
     if (controls && !s.paused && nextLabel && s.phase !== 'lobby' && s.phase !== 'end') buttons.push(`<button id="adv" class="${isMod ? '' : 'ghost'}">${isMod ? '▶ ' : '⏭ Skip ahead: '}${nextLabel}</button>`);
     if (ui.isHost && !isMod && ['night', 'day', 'vote'].includes(s.phase) && s.config.mod === 'none') buttons.push('<button class="ghost" data-add="30">⏱ +30s</button>');
     if (ui.isHost && s.phase !== 'lobby') buttons.push(`<button class="ghost" id="reset">${s.phase === 'end' ? '🔁 Play again' : '✖ End game'}</button>`);
 
+    // A paused game covers the whole screen, wherever you have scrolled to.
+    let veil = document.getElementById('ww-pause');
+    if (s.paused) {
+      if (!veil) { veil = document.createElement('div'); veil.id = 'ww-pause'; document.body.append(veil); }
+      veil.innerHTML = `<div class="box"><div class="big">⏸</div><h2>Game paused</h2>
+        <p>${controls ? 'Take your time. Press Resume when everyone is ready.' : `Waiting for the ${s.config.mod === 'player' ? 'moderator' : 'host'} to resume.`}</p>
+        ${controls ? '<button id="ww-resume">▶ Resume</button>' : ''}</div>`;
+      veil.querySelector('#ww-resume')?.addEventListener('click', () => d.ui.act('resume'));
+    } else veil?.remove();
     el.innerHTML = `<div class="ww ${theme} ${ghostOn ? 'ghosted' : ''} ${s.paused ? 'paused' : ''}"><h2>🐺 Werewolf</h2>${pauseBlock}${dropBlock}
       ${showRoster ? `<p class="muted">${aliveIdsOf(s).length} alive of ${s.order.length}</p>${roster()}` : ''}
       ${modBlock}${ghost}${body}

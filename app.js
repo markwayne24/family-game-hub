@@ -288,34 +288,40 @@ function enterRoom(code, name, isHost) {
 
 function buildShell() {
   app.innerHTML = `
-    <div class="row">
-      <div class="grow"><div class="muted">Room code</div><div class="code">${esc(S.code)}</div></div>
-      <button class="ghost" id="mute" aria-label="Sound on/off"></button>
-      <button class="ghost" id="copy">Copy invite link</button>
+    <div id="topbar">
+      <div class="topcode" title="Room code"><span class="muted">Room</span> <b class="code">${esc(S.code)}</b></div>
+      <div class="grow"></div>
+      <button class="ghost icon" id="mute" aria-label="Sound on/off"></button>
+      <button class="ghost icon" id="gear" aria-label="Menu" aria-expanded="false">⚙</button>
+    </div>
+    <div id="menuback" hidden></div>
+    <div id="menu" hidden role="dialog" aria-label="Room menu">
+      <div class="row"><h3 class="grow" style="margin:0">⚙ Menu</h3><button class="ghost small" id="menuclose" aria-label="Close menu">✕</button></div>
+      <div id="hostmenu">
+        <button class="ghost wide" id="copy">Copy invite link</button>
+        <button class="ghost wide" id="lobby">Back to game list</button>
+        <div id="limitpanel">
+          <h4 class="sethead">Player limit</h4>
+          <p class="muted" style="margin:0 0 6px">Most players allowed in this room (you count as one). Players already in are never removed.</p>
+          <div class="chips presets">${[0, 4, 6, 8, 10, 12, 15, 20, 30, 50].map(n => `<button class="chip pick" data-limit="${n}">${n ? n : 'No limit'}</button>`).join('')}</div>
+          <div class="row"><input id="limitnum" type="number" min="2" max="500" inputmode="numeric" placeholder="Other number" aria-label="Other player limit"><button class="ghost" id="limitset">Set</button></div>
+          <p class="muted" id="limitnote"></p>
+          <button class="ghost small" id="freeheld" hidden>Free the held seats now</button>
+          <h4 class="sethead">People who join during a game</h4>
+          <div class="chips presets">${Object.entries(LATE_MODES).map(([k, label]) => `<button class="chip pick" data-late="${k}">${label}</button>`).join('')}</div>
+          <p class="muted" id="latenote"></p>
+          <button class="ghost small" id="letin" hidden>Let the watchers join now</button>
+        </div>
+        <button class="ghost danger wide" id="close">Close room</button>
+      </div>
+      <div id="guestmenu"><button class="ghost wide" id="leave">Leave room</button></div>
     </div>
     <div class="metarow"><div class="whoami" id="whoami"></div><div class="total" id="total" aria-live="polite"></div></div>
     <div id="banner"></div>
     <div id="howto"></div>
     <div class="card" id="stage"></div>
-    <div class="row">
-      <button class="ghost" id="lobby">Back to game list</button>
-      <button class="ghost danger" id="close">Close room</button>
-      <button class="ghost" id="leave">Leave room</button>
-    </div>
     <div class="card" id="players">
-      <div class="row"><div class="muted grow" id="pcount"></div><button class="ghost small" id="limitbtn" hidden></button><button class="ghost small" id="pmore" hidden></button></div>
-      <div id="limitpanel" hidden>
-        <h4 class="sethead">Player limit</h4>
-        <p class="muted" style="margin:0 0 6px">Most players allowed in this room (you count as one). Players already in are never removed.</p>
-        <div class="chips presets">${[0, 4, 6, 8, 10, 12, 15, 20, 30, 50].map(n => `<button class="chip pick" data-limit="${n}">${n ? n : 'No limit'}</button>`).join('')}</div>
-        <div class="row"><input id="limitnum" type="number" min="2" max="500" inputmode="numeric" placeholder="Other number" aria-label="Other player limit"><button class="ghost" id="limitset">Set</button></div>
-        <p class="muted" id="limitnote"></p>
-        <button class="ghost small" id="freeheld" hidden>Free the held seats now</button>
-        <h4 class="sethead">People who join during a game</h4>
-        <div class="chips presets">${Object.entries(LATE_MODES).map(([k, label]) => `<button class="chip pick" data-late="${k}">${label}</button>`).join('')}</div>
-        <p class="muted" id="latenote"></p>
-        <button class="ghost small" id="letin" hidden>Let the watchers join now</button>
-      </div>
+      <div class="row"><div class="muted grow" id="pcount"></div><button class="ghost small" id="pmore" hidden></button></div>
       <div class="chips" id="chips"></div>
       <div id="pfull" hidden>
         <input id="psearch" type="search" placeholder="Search players…" autocomplete="off" aria-label="Search players">
@@ -324,7 +330,20 @@ function buildShell() {
       </div>
     </div>`;
   S.stageView = null;
-  app.querySelector('#limitbtn').onclick = () => { S.limitOpen = !S.limitOpen; render(); };
+  S.menuOpen = false;
+  // The menu holds every host control; it drops down under the fixed bar and closes after any choice.
+  const setMenu = open => {
+    S.menuOpen = open;
+    app.querySelector('#menu').hidden = !open;
+    app.querySelector('#menuback').hidden = !open;
+    app.querySelector('#gear').setAttribute('aria-expanded', open);
+    if (open) render();
+  };
+  app.querySelector('#gear').onclick = () => setMenu(!S.menuOpen);
+  app.querySelector('#menuclose').onclick = () => setMenu(false);
+  app.querySelector('#menuback').onclick = () => setMenu(false);
+  for (const id of ['#lobby', '#close', '#leave']) app.querySelector(id).addEventListener('click', () => setMenu(false));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.menuOpen) setMenu(false); });
   app.querySelectorAll('[data-limit]').forEach(b => b.onclick = () => setLimit(+b.dataset.limit));
   app.querySelectorAll('[data-late]').forEach(b => b.onclick = () => setLate(b.dataset.late));
   app.querySelector('#letin').onclick = letWatchersIn;
@@ -503,12 +522,8 @@ function renderTotals(ps) {
     room.watching?.length ? ` · 👀 ${room.watching.length} watching` : ''}`;
   total.title = room.held ? `${room.held} seat${room.held === 1 ? ' is' : 's are'} held for players who dropped out` : '';
 
-  const btn = app.querySelector('#limitbtn');
-  btn.hidden = !S.isHost;
-  btn.textContent = '⚙ Room settings';
   const panel = app.querySelector('#limitpanel');
-  panel.hidden = !(S.isHost && S.limitOpen);
-  if (!panel.hidden) {
+  if (S.isHost && S.menuOpen) {
     app.querySelectorAll('[data-limit]').forEach(b => b.classList.toggle('sel', +b.dataset.limit === S.maxPlayers));
     const over = S.maxPlayers && room.used > S.maxPlayers;
     app.querySelector('#limitnote').textContent = `${room.used} seat${room.used === 1 ? '' : 's'} in use${room.held ? `, ${room.held} held for players who dropped out` : ''}.${over ? ' Already over the limit: it only blocks new players.' : ''}`;
@@ -592,10 +607,9 @@ function render() {
   const g = GAMES[S.game];
   const stage = app.querySelector('#stage');
 
-  app.querySelector('#copy').style.display = S.isHost ? '' : 'none';
+  app.querySelector('#hostmenu').hidden = !S.isHost;
+  app.querySelector('#guestmenu').hidden = S.isHost;
   app.querySelector('#lobby').style.display = S.isHost && g ? '' : 'none';
-  app.querySelector('#close').style.display = S.isHost ? '' : 'none';
-  app.querySelector('#leave').style.display = S.isHost ? 'none' : '';
   // Two people with the same name: the later joiner becomes "Name 2". Their join time is kept so seats and turn order don't change.
   const wanted = resolveName(ps, S.me, S.baseName, S.name);
   if (wanted !== S.name) {

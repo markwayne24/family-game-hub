@@ -60,3 +60,6 @@ Werewolf vote privacy: the host can turn **Show who voted for whom** off in the 
 ### Werewolf: pause and drop-outs
 - **Pause:** the host or moderator can pause the game (bathroom break!). Everyone sees a "paused" banner, countdowns freeze, nothing can be played, and when they resume the timers pick up where they stopped.
 - **Someone goes offline:** a 🔌 shows next to their name. After 2 minutes the host (or moderator) is asked, without naming any roles: **Wait**, **Autopilot** (the app plays random legal moves for them and they take over again if they return), or **Remove** (they are out as "left the game"; if that was the last wolf the village wins). People who are offline that long are no longer waited for when closing the night or a vote. If the **moderator** drops, the host can switch the game to timers.
+
+### Room bar and menu
+A fixed bar stays at the top of every screen with the room code, the 🔊 sound switch (for everyone) and a ⚙ menu. The host's menu holds every host control: invite link, back to the game list, player limit, what happens when people join mid-game, and close room. Other players' menu has Leave room. A paused Werewolf game covers the whole screen for everyone, wherever they have scrolled to.

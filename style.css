@@ -528,3 +528,23 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww-paused{text-align:center;font-size:1.05rem;border:2px solid #f08c00}
 .ww.paused .votes,.ww.paused .ww-sky,.ww.paused #ready{opacity:.45;pointer-events:none}
 .ww-drop,.ww-paused,.ww .banner{animation:none}
+
+/* Fixed top bar and menu */
+#topbar{position:sticky;top:0;z-index:45;display:flex;gap:8px;align-items:center;margin:-16px -16px 10px;padding:8px 16px;background:var(--bg);border-bottom:1px solid var(--line)}
+#topbar .code{font-size:1.35rem;letter-spacing:.15em}
+.topcode{display:flex;align-items:baseline;gap:8px}
+button.icon{min-width:44px;min-height:44px;padding:6px 10px;font-size:1.2rem}
+#menuback{position:fixed;inset:0;background:#0007;z-index:35}
+#menu{position:fixed;left:0;right:0;top:61px;max-height:calc(100vh - 61px - 56px);max-height:calc(100dvh - 61px - 56px);overflow:auto;background:var(--card);border-bottom:1px solid var(--line);box-shadow:0 14px 30px #0005;padding:14px 16px 22px;z-index:40}
+#menu>*{max-width:608px;margin-left:auto;margin-right:auto}
+#menu[hidden],#menuback[hidden],#hostmenu[hidden],#guestmenu[hidden]{display:none}
+button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
+#menu #limitpanel{background:var(--bg);border-radius:14px;padding:8px 12px;margin:10px 0}
+
+/* Werewolf: the whole-screen pause */
+#ww-pause{position:fixed;inset:0;z-index:55;display:grid;place-items:center;background:#05081ae6;color:#fff;text-align:center;padding:24px;animation:bbIn .25s ease both;backdrop-filter:blur(3px)}
+#ww-pause .box{max-width:360px}
+#ww-pause .big{font-size:5rem;animation:pulse 2s ease-in-out infinite}
+#ww-pause h2{margin:.2em 0;font-size:1.8rem}
+#ww-pause p{margin:.4em 0 1.2em;opacity:.85}
+#ww-pause button{min-height:52px;min-width:180px;font-size:1.1rem;background:#ffd43b;color:#1b1b1b}
