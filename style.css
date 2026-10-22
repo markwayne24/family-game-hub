@@ -383,7 +383,8 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww-comp{background:var(--line);border-radius:12px;padding:10px 12px;margin:12px 0}
 .ww-script{border:2px dashed var(--accent);border-radius:14px;padding:10px 12px;margin:10px 0}
 .ww-nightlog{background:var(--line);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:.95rem}
-.ww-ctl{margin-top:14px;position:sticky;bottom:8px}
+.ww-ctl{margin-top:14px;position:sticky;bottom:0;padding:10px 0 4px;background:linear-gradient(transparent,var(--card) 35%)}
+.ww.night .ww-ctl{background:linear-gradient(transparent,#0f1b3d 35%)}
 .ww-ctl button{box-shadow:0 2px 10px #0003}
 .ww .chip.pick{min-width:44px;justify-content:center}
 
@@ -438,3 +439,15 @@ summary{min-height:44px;display:flex;align-items:center}
 @keyframes shieldRing{0%{opacity:0;transform:scale(.4)}30%{opacity:1}100%{opacity:0;transform:scale(2.4)}}
 @media (prefers-reduced-motion:reduce){.ww-sky *,.ww-sky{animation:none!important}}
 @keyframes clawDraw{from{stroke-dashoffset:140}to{stroke-dashoffset:0}}
+
+/* Werewolf: make every card readable on the dark night screen */
+.ww.night .role{background:#233266;color:#fff}
+.ww.night .role.bad{background:#7a1f2b}
+.ww.night button.ghost{color:#e8ecff;border-color:#5b6db3;background:transparent}
+.ww.night .ww-comp,.ww.night .ww-nightlog,.ww.night .ww-script{background:#1b2a5a;color:#e8ecff}
+.ww.night .ww-script{border-color:#7f8fd6}
+.ww.night .bar{background:#233266}
+.ww.night .table td{border-color:#33427a;color:#e8ecff}
+.ww.night summary,.ww.night h2,.ww.night h3{color:#e8ecff}
+.ww.night .muted{color:#a9b4de}
+.ww.night .banner{background:#3a3320}
