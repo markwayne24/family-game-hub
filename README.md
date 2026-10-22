@@ -31,3 +31,13 @@ Run locally: `npx serve .`
 ## Tests
 
 `npm test` checks every game's rules, scoring, secret-info handling and timers (no browser needed).
+
+## Werewolf
+
+Needs 5+ players. The host picks who runs the game:
+
+- **No moderator** – the app runs everything on timers (night, discussion, vote); the host plays too.
+- **Host moderates** – the host sees every role, reads the script and presses ▶ to move on (does not play).
+- **A player moderates** – the host picks one player to moderate; the host plays.
+
+Roles: Werewolf, Villager, Seer, Doctor, optional Hunter. Wolves count is automatic or fixed; the host can toggle roles, whether the dead's roles are shown, and whether the dead can see everyone's roles. Roles and night actions are sent encrypted to each player.

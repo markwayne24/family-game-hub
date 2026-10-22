@@ -321,6 +321,7 @@ export const werewolf = {
       }, 500);
     }
     if (s.phase === 'lobby' || s.phase === 'roles' || s.phase === 'end') d.myVote = null;
+    if (s.phase === 'lobby') d.show = false; // a fresh game starts with the role hidden
     if (fresh(el, 'round', `${s.round}${s.phase === 'vote' ? 'v' : ''}`)) d.myVote = null;
 
     const name = id => ui.esc(ui.nameOf(id));
