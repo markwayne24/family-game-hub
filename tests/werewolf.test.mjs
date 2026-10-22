@@ -394,4 +394,91 @@ const setup = (n, roles, cfg = {}, mod = 'none') => {
   assert.ok(W.view(s2).tally.votes);
 }
 console.log('werewolf new-role tests passed');
+{
+  // ---- people who drop out
+  const withOut = (e, ...gone) => ({ ...e, players: e.players.filter(p => !gone.includes(p.id)) });
+  let { e, s } = setup(7, { h: 'wolf', p1: 'wolf', p2: 'seer', p3: 'villager' }, { wolves: 2 });
+  const e0 = { ...e, now: 10000 };
+  assert.equal(W.reduce(s, A('h', 'presence'), e0), s); // everybody is here: nothing changes
+  assert.notEqual(W.reduce(s, A('p2', 'presence'), withOut(e0, 'p1')), s === null); // only the host's check counts
+  assert.equal(W.reduce(s, A('p2', 'presence'), withOut(e0, 'p1')), s);
+  let a = W.reduce(s, A('h', 'presence'), withOut(e0, 'p1'));
+  assert.deepEqual(a.away, { p1: 10000 }); assert.deepEqual(a.stale, []);
+  assert.deepEqual(W.view(a).away, ['p1']); assert.ok(!('auto' in W.view(a)));
+  assert.equal(W.deadline(a) <= 10000 + 120000, true);
+  // returning clears it
+  assert.deepEqual(W.reduce(a, A('h', 'presence'), e0).away, {});
+  // after the grace period, the host is asked (a timeout moves nothing else on)
+  const late = { ...e0, now: 10000 + 120000 + 10 };
+  a = { ...a, until: 1e9, minUntil: 1e9 }; // the night itself is far from over
+  let b = W.reduce(a, A('h', 'timeout'), late); assert.deepEqual(b.stale, ['p1']); assert.equal(b.phase, 'night');
+  // an offline wolf is not waited for: the other wolf's pick is enough
+  let n = W.reduce(b, A('h', 'wolf', { target: 'p3' }), late); n = step(n, late, 'h', 'wolf', { target: 'p3' }); n = step(n, late, 'p2', 'seer', { target: 'p3' });
+  assert.equal(n.acted, true);
+  // decisions are for the host/moderator only
+  assert.deepEqual(step(b, late, 'p2', 'awayRemove', { id: 'p1' }).stale, ['p1']);
+  // wait: the clock starts again
+  const w = step(b, late, 'h', 'awayWait', { id: 'p1' }); assert.deepEqual(w.stale, []); assert.equal(w.away.p1, late.now);
+  // autopilot: the app plays for them
+  const ap = step(b, late, 'h', 'awayAuto', { id: 'p1' });
+  assert.equal(ap.night.wolf.p1 !== undefined, true); assert.notEqual(ap.roles[ap.night.wolf.p1], 'wolf');
+  assert.equal(JSON.stringify(W.view(ap)).includes('"auto"'), false);
+  // ... and it votes by skipping
+  let v = { ...ap, phase: 'vote', votes: {}, round: 1 }; v = W.reduce(v, A('h', 'presence'), withOut(late, 'p1')); v = step(v, late, 'p2', 'vote', { target: 'p3' });
+  assert.equal(v.votes.p1, 'skip'); // autopilot votes right after the next action
+  // when they come back, they play for themselves again
+  assert.deepEqual(W.reduce(ap, A('h', 'presence'), late).auto, {});
+  // remove: they are out ('left'), no hunter shot; losing the last wolf ends the game
+  let r = step(b, late, 'h', 'awayRemove', { id: 'p1' });
+  assert.equal(r.alive.p1, false); assert.equal(r.deaths[0].how, 'left'); assert.equal(r.phase, 'night');
+  const hOut = { ...r, away: { h: late.now - 999999 }, stale: ['h'] };
+  r = step(hOut, late, 'h', 'awayRemove', { id: 'h' }); assert.equal(r.phase, 'end'); assert.equal(r.winner, 'village');
+  // a leaving hunter doesn't get a last shot
+  let hh = setup(7, { h: 'wolf', p1: 'hunter' }, { hunter: true }); const he = { ...hh.e, now: 10000 };
+  let hs = W.reduce(hh.s, A('h', 'presence'), withOut(he, 'p1')); hs = W.reduce(hs, A('h', 'timeout'), { ...he, now: 10000 + 120100 });
+  hs = step(hs, he, 'h', 'awayRemove', { id: 'p1' }); assert.equal(hs.hunter, null); assert.equal(hs.alive.p1, false);
+  // a stale player who is the last one to vote no longer blocks the vote
+  let vs = { ...b, phase: 'vote', votes: {}, round: 1 };
+  for (const id of vs.order.filter(x => vs.alive[x] && x !== 'p1')) vs = step(vs, late, id, 'vote', { target: id === 'p2' ? 'h' : 'p2' });
+  assert.equal(vs.phase, 'result');
+}
+{
+  // ---- the moderator drops out: switch to timers
+  let { e, s } = setup(7, { h: 'wolf' }, { }, 'player');
+  s = W.init(e); s = step(s, e, 'h', 'config', { mod: 'player', moderator: 'p6' }); s = step(s, e, 'h', 'start'); s = step(s, e, 'p6', 'advance');
+  assert.equal(s.config.mod, 'player'); assert.equal(s.until, null);
+  const e0 = { ...e, now: 5000 };
+  let a = W.reduce(s, A('h', 'presence'), { ...e0, players: e0.players.filter(p => p.id !== 'p6') });
+  assert.deepEqual(a.away, { p6: 5000 });
+  a = W.reduce(a, A('h', 'timeout'), { ...e0, now: 5000 + 120200 }); assert.deepEqual(a.stale, ['p6']);
+  assert.deepEqual(step(a, e0, 'p1', 'modTimers').config.mod, 'player'); // only controls
+  const t = step(a, { ...e0, now: 200000 }, 'h', 'modTimers');
+  assert.equal(t.config.mod, 'none'); assert.equal(t.moderator, null); assert.equal(t.until, 200000 + 45000); assert.deepEqual(t.stale, []);
+  assert.ok(!('moderator' in (W.priv(t).p6 ?? {})));
+}
+{
+  // ---- pause and resume
+  let { e, s } = setup(6, { h: 'wolf' }, { }, 'none');
+  s = step(s, { ...e, now: 1000 }, 'h', 'config', {}); // no-op in a running game
+  const until = s.until;
+  assert.equal(step(s, e, 'p1', 'pause').paused, null); // players can't pause
+  let p = step(s, { ...e, now: 2000 }, 'h', 'pause'); assert.deepEqual(p.paused, { at: 2000 }); assert.equal(W.deadline(p), null);
+  assert.deepEqual(W.view(p).paused, { at: 2000 });
+  // nothing happens while paused
+  assert.deepEqual(step(p, { ...e, now: 999999 }, 'h', 'timeout'), p);
+  assert.equal(step(p, e, 'h', 'wolf', { target: 'p1' }).night.wolf.h, undefined);
+  assert.equal(step(p, e, 'h', 'advance').phase, p.phase);
+  assert.equal(step(p, e, 'h', 'timer', { sec: 60 }).until, p.until);
+  const r = step(p, { ...e, now: 62000 }, 'h', 'resume');
+  assert.equal(r.paused, null); assert.equal(r.until, until + 60000); // 60 seconds were added back
+  assert.equal(step(r, e, 'h', 'pause', {}).paused !== null, true);
+  // a moderator can pause too, but not another player
+  let m = setup(6, { h: 'wolf' }, {}, 'player'); m = { e: m.e, s: step(step(W.init(m.e), m.e, 'h', 'config', { mod: 'player', moderator: 'p2' }), m.e, 'h', 'start') };
+  assert.equal(step(m.s, m.e, 'p2', 'pause').paused !== null, true); assert.equal(step(m.s, m.e, 'p3', 'pause').paused, null);
+  // grace periods do not run down while paused
+  let g = W.reduce(s, A('h', 'presence'), { ...e, now: 3000, players: e.players.filter(x => x.id !== 'p1') });
+  g = step(g, { ...e, now: 4000 }, 'h', 'pause'); const g2 = step(g, { ...e, now: 4000 + 500000 }, 'h', 'resume');
+  assert.equal(g2.away.p1, 3000 + 500000);
+}
+console.log('werewolf drop-out tests passed');
 console.log('werewolf tests passed');

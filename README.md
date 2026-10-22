@@ -56,3 +56,7 @@ Villagers and the hunter get a decoy job at night in normal mode too (a seer-sty
 - **Moderator tools:** a read-aloud script (one line per step, with a sound), and a countdown the moderator can start, extend or stop. When it runs out the game moves on.
 
 Werewolf vote privacy: the host can turn **Show who voted for whom** off in the lobby. The result then shows only the totals (and the number of skips), and the individual votes are never sent to players.
+
+### Werewolf: pause and drop-outs
+- **Pause:** the host or moderator can pause the game (bathroom break!). Everyone sees a "paused" banner, countdowns freeze, nothing can be played, and when they resume the timers pick up where they stopped.
+- **Someone goes offline:** a 🔌 shows next to their name. After 2 minutes the host (or moderator) is asked, without naming any roles: **Wait**, **Autopilot** (the app plays random legal moves for them and they take over again if they return), or **Remove** (they are out as "left the game"; if that was the last wolf the village wins). People who are offline that long are no longer waited for when closing the night or a vote. If the **moderator** drops, the host can switch the game to timers.

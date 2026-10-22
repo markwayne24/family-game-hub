@@ -62,6 +62,12 @@ const holder = (s, role) => aliveIds(s).find(x => s.roles[x] === role);
 const auto = s => s.config.mod === 'none';
 export const aliveIdsOf = aliveIds;
 export const teamOf = (s, id) => (s.roles[id] === 'wolf' ? 'wolves' : s.roles[id] === 'tanner' ? 'tanner' : 'village');
+// How long someone may be offline before the host is asked what to do.
+export const GRACE_MS = 120000;
+const graceOf = s => s.grace ?? GRACE_MS;
+const needed = (s, id) => !s.stale?.includes(id); // people who are offline too long are not waited for
+// A testing knob: localStorage.hubGraceMs shortens the 2-minute grace period.
+const testGrace = () => { try { return Number(localStorage.getItem('hubGraceMs')) || undefined; } catch { return undefined; } };
 const freshNight = () => ({ wolf: {}, seer: null, doctor: null, guard: null, heal: null, poison: null, witchDone: false, picks: {} });
 
 export function winnerOf(s) {
@@ -85,7 +91,7 @@ function plurality(targets, order) {
 
 // What the wolves have decided so far (null until every wolf has chosen).
 function wolfTarget(s) {
-  const wolves = wolvesAlive(s);
+  const wolves = wolvesAlive(s).filter(w => needed(s, w));
   if (!wolves.length || wolves.some(w => s.night.wolf[w] === undefined)) return null;
   return plurality(wolves.map(w => s.night.wolf[w]).filter(t => s.alive[t]), s.order);
 }
@@ -94,7 +100,7 @@ function kill(s, id, how, env) {
   if (!s.alive[id]) return s;
   let next = { ...s, alive: { ...s.alive, [id]: false }, deaths: [...s.deaths, { id, how, round: s.round }] };
   // A dying hunter gets a last shot (once).
-  if (s.roles[id] === 'hunter' && !s.hunterUsed && !s.hunter) next.hunter = { id, until: auto(s) ? env.now + 30000 : null };
+  if (s.roles[id] === 'hunter' && !s.hunterUsed && !s.hunter && how !== 'left') next.hunter = { id, until: auto(s) ? env.now + 30000 : null };
   // Lovers die together.
   const mate = s.lovers?.includes(id) ? s.lovers.find(x => x !== id) : null;
   if (mate && next.alive[mate]) next = kill(next, mate, 'love', env);
@@ -132,13 +138,14 @@ function endGame(s, winner) {
 
 // Everyone who has a job tonight has done it.
 const allActed = s => {
-  if (s.config.stealth) return aliveIds(s).every(id => s.night.picks[id] !== undefined);
-  const wolves = wolvesAlive(s);
+  if (s.config.stealth) return aliveIds(s).filter(id => needed(s, id)).every(id => s.night.picks[id] !== undefined);
+  const wolves = wolvesAlive(s).filter(w => needed(s, w));
   if (wolves.some(w => s.night.wolf[w] === undefined)) return false;
-  for (const role of ['seer', 'doctor']) if (holder(s, role) && s.night[role] == null) return false;
-  if (holder(s, 'bodyguard') && s.night.guard == null) return false;
-  if (holder(s, 'cupid') && s.round === 1 && !s.lovers) return false;
-  if (holder(s, 'witch') && (s.witch?.heal || s.witch?.poison) && !s.night.witchDone) return false;
+  const job = role => { const id = holder(s, role); return id && needed(s, id); };
+  for (const role of ['seer', 'doctor']) if (job(role) && s.night[role] == null) return false;
+  if (job('bodyguard') && s.night.guard == null) return false;
+  if (job('cupid') && s.round === 1 && !s.lovers) return false;
+  if (job('witch') && (s.witch?.heal || s.witch?.poison) && !s.night.witchDone) return false;
   return true;
 };
 
@@ -185,6 +192,8 @@ function resolveNight(s, env) {
   return enter(next, 'dawn', env);
 }
 
+const votesDone = s => aliveIds(s).filter(id => !s.muted?.[id] && needed(s, id)).every(id => s.votes[id] !== undefined);
+
 function leaveDawn(s, env) {
   const next = s.hunter ? { ...s, hunter: null, hunterUsed: true } : s; // the hunter ran out of time
   const w = winnerOf(next);
@@ -226,6 +235,65 @@ function forward(s, env) {
   }
 }
 
+// When the current phase ends by itself (null when it waits for the moderator).
+function baseDeadline(s) {
+  if ((s.phase === 'dawn' || s.phase === 'result') && s.hunter) return s.hunter.until;
+  if (s.phase === 'night') return s.acted && s.minUntil != null ? s.minUntil : s.until;
+  return s.until ?? null;
+}
+
+/* ---------- people who drop out ---------- */
+
+// Who is in the game but not in the room right now, and for how long.
+function presence(s, env) {
+  if (!s.stale) s = { ...s, stale: [], away: s.away ?? {}, auto: s.auto ?? {}, paused: s.paused ?? null };
+  if (!s.order.length || s.phase === 'lobby' || s.phase === 'end') return s;
+  const here = new Set(env.players.map(p => p.id));
+  const people = [...aliveIds(s), ...(s.config.mod === 'player' && s.moderator ? [s.moderator] : [])].filter(id => id !== env.hostId);
+  const away = {};
+  for (const id of people) if (!here.has(id)) away[id] = s.away?.[id] ?? env.now;
+  const auto = Object.fromEntries(Object.keys(s.auto ?? {}).filter(id => !here.has(id) && s.alive[id]).map(id => [id, true])); // back again: they play for themselves
+  const stale = s.paused ? s.stale : Object.keys(away).filter(id => away[id] + graceOf(s) <= env.now && !auto[id]);
+  const same = (x, y) => Object.keys(x).length === Object.keys(y).length && Object.keys(x).every(k => x[k] === y[k]);
+  if (same(away, s.away ?? {}) && same(auto, s.auto ?? {}) && stale.length === s.stale.length && stale.every((x, i) => x === s.stale[i])) return s;
+  return settle({ ...s, away, auto, stale }, env);
+}
+
+// After somebody is no longer waited for, the night or the vote may be complete.
+function settle(s, env) {
+  if (s.phase === 'night' && !s.paused) { const acted = allActed(s); if (acted !== s.acted) return { ...s, acted }; }
+  if (s.phase === 'vote' && !s.paused && Object.keys(s.votes).length && votesDone(s)) return resolveVote(s, env);
+  return s;
+}
+
+const PHASE_SEC = { roles: 20, dawn: 8, result: 12 };
+// The app plays for people who are away and have been put on autopilot: random but legal moves, nothing clever.
+function autoplay(s, env, game) {
+  if (!s.auto || !Object.keys(s.auto).length || s.phase === 'lobby' || s.phase === 'end' || s.paused) return s;
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  let n = s;
+  for (let pass = 0; pass < 3; pass++) {
+    const before = n;
+    for (const id of Object.keys(n.auto)) {
+      if (!n.alive[id]) continue;
+      const live = aliveIds(n), oth = live.filter(x => x !== id), role = n.roles[id];
+      const go = (type, data) => { n = game.step(n, { from: id, type, data }, env); };
+      if (n.phase === 'night') {
+        if (n.config.stealth) { if (n.night.picks[id] === undefined) go('pick', { target: pick(live) }); continue; }
+        if (role === 'wolf' && n.night.wolf[id] === undefined) go('wolf', { target: pick(live.filter(x => n.roles[x] !== 'wolf')) });
+        else if (role === 'seer' && n.night.seer == null) go('seer', { target: pick(oth) });
+        else if (role === 'doctor' && n.night.doctor == null) go('doctor', { target: pick(live.filter(x => x !== n.lastProtect)) });
+        else if (role === 'bodyguard' && n.night.guard == null) go('guard', { target: pick(oth) });
+        else if (role === 'cupid' && n.round === 1 && !n.lovers && oth.length > 1) { const two = [...oth].sort(() => Math.random() - 0.5); go('cupid', { a: two[0], b: two[1] }); }
+        else if (role === 'witch' && !n.night.witchDone) go('witchPass');
+      } else if (n.phase === 'vote' && n.votes[id] === undefined && !n.muted?.[id]) go('vote', { target: 'skip' });
+      else if ((n.phase === 'dawn' || n.phase === 'result') && n.hunter?.id === id) go('shoot', { target: pick(live) });
+    }
+    if (n === before) break;
+  }
+  return n;
+}
+
 /* ---------- the game ---------- */
 
 export const werewolf = {
@@ -233,6 +301,7 @@ export const werewolf = {
   name: 'Werewolf',
   emoji: '🐺',
   lateJoin: 'watch',
+  watchPresence: true,
   inProgress: s => s.phase !== 'lobby' && s.phase !== 'end',
 
   init(env, opts) {
@@ -241,11 +310,19 @@ export const werewolf = {
       roles: {}, alive: {}, names: {}, round: 0, night: freshNight(), muted: {}, lastProtect: null, seerLog: [],
       deaths: [], dawn: null, votes: {}, tally: null, ready: {}, hunter: null, hunterUsed: false, shots: [], winner: null,
       lovers: null, witch: null, savedLast: null, recap: [], candidates: null, runoff: false,
+      away: {}, stale: [], auto: {}, paused: null, grace: testGrace(),
       until: null, minUntil: null, acted: false, history: opts?.memory?.history ?? [], stats: opts?.memory?.stats ?? {},
     };
   },
 
+  // Everything goes through here: the host's presence checks first, then the rules, then autopilot for anyone who is away.
   reduce(s, a, env) {
+    if (a.type === 'presence') return a.from === env.hostId ? presence(s, env) : s;
+    return autoplay(this.step(s, a, env), env, this);
+  },
+
+  step(s, a, env) {
+    if (!s.stale) s = { ...s, stale: [], away: s.away ?? {}, auto: s.auto ?? {}, paused: s.paused ?? null }; // a game saved before drop-outs were handled
     s = { ...s, names: { ...s.names, ...Object.fromEntries(env.players.map(p => [p.id, p.name])) } };
     const isHost = a.from === env.hostId;
     const controls = isHost || (s.config.mod === 'player' && a.from === s.moderator);
@@ -278,7 +355,7 @@ export const werewolf = {
         return enter({
           ...s, order: ids, moderator: mod, roles, alive: Object.fromEntries(ids.map(id => [id, true])), round: 0, deaths: [], seerLog: [],
           lastProtect: null, dawn: null, tally: null, hunter: null, hunterUsed: false, shots: [], winner: null, muted: {},
-          lovers: null, witch: roles && Object.values(roles).includes('witch') ? { heal: true, poison: true } : null, savedLast: null, recap: [], candidates: null, runoff: false,
+          lovers: null, witch: roles && Object.values(roles).includes('witch') ? { heal: true, poison: true } : null, savedLast: null, recap: [], candidates: null, runoff: false, away: {}, stale: [], auto: {}, paused: null,
         }, 'roles', env);
       }
       return s;
@@ -286,10 +363,40 @@ export const werewolf = {
     if (s.phase === 'end') return s;
 
     /* --- the person running the game (moderator or host) --- */
+    if (a.type === 'pause' && controls && !s.paused) return { ...s, paused: { at: env.now } };
+    if (a.type === 'resume' && controls && s.paused) {
+      const gap = env.now - s.paused.at;
+      const shift = x => (typeof x === 'number' ? x + gap : x);
+      return { ...s, paused: null, until: shift(s.until), minUntil: shift(s.minUntil), hunter: s.hunter ? { ...s.hunter, until: shift(s.hunter.until) } : s.hunter, away: Object.fromEntries(Object.entries(s.away ?? {}).map(([k, v]) => [k, v + gap])) };
+    }
+    if (s.paused) return s; // nothing happens until the game is resumed
+
+    // What to do about people who have been offline for a while.
+    if (controls && (a.type === 'awayWait' || a.type === 'awayRemove' || a.type === 'awayAuto' || a.type === 'modTimers')) {
+      const id = a.data?.id;
+      if (a.type === 'modTimers') {
+        if (s.config.mod !== 'player' || !s.moderator) return s;
+        const sec = { night: s.config.nightSec, day: s.config.daySec, vote: s.config.voteSec }[s.phase] ?? PHASE_SEC[s.phase] ?? 8;
+        const keep = { ...s.away }; delete keep[s.moderator];
+        return { ...s, config: { ...s.config, mod: 'none', moderator: null }, moderator: null, away: keep, stale: s.stale.filter(x => x !== s.moderator), until: env.now + sec * 1000, minUntil: s.phase === 'night' ? env.now + Math.min(15, sec) * 1000 : s.minUntil };
+      }
+      if (!(s.alive[id] && s.away?.[id] !== undefined)) return s;
+      const rest = { away: { ...s.away }, stale: s.stale.filter(x => x !== id) };
+      if (a.type === 'awayWait') { rest.away[id] = env.now; return settle({ ...s, ...rest }, env); }
+      if (a.type === 'awayAuto') return settle({ ...s, ...rest, auto: { ...s.auto, [id]: true } }, env);
+      delete rest.away[id];
+      const gone = kill({ ...s, ...rest }, id, 'left', env);
+      const w = winnerOf(gone);
+      return w ? endGame(gone, w) : settle(gone, env);
+    }
+
     if (a.type === 'advance' && controls) return forward(s, env);
     if (a.type === 'timeout' && isHost) {
-      const at = this.deadline(s);
-      return at && env.now >= at - 100 ? forward(s, env) : s;
+      const base = baseDeadline(s);
+      if (base && env.now >= base - 100) return forward(s, env);
+      // otherwise a grace period may just have run out
+      const stale = Object.keys(s.away ?? {}).filter(id => s.away[id] + graceOf(s) <= env.now && !s.auto?.[id]);
+      return stale.length === s.stale.length && stale.every((x, i) => x === s.stale[i]) ? s : { ...s, stale };
     }
     // A countdown the moderator can start, extend or stop (0 stops it).
     if (a.type === 'timer' && controls && ['night', 'day', 'vote'].includes(s.phase)) {
@@ -358,21 +465,23 @@ export const werewolf = {
       if (t !== 'skip' && !(typeof t === 'string' && s.alive[t] && t !== me)) return s;
       if (t !== 'skip' && s.candidates && !s.candidates.includes(t)) return s; // second round: only the tied players
       const next = { ...s, votes: { ...s.votes, [me]: t } };
-      return aliveIds(next).filter(id => !next.muted?.[id]).every(id => next.votes[id] !== undefined) ? resolveVote(next, env) : next;
+      return votesDone(next) ? resolveVote(next, env) : next;
     }
 
     return s;
   },
 
   deadline(s) {
-    if ((s.phase === 'dawn' || s.phase === 'result') && s.hunter) return s.hunter.until;
-    if (s.phase === 'night') return s.acted && s.minUntil != null ? s.minUntil : s.until;
-    return s.until ?? null;
+    if (s.paused) return null;
+    const base = baseDeadline(s);
+    const grace = Object.keys(s.away ?? {}).filter(id => !(s.stale ?? []).includes(id) && !s.auto?.[id]).map(id => s.away[id] + graceOf(s));
+    const all = [base, ...grace].filter(x => typeof x === 'number');
+    return all.length ? Math.min(...all) : null;
   },
 
   // What everyone may see. Roles appear only when someone dies (if the host allows it) or the game ends.
   view(s) {
-    const { roles, night, seerLog, lastProtect, votes, host, lovers, witch, savedLast, recap, ...pub } = s;
+    const { roles, night, seerLog, lastProtect, votes, host, lovers, witch, savedLast, recap, auto, away, stale, ...pub } = s;
     const over = s.phase === 'end';
     const secret = !s.config.showVotes; // the host can keep who-voted-for-whom private
     const hide = x => (secret && x ? { ...x, votes: null } : x);
@@ -381,7 +490,7 @@ export const werewolf = {
     const composition = {};
     for (const id of s.order) composition[roles[id]] = (composition[roles[id]] ?? 0) + 1;
     return {
-      ...pub, tally: hide(pub.tally), revealed, composition: s.phase === 'lobby' ? {} : composition,
+      ...pub, tally: hide(pub.tally), revealed, away: Object.keys(away ?? {}), stale: stale ?? [], paused: s.paused ?? null, composition: s.phase === 'lobby' ? {} : composition,
       voted: s.phase === 'vote' ? Object.keys(votes) : [],
       liveVotes: s.config.openVotes && s.phase === 'vote' ? votes : null,
       locked: s.config.stealth && s.phase === 'night' ? Object.keys(night.picks ?? {}).filter(id => s.alive[id]).length : null,
@@ -431,6 +540,7 @@ export const werewolf = {
     if (!d.tick) {
       d.tick = setInterval(() => {
         if (!el.isConnected) { clearInterval(d.tick); d.tick = null; return; }
+        if (d.s.paused) return; // quiet while paused
         const at = d.at;
         const left = at ? Math.max(0, at - Date.now()) : 0;
         d.n = (d.n ?? 0) + 1;
@@ -457,7 +567,8 @@ export const werewolf = {
     if (fresh(el, 'scriptStep', `${s.phase}${s.round}`)) d.mstep = 0;
     if (s.phase !== 'night') d.lovePick = [];
 
-    const name = id => ui.esc(ui.nameOf(id));
+    const nm = id => { const n = ui.nameOf(id); return n === '(waiting)' ? s.names?.[id] ?? n : n; }; // people who are offline keep their name
+    const name = id => ui.esc(nm(id));
     const me = ui.priv;
     const isMod = !!me?.moderator;
     const inGame = s.order.includes(ui.me);
@@ -468,17 +579,17 @@ export const werewolf = {
     const cfgAttr = (k, v) => `data-k="${k}" data-v="${ui.esc(JSON.stringify(v))}"`;
     const controls = ui.isHost || isMod;
     const theme = s.phase === 'night' ? 'night' : s.phase === 'result' ? 'dusk' : ['dawn', 'day', 'vote'].includes(s.phase) ? 'day' : '';
-    const how = { wolves: 'was taken in the night…', poison: 'was poisoned…', guard: 'gave their life guarding someone…', love: 'died of a broken heart…', hunter: 'was shot by the hunter', vote: 'was voted out' };
+    const how = { wolves: 'was taken in the night…', poison: 'was poisoned…', guard: 'gave their life guarding someone…', love: 'died of a broken heart…', hunter: 'was shot by the hunter', vote: 'was voted out', left: 'left the game' };
 
     /* ---- sounds and scenes for what just changed ---- */
     const prevPhase = memo(el, 'phase', s.phase);
     if (prevPhase !== undefined && prevPhase !== s.phase) {
       if (s.phase === 'night') sfx('howl');
       else if (s.phase === 'dawn') {
-        const gone = (s.dawn?.died ?? []).map(id => ({ name: ui.nameOf(id), role: s.revealed[id] ? R(s.revealed[id]).name : '', how: how[s.deaths.find(x => x.id === id && x.round === s.dawn.round)?.how] ?? how.wolves }));
+        const gone = (s.dawn?.died ?? []).map(id => ({ name: nm(id), role: s.revealed[id] ? R(s.revealed[id]).name : '', how: how[s.deaths.find(x => x.id === id && x.round === s.dawn.round)?.how] ?? how.wolves }));
         dawnCinematic(gone);
         if (s.dawn?.died?.some(id => s.deaths.find(x => x.id === id && x.round === s.dawn.round)?.how === 'love')) setTimeout(() => sfx('heartbreak'), 2800);
-        if (me?.saved) setTimeout(() => saveToast(`You saved ${ui.nameOf(me.saved)} from the wolves!`), 4800);
+        if (me?.saved) setTimeout(() => saveToast(`You saved ${nm(me.saved)} from the wolves!`), 4800);
       } else if (s.phase === 'day') sfx('birds');
       else if (s.phase === 'vote') sfx('flip');
       else if (s.phase !== 'result') sfx('whoosh');
@@ -487,11 +598,13 @@ export const werewolf = {
     const prevShots = memo(el, 'shots', s.shots?.length ?? 0);
     if (prevShots !== undefined && (s.shots?.length ?? 0) > prevShots) sfx('bang');
 
+    const online = new Set([...ui.players, ...(ui.watching ?? [])].map(p => p.id));
     const players = chips => `<div class="chips ww-players">${chips}</div>`;
     const roster = () => players(s.order.map(id => {
       const dead = !s.alive[id];
       const heart = me?.lover === id ? ' 💘' : '';
-      return `<span class="chip ${dead ? 'dead' : ''} ${id === ui.me ? 'me' : ''}">${dead ? '💀 ' : ''}${name(id)}${tag(id)}${heart}</span>`;
+      const off = !dead && s.away.includes(id) ? ' 🔌' : '';
+      return `<span class="chip ${dead ? 'dead' : ''} ${id === ui.me ? 'me' : ''}">${dead ? '💀 ' : ''}${name(id)}${tag(id)}${heart}${off}</span>`;
     }).join(''));
     const timer = dl ? `<div class="bar"><i style="width:100%"></i></div><p class="muted">Time left: <span id="timer"></span></p>` : '';
     const targets = (ids, attr, picked, locked = []) => `<div class="votes">${ids.map(id =>
@@ -524,7 +637,7 @@ export const werewolf = {
       if (holderOf('seer')) L.push(['🔮', 'Wolves, sleep. Seer, wake up. Choose someone to inspect.', 'mystic']);
       if (holderOf('doctor')) L.push(['🩺', 'Seer, sleep. Doctor, wake up. Choose someone to protect.', 'shield']);
       if (holderOf('bodyguard')) L.push(['🛡️', 'Bodyguard, wake up. Choose someone to guard.', 'shield']);
-      if (holderOf('witch')) L.push(['🧙‍♀️', `Witch, wake up. ${me?.attack ? `The victim is ${ui.nameOf(me.attack)}. ` : ''}Do you heal them? Do you poison someone?`, 'potion']);
+      if (holderOf('witch')) L.push(['🧙‍♀️', `Witch, wake up. ${me?.attack ? `The victim is ${nm(me.attack)}. ` : ''}Do you heal them? Do you poison someone?`, 'potion']);
       L.push(['☀️', 'Everyone, wake up when I say the sun rises.', 'whoosh']);
       return L;
     };
@@ -571,7 +684,7 @@ export const werewolf = {
       const counts = roleCounts(Math.max(n, MIN_PLAYERS), c);
       const comp = Object.entries(counts).filter(([, k]) => k > 0).map(([r, k]) => `${R(r).emoji} ${k} ${R(r).name}${k > 1 ? 's' : ''}`).join(' · ');
       const why = problem(c, n);
-      const modName = c.mod === 'player' && c.moderator ? ui.nameOf(c.moderator) : '';
+      const modName = c.mod === 'player' && c.moderator ? nm(c.moderator) : '';
       if (ui.isHost) {
         const pick = (k, v, label, on, off = false) => `<button class="chip pick ${on ? 'sel' : ''}" ${cfgAttr(k, v)} ${off ? 'disabled' : ''}>${label}</button>`;
         const tog = (k, label, off = false) => pick(k, !c[k], `${c[k] ? '✅' : '⬜'} ${label}`, c[k], off);
@@ -793,15 +906,27 @@ export const werewolf = {
     const ghost = ghostOn
       ? `<div class="ww-ghost"><p>👻 <b>You are out.</b> Watch quietly, and no hints!</p><details open><summary>What happened so far</summary><ol class="ww-recap">${deathsTxt || '<li><small>Nobody has died yet.</small></li>'}</ol></details>${me?.everyone ? `<details><summary>👻 All roles</summary><table class="table">${s.order.map(id => `<tr><td>${name(id)}</td><td>${R(me.everyone[id]).emoji} ${R(me.everyone[id]).name}</td></tr>`).join('')}</table></details>` : ''}</div>` : '';
 
+    /* ---- people who dropped out, and the pause ---- */
+    const droprow = id => `<div class="ww-droprow"><b>${name(id)}${id === s.moderator ? ' (moderator)' : ''}</b><div class="chips"><button class="chip pick" data-away="wait" data-id="${id}">⏳ Wait</button>${id === s.moderator
+      ? `<button class="chip pick" data-away="timers" data-id="${id}">⏱ Switch to timers</button>`
+      : `<button class="chip pick" data-away="auto" data-id="${id}">🤖 Autopilot</button><button class="chip pick" data-away="remove" data-id="${id}">🚪 Remove</button>`}</div></div>`;
+    const dropBlock = s.phase === 'lobby' || s.phase === 'end' ? '' : (controls && s.stale.length
+      ? `<div class="banner ww-drop"><b>🔌 Offline for over 2 minutes</b><p class="muted">Wait for them, let the app play for them, or take them out of the game.</p>${s.stale.map(droprow).join('')}</div>` : '')
+      + (s.away.filter(id => !controls || !s.stale.includes(id)).length ? `<p class="muted">🔌 ${s.away.filter(id => !controls || !s.stale.includes(id)).map(name).join(', ')} ${s.away.length > 1 ? 'are' : 'is'} offline${s.stale.length && !controls ? '. The host is deciding what to do.' : '. Giving them a couple of minutes to come back.'}</p>` : '');
+    const pauseBlock = s.paused ? `<div class="banner ww-paused">⏸ <b>Game paused.</b> ${controls ? 'Press Resume when everyone is ready.' : 'Waiting for the ' + (s.config.mod === 'player' ? 'moderator' : 'host') + ' to resume.'}</div>` : '';
+
     /* ---- shared bottom part ---- */
     const showRoster = s.phase !== 'lobby' && s.phase !== 'end' && s.order.length;
     const modBlock = isMod && s.phase !== 'lobby' && s.phase !== 'end' ? modScript() : '';
     const buttons = [];
-    if (controls && nextLabel && s.phase !== 'lobby' && s.phase !== 'end') buttons.push(`<button id="adv" class="${isMod ? '' : 'ghost'}">${isMod ? '▶ ' : '⏭ Skip ahead: '}${nextLabel}</button>`);
+    const inGameNow = s.phase !== 'lobby' && s.phase !== 'end';
+    if (controls && inGameNow && s.paused) buttons.push('<button id="resume">▶ Resume</button>');
+    else if (controls && inGameNow) buttons.push('<button class="ghost" id="pause">⏸ Pause</button>');
+    if (controls && !s.paused && nextLabel && s.phase !== 'lobby' && s.phase !== 'end') buttons.push(`<button id="adv" class="${isMod ? '' : 'ghost'}">${isMod ? '▶ ' : '⏭ Skip ahead: '}${nextLabel}</button>`);
     if (ui.isHost && !isMod && ['night', 'day', 'vote'].includes(s.phase) && s.config.mod === 'none') buttons.push('<button class="ghost" data-add="30">⏱ +30s</button>');
     if (ui.isHost && s.phase !== 'lobby') buttons.push(`<button class="ghost" id="reset">${s.phase === 'end' ? '🔁 Play again' : '✖ End game'}</button>`);
 
-    el.innerHTML = `<div class="ww ${theme} ${ghostOn ? 'ghosted' : ''}"><h2>🐺 Werewolf</h2>
+    el.innerHTML = `<div class="ww ${theme} ${ghostOn ? 'ghosted' : ''} ${s.paused ? 'paused' : ''}"><h2>🐺 Werewolf</h2>${pauseBlock}${dropBlock}
       ${showRoster ? `<p class="muted">${aliveIdsOf(s).length} alive of ${s.order.length}</p>${roster()}` : ''}
       ${modBlock}${ghost}${body}
       ${buttons.length ? `<div class="row ww-ctl ${isMod && s.phase !== 'end' ? 'stick' : ''}">${buttons.join('')}</div>` : ''}</div>`;
@@ -845,6 +970,13 @@ export const werewolf = {
     on('[data-timer]', b => ui.act('timer', { sec: Number(b.dataset.timer) }));
     on('[data-add]', b => ui.act('timer', { add: Number(b.dataset.add) }));
     on('#reset', () => ui.act('reset'));
+    on('#pause', () => ui.act('pause'));
+    on('#resume', () => ui.act('resume'));
+    on('[data-away]', b => {
+      const id = b.dataset.id, kind = b.dataset.away;
+      if (kind === 'remove' && !confirm(`Take ${nm(id)} out of the game? They will be marked as having left.`)) return;
+      ui.act(kind === 'timers' ? 'modTimers' : { wait: 'awayWait', auto: 'awayAuto', remove: 'awayRemove' }[kind], { id });
+    });
   },
 
   remember: s => ({ history: s.history ?? [], stats: s.stats ?? {} }),

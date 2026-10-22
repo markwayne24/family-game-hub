@@ -208,6 +208,17 @@ function pushState() {
   if (at) S.timer = setTimeout(() => act('timeout'), Math.max(0, at - Date.now()) + 50);
 }
 
+// Games that care about who is still connected (Werewolf) get a 'presence' check from the host, a moment after people come and go.
+function watchPresence() {
+  clearTimeout(S.presT);
+  S.presT = setTimeout(() => {
+    const g = GAMES[S.game];
+    if (!g?.reduce || S.raw == null || !S.subscribed || !g.watchPresence) return;
+    const next = g.reduce(S.raw, { from: S.me, type: 'presence' }, env());
+    if (next !== S.raw) { S.raw = next; pushState(); }
+  }, 1500);
+}
+
 // Runs on the host only; everyone's actions go through here.
 function hostHandle(a) {
   if (S.spectators.has(a.from) && a.type !== 'hello') return; // people watching can't act until the next game
@@ -255,7 +266,7 @@ function enterRoom(code, name, isHost) {
       if (!S.sealedForMe) { S.stateSeq++; render(); return; }
       openPrivate(); // render once it has been decrypted, so an old secret never flashes
     })
-    .on('presence', { event: 'sync' }, () => { if (S.sealedForMe && S.priv === null) openPrivate(); render(); })
+    .on('presence', { event: 'sync' }, () => { if (S.sealedForMe && S.priv === null) openPrivate(); if (S.isHost) watchPresence(); render(); })
     .on('broadcast', { event: 'kick' }, ({ payload }) => { if (payload.id === S.me) removedScreen('You were removed from the room by the host.', true); })
     .on('broadcast', { event: 'full' }, ({ payload }) => { if (payload.id === S.me) fullScreen(payload.max); })
     .on('broadcast', { event: 'closed' }, () => { if (!S.isHost) removedScreen('The host closed this room. Thanks for playing!'); })

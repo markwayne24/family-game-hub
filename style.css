@@ -520,3 +520,11 @@ summary{min-height:44px;display:flex;align-items:center}
 .ww .votes + button.ghost,.ww .votes + .ww-skip{display:block;width:100%;margin-top:10px;min-height:44px}
 .ww .votes + button.ghost + .bar,.ww .votes + button.ghost + p{margin-top:14px}
 .ww-peek{margin-bottom:12px}
+
+/* Werewolf: drop-outs and pause */
+.ww-drop{background:#fff3cd;color:#664d03;border-radius:12px;padding:10px 12px;margin:8px 0}
+.ww.night .ww-drop{background:#4a3b12;color:#ffe9a8}
+.ww-droprow{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0;justify-content:space-between}
+.ww-paused{text-align:center;font-size:1.05rem;border:2px solid #f08c00}
+.ww.paused .votes,.ww.paused .ww-sky,.ww.paused #ready{opacity:.45;pointer-events:none}
+.ww-drop,.ww-paused,.ww .banner{animation:none}
