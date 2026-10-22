@@ -169,4 +169,65 @@ for (let g = 0; g < 200; g++) {
   }
   assert.equal(s.phase, 'end', 'game must finish'); assert.ok(['village', 'wolves'].includes(s.winner));
 }
+
+// ---- face-to-face ("stealth") mode: the same night screen and action for everyone
+{
+  let e = mk(7), s = W.init(e);
+  s = step(s, e, 'h', 'config', { stealth: true }); assert.equal(s.config.stealth, true);
+  s = step(s, e, 'h', 'start'); s = step(s, { ...e, now: s.until }, 'h', 'timeout');
+  assert.equal(s.phase, 'night');
+  const wolf = s.order.find(i => s.roles[i] === 'wolf'), seer = s.order.find(i => s.roles[i] === 'seer'), doc = s.order.find(i => s.roles[i] === 'doctor');
+  const vill = s.order.filter(i => s.roles[i] === 'villager');
+  // old-style role actions are not accepted, only the common pick
+  assert.deepEqual(step(s, e, wolf, 'wolf', { target: vill[0] }).night.picks, {});
+  // anybody can pick anybody alive, including themselves
+  let n = step(s, e, vill[0], 'pick', { target: vill[0] }); assert.equal(n.night.picks[vill[0]], vill[0]);
+  assert.equal(step(s, e, vill[0], 'pick', { target: 'nobody' }).night.picks[vill[0]], undefined);
+  // the public view and other players' secrets never say who picked what
+  n = step(n, e, wolf, 'pick', { target: vill[1] });
+  const pub = JSON.stringify(W.view(n)); assert.ok(!pub.includes('picks')); assert.equal(W.view(n).locked, 2);
+  assert.equal(W.priv(n)[vill[0]].pick, vill[0]); assert.equal(W.priv(n)[wolf].pick, vill[1]);
+  assert.ok(!('packPicks' in W.priv(n)[vill[0]]) && !('packPicks' in W.priv(n)[seer]));
+  assert.equal(W.priv(n)[wolf].packPicks[wolf], vill[1]);
+  assert.ok(!('votes' in W.priv(n)[wolf]));
+  // a pick can be changed until the night ends
+  n = step(n, e, wolf, 'pick', { target: vill[2] }); assert.equal(n.night.picks[wolf], vill[2]);
+  // everyone picks -> the night can end early; decoys are ignored
+  for (const id of s.order) if (n.night.picks[id] === undefined) n = step(n, e, id, 'pick', { target: id === seer ? wolf : id === doc ? vill[2] : vill[0] === id ? vill[1] : vill[0] });
+  assert.equal(n.acted, true); assert.equal(W.deadline(n), n.minUntil);
+  let d = step(n, { ...e, now: n.minUntil }, 'h', 'timeout');
+  assert.equal(d.phase, 'dawn'); assert.deepEqual(d.dawn.died, []); // doctor protected the wolves' victim
+  assert.deepEqual(d.seerLog, [{ round: 1, id: wolf, wolf: true }]); // the seer's answer arrives at dawn
+  assert.deepEqual(d.muted, {});
+  assert.equal(d.lastProtect, vill[2]);
+  // invalid picks are void: the wolf eats a wolf-pick -> nobody; the doctor repeating a save does nothing next night
+  // someone who did not pick loses their vote
+  let m = step(s, e, wolf, 'pick', { target: vill[0] });
+  for (const id of s.order) if (id !== vill[1]) m = step(m, e, id, 'pick', { target: id === wolf ? vill[0] : wolf });
+  m = step(m, { ...e, now: m.until }, 'h', 'timeout');
+  assert.equal(m.phase, 'dawn'); assert.deepEqual(m.muted, { [vill[1]]: true }); assert.deepEqual(m.dawn.died, [vill[0]].filter(x => x !== doc));
+  m = step(m, { ...e, now: m.until }, 'h', 'timeout');
+  assert.equal(m.phase, 'day');
+  m = { ...m, phase: 'vote', votes: {} };
+  assert.deepEqual(step(m, e, vill[1], 'vote', { target: wolf }).votes, {}); // muted can't vote
+  let v = m;
+  const voters = m.order.filter(i => m.alive[i] && i !== vill[1]);
+  for (const id of voters) v = step(v, e, id, 'vote', { target: id === wolf ? voters.find(x => x !== wolf) : wolf });
+  assert.equal(v.phase, 'result'); // resolves without waiting for the muted player
+  assert.equal(v.tally.eliminated, wolf);
+  // moderator sees the picks, players don't
+  e = mk(7); s = W.init(e); s = step(s, e, 'h', 'config', { stealth: true, mod: 'host' });
+  s = step(s, e, 'h', 'start'); s = step(s, e, 'h', 'advance');
+  assert.equal(W.priv(s).h.stealth, true);
+}
+// wolves can't pick another wolf as the victim in face-to-face mode (the pick is simply void)
+{
+  const e = mk(6); let s = W.init(e);
+  s = step(s, e, 'h', 'config', { stealth: true, wolves: 2 }); s = step(s, e, 'h', 'start'); s = step(s, { ...e, now: s.until }, 'h', 'timeout');
+  const [w1, w2] = s.order.filter(i => s.roles[i] === 'wolf');
+  for (const id of s.order) s = step(s, e, id, 'pick', { target: id === w1 ? w2 : id === w2 ? w1 : w1 });
+  s = step(s, { ...e, now: s.minUntil }, 'h', 'timeout');
+  assert.deepEqual(s.dawn.died, []);
+}
+console.log('werewolf stealth tests passed');
 console.log('werewolf tests passed');

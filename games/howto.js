@@ -58,6 +58,7 @@ export const HOWTO = {
       '🗳️ Vote: everyone alive votes. The most-voted player is out. A tie means nobody goes. Then night comes again.',
       'The Hunter 🏹 (if used) takes one last shot when they die. The game ends when all wolves are out (village wins) or wolves equal the villagers (wolves win).',
     ],
-    tips: ['The host chooses who runs the game: no moderator (timers), the host, or another player.', 'If you are out, stay quiet and don\'t give hints!'],
+    tips: ['The host chooses who runs the game: no moderator (timers), the host, or another player.', 'Playing in the same room? The host can turn on Face-to-face mode: at night everyone gets the same screen and must pick a player (only the right picks count), so nobody can tell who the wolves are. Skip the night and you can\'t vote the next day.',
+      'If you are out, stay quiet and don\'t give hints!'],
   },
 };

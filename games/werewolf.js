@@ -22,7 +22,7 @@ export const TIMERS = { nightSec: [30, 45, 60], daySec: [60, 120, 180, 300], vot
 
 const DEFAULTS = {
   mod: 'none', moderator: null, wolves: 'auto', seer: true, doctor: true, hunter: false,
-  reveal: true, ghost: false, nightSec: 45, daySec: 180, voteSec: 60,
+  reveal: true, ghost: false, stealth: false, nightSec: 45, daySec: 180, voteSec: 60,
 };
 
 export const autoWolves = n => (n <= 7 ? 1 : Math.floor(n / 4));
@@ -86,7 +86,7 @@ function enter(s, phase, env, extra = {}) {
   switch (phase) {
     case 'roles': return { ...base, until: auto(s) ? t + 20000 : null };
     case 'night': return {
-      ...base, round: s.round + 1, night: { wolf: {}, seer: null, doctor: null }, acted: false,
+      ...base, round: s.round + 1, night: { wolf: {}, seer: null, doctor: null, picks: {} }, muted: {}, acted: false,
       until: auto(s) ? t + c.nightSec * 1000 : null, minUntil: auto(s) ? t + Math.min(15, c.nightSec) * 1000 : null,
     };
     case 'dawn': return { ...base, until: auto(s) ? t + 8000 : null };
@@ -104,6 +104,7 @@ function endGame(s, winner) {
 
 // Everyone who has a job tonight has done it.
 const allActed = s => {
+  if (s.config.stealth) return aliveIds(s).every(id => s.night.picks[id] !== undefined);
   const wolves = wolvesAlive(s);
   if (wolves.some(w => s.night.wolf[w] === undefined)) return false;
   for (const role of ['seer', 'doctor']) {
@@ -114,11 +115,27 @@ const allActed = s => {
 };
 
 function resolveNight(s, env) {
-  const votes = Object.entries(s.night.wolf).filter(([w, t]) => s.alive[w] && s.roles[w] === 'wolf' && s.alive[t]).map(([, t]) => t);
+  let base = s, votes, protect;
+  if (s.config.stealth) {
+    // Everyone picked someone; only the picks that fit each role count, the rest are decoys.
+    const picks = s.night.picks;
+    const ok = t => typeof t === 'string' && s.alive[t];
+    votes = wolvesAlive(s).map(w => picks[w]).filter(t => ok(t) && s.roles[t] !== 'wolf');
+    const doc = aliveIds(s).find(x => s.roles[x] === 'doctor');
+    protect = doc && ok(picks[doc]) && picks[doc] !== s.lastProtect ? picks[doc] : null;
+    const seer = aliveIds(s).find(x => s.roles[x] === 'seer');
+    const look = seer ? picks[seer] : null;
+    if (ok(look) && look !== seer) base = { ...base, seerLog: [...s.seerLog, { round: s.round, id: look, wolf: s.roles[look] === 'wolf' }] };
+    // Anyone who did not take part in the night loses their vote today.
+    base = { ...base, muted: Object.fromEntries(aliveIds(s).filter(id => picks[id] === undefined).map(id => [id, true])) };
+  } else {
+    votes = Object.entries(s.night.wolf).filter(([w, t]) => s.alive[w] && s.roles[w] === 'wolf' && s.alive[t]).map(([, t]) => t);
+    protect = s.night.doctor;
+  }
   const victim = plurality(votes);
   const died = [];
-  let next = { ...s, lastProtect: s.night.doctor ?? null, shots: [] };
-  if (victim && victim !== s.night.doctor) { next = kill(next, victim, 'wolves', env); died.push(victim); }
+  let next = { ...base, lastProtect: protect ?? null, shots: [] };
+  if (victim && victim !== protect) { next = kill(next, victim, 'wolves', env); died.push(victim); }
   next.dawn = { round: s.round, died };
   return enter(next, 'dawn', env);
 }
@@ -131,7 +148,7 @@ function leaveDawn(s, env) {
 
 function resolveVote(s, env) {
   const counts = {};
-  for (const [voter, t] of Object.entries(s.votes)) if (s.alive[voter] && t !== 'skip' && s.alive[t]) counts[t] = (counts[t] ?? 0) + 1;
+  for (const [voter, t] of Object.entries(s.votes)) if (s.alive[voter] && !s.muted?.[voter] && t !== 'skip' && s.alive[t]) counts[t] = (counts[t] ?? 0) + 1;
   const top = Math.max(0, ...Object.values(counts));
   const leaders = Object.keys(counts).filter(k => counts[k] === top);
   const eliminated = top > 0 && leaders.length === 1 ? leaders[0] : null; // a tie eliminates nobody
@@ -171,7 +188,7 @@ export const werewolf = {
   init(env, opts) {
     return {
       phase: 'lobby', host: env.hostId, config: { ...DEFAULTS }, order: [], moderator: null,
-      roles: {}, alive: {}, names: {}, round: 0, night: { wolf: {}, seer: null, doctor: null }, lastProtect: null, seerLog: [],
+      roles: {}, alive: {}, names: {}, round: 0, night: { wolf: {}, seer: null, doctor: null, picks: {} }, muted: {}, lastProtect: null, seerLog: [],
       deaths: [], dawn: null, votes: {}, tally: null, ready: {}, hunter: null, hunterUsed: false, shots: [], winner: null,
       until: null, minUntil: null, acted: false, history: opts?.memory?.history ?? [],
     };
@@ -193,7 +210,7 @@ export const werewolf = {
         if (c.mod === 'player' && typeof p.moderator === 'string' && p.moderator !== env.hostId && env.players.some(x => x.id === p.moderator)) c.moderator = p.moderator;
         if (p.wolves === 'auto') c.wolves = 'auto';
         else if (Number.isInteger(p.wolves)) c.wolves = Math.min(8, Math.max(1, p.wolves));
-        for (const k of ['seer', 'doctor', 'hunter', 'reveal', 'ghost']) if (typeof p[k] === 'boolean') c[k] = p[k];
+        for (const k of ['seer', 'doctor', 'hunter', 'reveal', 'ghost', 'stealth']) if (typeof p[k] === 'boolean') c[k] = p[k];
         for (const [k, choices] of Object.entries(TIMERS)) if (choices.includes(p[k])) c[k] = p[k];
         return { ...s, config: c };
       }
@@ -208,7 +225,7 @@ export const werewolf = {
         const roles = Object.fromEntries(ids.map((id, i) => [id, pool[i]]));
         return enter({
           ...s, order: ids, moderator: mod, roles, alive: Object.fromEntries(ids.map(id => [id, true])), round: 0, deaths: [], seerLog: [],
-          lastProtect: null, dawn: null, tally: null, hunter: null, hunterUsed: false, shots: [], winner: null,
+          lastProtect: null, dawn: null, tally: null, hunter: null, hunterUsed: false, shots: [], winner: null, muted: {},
         }, 'roles', env);
       }
       return s;
@@ -239,6 +256,12 @@ export const werewolf = {
       const target = a.data?.target;
       const alive = t => typeof t === 'string' && s.alive[t];
       let next = s;
+      if (s.config.stealth) {
+        // Face-to-face mode: everybody does the very same thing, so nobody can tell who has a job.
+        if (a.type !== 'pick' || !alive(target)) return s;
+        next = { ...s, night: { ...s.night, picks: { ...s.night.picks, [me]: target } } };
+        return { ...next, acted: allActed(next) };
+      }
       if (a.type === 'wolf' && s.roles[me] === 'wolf' && alive(target) && s.roles[target] !== 'wolf') {
         next = { ...s, night: { ...s.night, wolf: { ...s.night.wolf, [me]: target } } };
       } else if (a.type === 'seer' && s.roles[me] === 'seer' && s.night.seer == null && alive(target) && target !== me) {
@@ -257,9 +280,10 @@ export const werewolf = {
     }
     if (s.phase === 'vote' && a.type === 'vote') {
       const t = a.data?.target;
+      if (s.muted?.[me]) return s; // slept through the night, so no vote today
       if (t !== 'skip' && !(typeof t === 'string' && s.alive[t] && t !== me)) return s;
       const next = { ...s, votes: { ...s.votes, [me]: t } };
-      return aliveIds(next).every(id => next.votes[id] !== undefined) ? resolveVote(next, env) : next;
+      return aliveIds(next).filter(id => !next.muted?.[id]).every(id => next.votes[id] !== undefined) ? resolveVote(next, env) : next;
     }
 
     return s;
@@ -278,7 +302,7 @@ export const werewolf = {
     for (const id of s.order) if (s.phase === 'end' || (!s.alive[id] && s.config.reveal)) revealed[id] = roles[id];
     const composition = {};
     for (const id of s.order) composition[roles[id]] = (composition[roles[id]] ?? 0) + 1;
-    return { ...pub, revealed, composition: s.phase === 'lobby' ? {} : composition, voted: s.phase === 'vote' ? Object.keys(votes) : [] };
+    return { ...pub, revealed, composition: s.phase === 'lobby' ? {} : composition, voted: s.phase === 'vote' ? Object.keys(votes) : [], locked: s.config.stealth && s.phase === 'night' ? Object.keys(night.picks ?? {}).filter(id => s.alive[id]).length : null };
   },
 
   // What each player (and the moderator) may see privately. Sent encrypted, one message per person.
@@ -290,14 +314,18 @@ export const werewolf = {
     for (const id of s.order) {
       const role = s.roles[id];
       const mine = { role };
-      if (role === 'wolf') { mine.pack = wolves.filter(w => w !== id); if (nightOn && s.alive[id]) mine.votes = s.night.wolf; }
+      if (role === 'wolf') {
+        mine.pack = wolves.filter(w => w !== id);
+        if (nightOn && s.alive[id]) mine[s.config.stealth ? 'packPicks' : 'votes'] = s.config.stealth ? Object.fromEntries(wolves.filter(w => s.night.picks[w] !== undefined).map(w => [w, s.night.picks[w]])) : s.night.wolf;
+      }
+      if (s.config.stealth && nightOn && s.alive[id]) { mine.pick = s.night.picks[id] ?? null; mine.done = mine.pick !== null; }
       if (role === 'seer') mine.seerLog = s.seerLog;
       if (role === 'doctor') mine.lastProtect = s.lastProtect;
-      if (nightOn && s.alive[id]) mine.done = role === 'wolf' ? s.night.wolf[id] !== undefined : role === 'seer' ? s.night.seer != null : role === 'doctor' ? s.night.doctor != null : null;
+      if (nightOn && s.alive[id] && !s.config.stealth) mine.done = role === 'wolf' ? s.night.wolf[id] !== undefined : role === 'seer' ? s.night.seer != null : role === 'doctor' ? s.night.doctor != null : null;
       if (!s.alive[id] && s.config.ghost) mine.everyone = s.roles;
       out[id] = mine;
     }
-    if (s.moderator) out[s.moderator] = { moderator: true, everyone: s.roles, night: s.night, acted: s.acted, lastProtect: s.lastProtect, seerLog: s.seerLog };
+    if (s.moderator) out[s.moderator] = { moderator: true, everyone: s.roles, night: s.night, stealth: s.config.stealth, acted: s.acted, lastProtect: s.lastProtect, seerLog: s.seerLog };
     return out;
   },
 
@@ -328,6 +356,7 @@ export const werewolf = {
       }, 500);
     }
     if (s.phase === 'lobby' || s.phase === 'roles' || s.phase === 'end') d.myVote = null;
+    if (s.phase !== 'night') d.peek = false;
     if (s.phase === 'lobby') d.show = false; // a fresh game starts with the role hidden
     if (fresh(el, 'round', `${s.round}${s.phase === 'vote' ? 'v' : ''}`)) d.myVote = null;
 
@@ -370,8 +399,9 @@ export const werewolf = {
       if (!role) return '';
       const r = R(role);
       const wolves = role === 'wolf' && me.pack?.length ? `<br><small>Pack: ${me.pack.map(name).join(', ')}</small>` : '';
+      const looks = role === 'seer' && me.seerLog?.length ? `<br><small>${me.seerLog.map(l => `🔮 ${name(l.id)}: ${l.wolf ? '🐺 werewolf' : 'not a werewolf'}`).join('<br>')}</small>` : '';
       return d.show
-        ? `<div class="role ww-role ${role === 'wolf' ? 'bad' : ''} ${fresh(el, 'rc', `${s.round}${d.show}`) ? 'flip' : ''}">${r.emoji} You are ${role === 'villager' ? 'a' : 'the'} <b>${r.name}</b>${alive ? '' : ' (out)'}<br><small>${r.blurb}</small>${wolves}</div>
+        ? `<div class="role ww-role ${role === 'wolf' ? 'bad' : ''} ${fresh(el, 'rc', `${s.round}${d.show}`) ? 'flip' : ''}">${r.emoji} You are ${role === 'villager' ? 'a' : 'the'} <b>${r.name}</b>${alive ? '' : ' (out)'}<br><small>${r.blurb}</small>${wolves}${looks}</div>
            <button class="ghost" id="hide">🙈 Hide my role</button>`
         : '<button class="ghost ww-peek" id="peek">👁 Tap to see my role (keep your screen private)</button>';
     };
@@ -384,7 +414,9 @@ export const werewolf = {
       if (s.phase === 'night') {
         const n = me.night ?? { wolf: {} };
         const picks = Object.entries(n.wolf).map(([w, t]) => `${name(w)} → ${name(t)}`).join(', ') || '…';
-        night = `<div class="ww-nightlog"><b>Tonight:</b><br>🐺 ${picks}<br>🔮 ${n.seer ? name(n.seer) : '…'}<br>🩺 ${n.doctor ? name(n.doctor) : '…'}</div>`;
+        if (me.stealth) {
+          night = `<div class="ww-nightlog"><b>Tonight's picks:</b><br>${s.order.filter(id => s.alive[id]).map(id => `${R(all[id]).emoji} ${name(id)} → ${n.picks?.[id] ? name(n.picks[id]) : '…'}`).join('<br>')}</div>`;
+        } else night = `<div class="ww-nightlog"><b>Tonight:</b><br>🐺 ${picks}<br>🔮 ${n.seer ? name(n.seer) : '…'}<br>🩺 ${n.doctor ? name(n.doctor) : '…'}</div>`;
       }
       return `<details open><summary><b>All roles</b></summary><table class="table">${list}</table></details>${night}`;
     };
@@ -418,14 +450,15 @@ export const werewolf = {
           ${c.mod === 'player' ? `<h3>Moderator</h3><div class="chips">${ui.players.filter(p => p.id !== ui.me).map(p => pick('moderator', p.id, ui.esc(p.name), c.moderator === p.id)).join('') || '<span class="muted">Waiting for someone to join…</span>'}</div>` : ''}
           <h3>Werewolves</h3><div class="chips">${pick('wolves', 'auto', 'Auto', c.wolves === 'auto')}${[1, 2, 3, 4].map(k => pick('wolves', k, k, c.wolves === k)).join('')}</div>
           <h3>Roles</h3><div class="chips">${tog('seer', '🔮 Seer')}${tog('doctor', '🩺 Doctor')}${tog('hunter', '🏹 Hunter')}</div>
-          <h3>Rules</h3><div class="chips">${tog('reveal', 'Show role of the dead')}${tog('ghost', 'Dead players see all roles')}</div>
+          <h3>Rules</h3><div class="chips">${tog('reveal', 'Show role of the dead')}${tog('ghost', 'Dead players see all roles')}${tog('stealth', '🕵️ Face-to-face mode')}</div>
+          ${c.stealth ? '<p class="muted">Sitting together? At night everyone gets the same screen and must pick a player, so nobody can tell who the wolves, seer or doctor are. Only the right picks count. Anyone who skips the night can\'t vote the next day.</p>' : ''}
           ${c.mod === 'none' ? `<h3>Timers</h3>
             <p class="muted">Night</p><div class="chips">${TIMERS.nightSec.map(v => pick('nightSec', v, `${v}s`, c.nightSec === v)).join('')}</div>
             <p class="muted">Discussion</p><div class="chips">${TIMERS.daySec.map(v => pick('daySec', v, `${v / 60 >= 1 ? v / 60 + ' min' : v + 's'}`, c.daySec === v)).join('')}</div>
             <p class="muted">Voting</p><div class="chips">${TIMERS.voteSec.map(v => pick('voteSec', v, `${v}s`, c.voteSec === v)).join('')}</div>` : ''}`;
       } else {
         body = `<p><b>${MODERATORS[c.mod].emoji} ${MODERATORS[c.mod].name}</b>${modName ? `: ${ui.esc(modName)}` : ''}</p><p class="muted">${MODERATORS[c.mod].blurb}</p>
-          <p class="muted">Seer ${c.seer ? '✅' : '—'} · Doctor ${c.doctor ? '✅' : '—'} · Hunter ${c.hunter ? '✅' : '—'}</p>`;
+          <p class="muted">Seer ${c.seer ? '✅' : '—'} · Doctor ${c.doctor ? '✅' : '—'} · Hunter ${c.hunter ? '✅' : '—'}${c.stealth ? ' · 🕵️ Face-to-face mode' : ''}</p>`;
       }
       body += `<div class="ww-comp"><b>${n >= MIN_PLAYERS ? n : '5+'} players:</b> ${comp}</div>
         ${why ? `<p class="muted">${ui.esc(why)}</p>` : ''}
@@ -443,6 +476,21 @@ export const werewolf = {
     else if (s.phase === 'night') {
       let act = '';
       if (isMod) act = '';
+      else if (inGame && alive && s.config.stealth) {
+        // Face-to-face mode: the same screen for every role, so nobody can read it over a shoulder.
+        const peekText = d.peek ? (() => {
+          const bits = {
+            wolf: `🐺 You are a werewolf. Pack: ${(me.pack ?? []).map(name).join(', ') || 'none'}.<br>Your pack's picks so far: ${Object.entries(me.packPicks ?? {}).map(([w, x]) => `${name(w)} → ${name(x)}`).join(', ') || 'none'}.<br>Pick a villager (not your pack). The most-picked one is eaten.`,
+            seer: '🔮 You are the seer. Your pick is inspected. The answer arrives in the morning.',
+            doctor: `🩺 You are the doctor. Your pick is protected tonight${me.lastProtect ? ` (not ${name(me.lastProtect)}, who you saved last night)` : ''}.`,
+          }[role] ?? `${R(role).emoji} Your pick is only a decoy. Nothing happens, but you must still pick so you can vote tomorrow.`;
+          return `<div class="role ww-peek-card">${bits}</div>`;
+        })() : '';
+        act = `<h3>Pick a player</h3><p class="muted">Everyone picks one player, whatever their role. No pick means no vote tomorrow.</p>
+          ${targets(aliveIdsOf(s), 'data-pick', me.pick)}
+          <p class="muted">${me.done ? '✅ Locked in (you can still change it).' : '⏳ Not picked yet.'} ${s.locked ?? 0}/${aliveIdsOf(s).length} locked in.</p>
+          <button class="ghost" id="peeknight">👁 Peek at what my pick does</button>${peekText}`;
+      }
       else if (!inGame) act = '<p>🌙 It is night. You are watching.</p>';
       else if (!alive) act = '<p>💀 You are out. Stay quiet and watch.</p>';
       else if (role === 'wolf') {
@@ -482,7 +530,8 @@ export const werewolf = {
     else if (s.phase === 'day') {
       const readyN = Object.keys(s.ready).filter(id => s.alive[id]).length;
       const aliveN = aliveIdsOf(s).length;
-      body = `<h3>🗣️ Day ${s.round}: discuss!</h3><p class="muted">Who is acting suspicious? Talk it out loud.</p>${roleCard()}${timer}
+      const mutedNames = Object.keys(s.muted ?? {}).filter(id => s.alive[id]);
+      body = `<h3>🗣️ Day ${s.round}: discuss!</h3>${mutedNames.length ? `<p class="banner">🔇 ${mutedNames.map(name).join(', ')} skipped the night and can't vote today.</p>` : ''}<p class="muted">Who is acting suspicious? Talk it out loud.</p>${roleCard()}${timer}
         ${alive && inGame ? (s.ready[ui.me] ? '<p class="muted">You are ready to vote.</p>' : '<button id="ready">✋ I\'m ready to vote</button>') : ''}
         <p class="muted">${readyN}/${aliveN} ready · majority starts the vote</p>`;
     }
@@ -490,14 +539,15 @@ export const werewolf = {
     /* ---------------- vote ---------------- */
     else if (s.phase === 'vote') {
       let pick = '';
-      if (alive && inGame) {
+      if (alive && inGame && s.muted?.[ui.me]) pick = '<p class="banner">🔇 You skipped the night, so you can\'t vote today.</p>';
+      else if (alive && inGame) {
         pick = s.voted.includes(ui.me)
           ? `<p class="muted">Vote locked in${d.myVote ? `: ${d.myVote === 'skip' ? 'skip' : name(d.myVote)}` : ''}. Waiting for the others…</p>`
           : `${targets(others(), 'data-vote', null)}<button class="ghost" data-vote="skip">Skip (vote for nobody)</button>`;
       }
       body = `<h3>🗳️ Vote someone out</h3>${roleCard()}${pick}${timer}
-        <p class="muted">${s.voted.length}/${aliveIdsOf(s).length} voted</p>
-        ${players(aliveIdsOf(s).map(id => `<span class="chip ${s.voted.includes(id) ? 'new' : ''}">${s.voted.includes(id) ? '✅' : '⏳'} ${name(id)}</span>`).join(''))}`;
+        <p class="muted">${s.voted.length}/${aliveIdsOf(s).filter(id => !s.muted?.[id]).length} voted</p>
+        ${players(aliveIdsOf(s).map(id => `<span class="chip ${s.voted.includes(id) ? 'new' : ''}">${s.muted?.[id] ? '🔇' : s.voted.includes(id) ? '✅' : '⏳'} ${name(id)}</span>`).join(''))}`;
     }
 
     /* ---------------- vote result ---------------- */
@@ -549,6 +599,8 @@ export const werewolf = {
     on('#peek', () => { d.show = true; this.render(el, d.s, ui); });
     on('#hide', () => { d.show = false; this.render(el, d.s, ui); });
     on('[data-wolf]', b => sfx('blip') || ui.act('wolf', { target: b.dataset.wolf }));
+    on('[data-pick]', b => sfx('blip') || ui.act('pick', { target: b.dataset.pick }));
+    on('#peeknight', () => { d.peek = true; clearTimeout(d.peekT); d.peekT = setTimeout(() => { d.peek = false; if (el.isConnected) this.render(el, d.s, ui); }, 4000); this.render(el, d.s, ui); });
     on('[data-seer]', b => sfx('blip') || ui.act('seer', { target: b.dataset.seer }));
     on('[data-doc]', b => sfx('blip') || ui.act('doctor', { target: b.dataset.doc }));
     on('[data-shoot]', b => sfx('slash') || ui.act('shoot', { target: b.dataset.shoot }));
