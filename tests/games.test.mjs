@@ -678,4 +678,60 @@ import { GRACE_MS } from '../games/bingo.js';
   assert.ok(starts.seeds['a#0'] !== undefined, 'Ann (just dropped) still gets her card dealt');
   assert.equal(new Set(['h', 'a', 'b'].map(id => cardOf(starts, id).join())).size, 3);
 }
+
+
+// ---- player limit
+import { admit, summary, freeHeld, RESERVE_MS } from '../games/capacity.js';
+{
+  const pl = (...xs) => xs.map(([id, t, host]) => ({ id, t, host: !!host }));
+  // no limit: everyone is admitted
+  let r = admit({}, pl(['h', 1, true], ['a', 2], ['b', 3]), 0, 1000);
+  assert.deepEqual(Object.keys(r.admitted).sort(), ['a', 'b', 'h']); assert.deepEqual(r.full, []);
+  // a limit of 3 counts the host: host + 2 guests fit, the 3rd guest is turned away
+  r = admit({}, pl(['h', 1, true], ['a', 2], ['b', 3], ['c', 4]), 3, 1000);
+  assert.deepEqual(Object.keys(r.admitted).sort(), ['a', 'b', 'h']); assert.deepEqual(r.full, ['c']);
+  // newcomers who arrive at once take seats in the order they joined, whatever order they are listed in
+  r = admit({}, pl(['h', 1, true], ['z', 5], ['a', 3], ['m', 4]), 3, 1000);
+  assert.deepEqual(r.full, ['z']); assert.ok(r.admitted.a !== undefined && r.admitted.m !== undefined);
+  r = admit({}, pl(['h', 1, true], ['b', 3], ['a', 3]), 2, 1000); assert.deepEqual(r.full, ['b']); // same join time: lower id first
+  // the host always has a seat, even with a limit of 1 or when guests arrived first
+  r = admit({}, pl(['g', 1], ['h', 9, true]), 1, 1000); assert.ok(r.admitted.h !== undefined);
+  // over time: seats are filled once and stay filled
+  let adm = admit({}, pl(['h', 1, true], ['a', 2]), 3, 1000).admitted;
+  adm = admit(adm, pl(['h', 1, true], ['a', 2], ['b', 3]), 3, 2000).admitted;
+  r = admit(adm, pl(['h', 1, true], ['a', 2], ['b', 3], ['c', 4]), 3, 3000); assert.deepEqual(r.full, ['c']);
+  // a player who drops out keeps their seat, so a newcomer can't take it...
+  r = admit(r.admitted, pl(['h', 1, true], ['a', 2], ['c', 4]), 3, 4000); assert.deepEqual(r.full, ['c']); assert.ok(r.admitted.b !== undefined);
+  // ...and when they come back they get it, even though the room is "full"
+  r = admit(r.admitted, pl(['h', 1, true], ['a', 2], ['b', 3]), 3, 5000); assert.deepEqual(r.full, []);
+  // after the reservation runs out, the seat goes to someone else
+  const held = { h: 1000, a: 1000, b: 1000 };
+  r = admit(held, pl(['h', 1, true], ['a', 2], ['c', 4]), 3, 1000 + RESERVE_MS);       // exactly at the limit: still held
+  assert.deepEqual(r.full, ['c']);
+  r = admit(held, pl(['h', 1, true], ['a', 2], ['c', 4]), 3, 1000 + RESERVE_MS + 1);   // just past it: released
+  assert.deepEqual(r.full, []); assert.ok(r.admitted.c !== undefined && r.admitted.b === undefined);
+  // lowering the limit never removes anyone who is already in; it only blocks newcomers
+  let crowd = admit({}, pl(['h', 1, true], ['a', 2], ['b', 3], ['c', 4], ['d', 5]), 0, 1000).admitted;
+  r = admit(crowd, pl(['h', 1, true], ['a', 2], ['b', 3], ['c', 4], ['d', 5], ['e', 6]), 3, 2000);
+  assert.equal(Object.keys(r.admitted).length, 5); assert.deepEqual(r.full, ['e']);
+  // raising the limit lets the waiting player in on the next check
+  r = admit(r.admitted, pl(['h', 1, true], ['a', 2], ['b', 3], ['c', 4], ['d', 5], ['e', 6]), 6, 3000); assert.deepEqual(r.full, []);
+  // removing the limit admits everybody
+  r = admit(r.admitted, pl(['h', 1, true], ['x', 7], ['y', 8]), 0, 4000); assert.deepEqual(r.full, []);
+  // someone turned away isn't recorded as admitted, so they can try again once there is room
+  const blocked = admit({}, pl(['h', 1, true], ['a', 2], ['b', 3]), 2, 1000);
+  assert.deepEqual(blocked.full, ['b']); assert.ok(blocked.admitted.b === undefined);
+  assert.deepEqual(admit(blocked.admitted, pl(['h', 1, true], ['b', 3]), 2, 2000 + RESERVE_MS + 1).full, []); // a left; her seat expired
+  // the numbers shown to everyone
+  assert.deepEqual(summary({ h: 1, a: 1, b: 1 }, pl(['h', 1, true], ['a', 2]), 3), { max: 3, used: 3, held: 1, full: true });
+  assert.deepEqual(summary({ h: 1, a: 1 }, pl(['h', 1, true], ['a', 2]), 0), { max: 0, used: 2, held: 0, full: false }); // no limit is never full
+  assert.equal(summary({ h: 1 }, pl(['h', 1, true]), 10).full, false);
+  // "free held seats"
+  assert.deepEqual(Object.keys(freeHeld({ h: 1, a: 1, b: 1 }, pl(['h', 1, true], ['a', 2]))).sort(), ['a', 'h']);
+  // many people: only the first N get in
+  const crowdPl = [{ id: 'host', t: 0, host: true }, ...Array.from({ length: 1000 }, (_, i) => ({ id: 'p' + i, t: i + 1, host: false }))];
+  const big = admit({}, crowdPl, 10, 1000);
+  assert.equal(Object.keys(big.admitted).length, 10); assert.equal(big.full.length, 991);
+  assert.ok(big.admitted.p0 !== undefined && big.admitted.p8 !== undefined && big.admitted.p9 === undefined); // the earliest 9 guests + the host
+}
 console.log('all game tests passed');
