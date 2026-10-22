@@ -271,3 +271,11 @@ input.bad{border-color:var(--bad);animation:shake .4s ease}
 .hist-table th{text-align:left;font-size:.75rem;color:var(--mute);padding:4px}
 .hist-table td{vertical-align:top;font-size:.9rem}
 .bingo-banner.ended{background:none;color:var(--mute);-webkit-text-fill-color:currentColor;animation:none}
+
+/* ---------- big rooms: searchable, paged player list ---------- */
+button.small{padding:4px 10px;font-size:.85rem}
+.prow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--line)}
+.prow .x{background:transparent;color:var(--bad);padding:0 6px;font-size:1.2rem;box-shadow:none}
+.pager{justify-content:center;gap:10px;margin-top:8px}
+input[type=search]{-webkit-appearance:none}
+[hidden]{display:none!important}

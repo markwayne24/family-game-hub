@@ -4,6 +4,7 @@ import { GAMES } from './games/index.js';
 import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
 import { resolveName } from './games/names.js';
+import { search, paginate } from './games/list.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById('app');
@@ -17,7 +18,7 @@ const store = {
 };
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
-const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0 };
+const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0, pq: '', ppage: 0, pOpen: false };
 
 /* ---------- entry ---------- */
 
@@ -228,8 +229,18 @@ function buildShell() {
       <button class="ghost danger" id="close">Close room</button>
       <button class="ghost" id="leave">Leave room</button>
     </div>
-    <div class="card"><div class="muted" id="pcount"></div><div class="chips" id="chips"></div></div>`;
+    <div class="card" id="players">
+      <div class="row"><div class="muted grow" id="pcount"></div><button class="ghost small" id="pmore" hidden></button></div>
+      <div class="chips" id="chips"></div>
+      <div id="pfull" hidden>
+        <input id="psearch" type="search" placeholder="Search players…" autocomplete="off" aria-label="Search players">
+        <div id="plist"></div>
+        <div class="row pager" id="ppager"></div>
+      </div>
+    </div>`;
   S.stageView = null;
+  app.querySelector('#pmore').onclick = () => { S.pOpen = !S.pOpen; S.pq = ''; S.ppage = 0; app.querySelector('#psearch').value = ''; render(); };
+  app.querySelector('#psearch').oninput = e => { S.pq = e.target.value; S.ppage = 0; render(); };
   app.querySelector('#lobby').onclick = () => hostHandle({ from: S.me, type: 'select', data: { game: 'lobby' } });
   const mute = app.querySelector('#mute');
   mute.textContent = isMuted() ? '🔇' : '🔊';
@@ -284,6 +295,49 @@ async function closeRoom() {
   user ? hostHome(user) : loginScreen();
 }
 
+// Small rooms show everyone as chips. Big rooms show the host, you and a few others, with a searchable, paged full list.
+const CHIP_LIMIT = 12;
+const PAGE_SIZE = 10;
+
+function renderPlayers(ps) {
+  const kickBtn = p => (S.isHost && p.id !== S.me ? `<button class="x" data-kick="${esc(p.id)}" title="Remove ${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button>` : '');
+  const big = ps.length > CHIP_LIMIT;
+  if (!big) S.pOpen = false;
+  const open = big && S.pOpen;
+  const q = app.querySelector('#players');
+  q.querySelector('#pcount').textContent = `Players (${ps.length})`;
+  const more = q.querySelector('#pmore');
+  more.hidden = !big;
+  more.textContent = open ? 'Hide list' : `See all ${ps.length}`;
+  q.querySelector('#pfull').hidden = !open;
+
+  // Host first, then you, then everyone else in join order.
+  const ordered = [...ps].sort((a, b) => (b.host - a.host) || ((b.id === S.me) - (a.id === S.me)));
+  const chips = big ? ordered.slice(0, CHIP_LIMIT - 2) : ps;
+  const chips_el = q.querySelector('#chips');
+  chips_el.hidden = open;
+  // Only players who just arrived get the pop-in animation.
+  chips_el.innerHTML = chips.map(p =>
+    `<span class="chip ${p.id === S.me ? 'me' : ''} ${S.seen.has(p.id) ? '' : 'new'}">${p.host ? '👑 ' : ''}${esc(p.name)}${kickBtn(p)}</span>`).join('')
+    + (big ? `<span class="chip">+${ps.length - chips.length} more</span>` : '');
+
+  if (open) {
+    const found = search(ordered, S.pq);
+    const pg = paginate(found, S.ppage, PAGE_SIZE);
+    S.ppage = pg.page;
+    q.querySelector('#plist').innerHTML = pg.items.map(p =>
+      `<div class="prow"><span>${p.host ? '👑 ' : ''}${esc(p.name)}${p.id === S.me ? ' <small class="muted">(you)</small>' : ''}</span>${kickBtn(p)}</div>`).join('')
+      || '<p class="muted">No players match.</p>';
+    q.querySelector('#ppager').innerHTML = pg.pages > 1
+      ? `<button class="ghost small" data-pg="-1" ${pg.page === 0 ? 'disabled' : ''}>‹ Prev</button><span class="muted">Page ${pg.page + 1} of ${pg.pages} · ${pg.total} players</span><button class="ghost small" data-pg="1" ${pg.page >= pg.pages - 1 ? 'disabled' : ''}>Next ›</button>`
+      : `<span class="muted">${pg.total} player${pg.total === 1 ? '' : 's'}</span>`;
+    q.querySelectorAll('[data-pg]').forEach(b => b.onclick = () => { S.ppage += +b.dataset.pg; render(); });
+  }
+  q.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
+    if (confirm(`Remove ${b.title.replace('Remove ', '')} from the room?`)) kick(b.dataset.kick);
+  });
+}
+
 function pickerHtml() {
   return `<h2>Pick a game</h2>
     <div class="games">${Object.values(GAMES).map(x => `<div class="gcard"><button data-g="${x.id}">${x.emoji}<br>${esc(x.name)}</button>${(x.options ?? []).map(o =>
@@ -313,13 +367,7 @@ function render() {
   }
   const renamed = S.name !== S.baseName ? `<div class="banner">Someone already has the name “${esc(S.baseName)}”, so you appear as “${esc(S.name)}”.</div>` : '';
   app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed;
-  app.querySelector('#pcount').textContent = `Players (${ps.length})`;
-  // Only players who just arrived get the pop-in animation.
-  app.querySelector('#chips').innerHTML = ps.map(p =>
-    `<span class="chip ${p.id === S.me ? 'me' : ''} ${S.seen.has(p.id) ? '' : 'new'}">${p.host ? '👑 ' : ''}${esc(p.name)}${S.isHost && p.id !== S.me ? `<button class="x" data-kick="${esc(p.id)}" title="Remove ${esc(p.name)}" aria-label="Remove ${esc(p.name)}">×</button>` : ''}</span>`).join('');
-  app.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
-    if (confirm(`Remove ${b.title.replace('Remove ', '')} from the room?`)) kick(b.dataset.kick);
-  });
+  renderPlayers(ps);
   if (S.seen.size && ps.some(p => !S.seen.has(p.id) && p.id !== S.me)) sfx('blip');
   ps.forEach(p => S.seen.add(p.id));
 

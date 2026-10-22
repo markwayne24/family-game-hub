@@ -441,4 +441,22 @@ import { resolveName, normName } from '../games/names.js';
   for (let pass = 0; pass < 3; pass++) for (const p of joined) p.name = resolveName(joined, p.id, 'Nicole');
   assert.equal(new Set(joined.map(p => normName(p.name))).size, 4); assert.deepEqual(joined.map(p => p.name), ['Nicole', 'Nicole 2', 'Nicole 3', 'Nicole 4']);
 }
+
+
+// ---- long player lists: search and pagination
+import { search, paginate } from '../games/list.js';
+{
+  const people = Array.from({ length: 1000 }, (_, i) => ({ id: 'p' + i, name: i % 100 === 0 ? `Nicole ${i}` : `Player ${i}` }));
+  assert.equal(search(people, '').length, 1000);
+  assert.equal(search(people, 'nicole').length, 10); // case-insensitive
+  assert.equal(search(people, '  NICOLE 3 ').map(p => p.name).join(), 'Nicole 300');
+  assert.equal(search(people, 'zzz').length, 0);
+  const pg = paginate(people, 0, 10);
+  assert.equal(pg.items.length, 10); assert.equal(pg.pages, 100); assert.equal(pg.total, 1000); assert.equal(pg.page, 0);
+  assert.equal(paginate(people, 99, 10).items[9].id, 'p999'); // last page
+  assert.equal(paginate(people, 500, 10).page, 99); // too far: clamped to the last page
+  assert.equal(paginate(people, -3, 10).page, 0);
+  assert.equal(paginate([], 0, 10).pages, 1); assert.equal(paginate([], 0, 10).items.length, 0);
+  assert.equal(paginate(people.slice(0, 25), 2, 10).items.length, 5); // partial last page
+}
 console.log('all game tests passed');
