@@ -699,6 +699,7 @@ export const werewolf = {
     d.waiting = waitingForRole;
 
     let body = '';
+    let lobbyBar = ''; // the host's Start button stays at the bottom of the screen
     /* ---------------- lobby ---------------- */
     if (s.phase === 'lobby') {
       const c = s.config;
@@ -731,8 +732,8 @@ export const werewolf = {
           <p class="muted">Roles: ${SPECIALS.filter(k => c[k]).map(k => `${R(k).emoji} ${R(k).name}`).join(', ') || 'none'}${c.stealth ? ' · 🕵️ Face-to-face mode' : ''}${c.openVotes ? ' · open voting' : ''}${c.showVotes ? '' : ' · secret votes'}${c.runoff ? ' · runoff on ties' : ''}</p>`;
       }
       body += `<div class="ww-comp"><b>${n >= MIN_PLAYERS ? n : '5+'} players:</b> ${comp}</div>
-        ${why ? `<p class="muted">${ui.esc(why)}</p>` : ''}
-        ${ui.isHost ? `<button id="start" ${why ? 'disabled' : ''}>Start the game</button>` : '<p class="muted">Waiting for the host to start…</p>'}`;
+        ${ui.isHost ? '' : '<p class="muted">Waiting for the host to start…</p>'}`;
+      if (ui.isHost) lobbyBar = `<div class="ww-ctl stick">${why ? `<p class="ww-why">⚠️ ${ui.esc(why)}</p>` : ''}<button id="start" class="ww-main" ${why ? 'disabled' : ''}>▶ Start the game</button></div>`;
       const board = Object.values(s.stats ?? {}).sort((a, b) => b.wins - a.wins || b.survived - a.survived);
       if (board.length) body += `<h3>🏆 Leaderboard</h3><table class="table"><tr class="muted"><td></td><td>Wins</td><td>Played</td><td>Survived</td></tr>${board.map(x => `<tr><td>${ui.esc(x.name)}</td><td><b>${x.wins}</b></td><td>${x.played}</td><td>${x.survived}</td></tr>`).join('')}</table>`;
       if (s.history.length) body += `<p class="muted">Past games: ${s.history.map(h => `#${h.n} ${{ wolves: '🐺', village: '🏡', lovers: '💘', tanner: '🎭' }[h.winner]} (${h.rounds} nights)`).join(' · ')}</p>`;
@@ -967,7 +968,7 @@ export const werewolf = {
     if (running && nextLabel && !isMod) small.push(`<button id="adv" class="ghost">⏭ ${nextLabel}</button>`);
     if (ui.isHost && !isMod && ['night', 'day', 'vote'].includes(s.phase) && s.config.mod === 'none' && !s.paused) small.push('<button class="ghost" data-add="30">⏱ +30s</button>');
     if (ui.isHost && inGameNow) small.push('<button class="ghost danger" id="reset">✖ End game</button>');
-    const bar = main || small.length ? `<div class="ww-ctl ${isMod && inGameNow ? 'stick' : ''}">${doneBanner}${main}${small.length ? `<div class="ww-ctl2">${small.join('')}</div>` : ''}</div>` : '';
+    const bar = lobbyBar || (main || small.length ? `<div class="ww-ctl ${isMod && inGameNow ? 'stick' : ''}">${doneBanner}${main}${small.length ? `<div class="ww-ctl2">${small.join('')}</div>` : ''}</div>` : '');
 
     // A paused game covers the whole screen, wherever you have scrolled to.
     let veil = document.getElementById('ww-pause');
