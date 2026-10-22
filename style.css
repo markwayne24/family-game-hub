@@ -234,3 +234,33 @@ input.bad{border-color:var(--bad);animation:shake .4s ease}
 .bb-sparks i:nth-child(3n+2){background:#fff}
 .bb-sparks i:nth-child(3n){background:var(--c)}
 .bb-overlay.landed .bb-sparks i{animation:bbSpark .85s ease-out forwards}
+
+/* ---------- Bingo v3: multiple cards, custom pattern, private roll ---------- */
+@keyframes mystery{0%,100%{transform:rotate(-6deg) scale(1)}50%{transform:rotate(6deg) scale(1.08)}}
+.cc{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
+.mycards{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:14px}
+.cardlabel{font-weight:700;text-align:center;color:var(--mute);margin-top:6px}
+.mycard>button{width:100%;margin-top:6px}
+.cardset{display:grid;gap:6px}
+.cs-all{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.cs-all span{flex:1;font-weight:700}
+.cs-row{display:flex;gap:8px;align-items:center}
+.cs-row span{flex:1}
+.cs-row b{min-width:1.5em;text-align:center}
+.cs-row button{padding:4px 14px}
+.modes{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:8px}
+.mode{display:flex;flex-direction:column;gap:4px;align-items:center;background:var(--line);color:var(--ink);font-size:1.4rem;padding:10px}
+.mode small{font-size:.75rem;font-weight:500;text-align:center}
+.mode.sel{background:var(--card);outline:3px solid var(--accent)}
+.mini-mode{margin:8px 0;font-size:.9rem}
+.editor{margin:10px 0}
+.bingo .cell.ed{aspect-ratio:1;padding:0;background:var(--line);color:var(--ink);border:2px dashed var(--line);border-radius:10px}
+.bingo .cell.ed.on{background:var(--accent);border:2px solid var(--accent)}
+.bingo .cell.ed:not(.on):hover{background:var(--card);border-color:var(--accent)}
+.secret{text-align:center;background:var(--line);border-radius:16px;padding:12px;margin:8px 0;animation:pop .4s ease}
+.secret .big{font-size:3rem}
+.pending{display:flex;align-items:center;gap:12px;background:var(--line);border-radius:16px;padding:10px 14px;margin:8px 0}
+.pending span{display:grid;place-items:center;width:48px;height:48px;border-radius:50%;background:var(--accent);color:#fff;font-size:1.6rem;font-weight:900;animation:mystery 1s ease-in-out infinite}
+.pending p{margin:0}
+.bb-overlay.secret{background:radial-gradient(circle at 50% 45%,rgba(60,30,120,.8),rgba(20,18,31,.35) 78%)}
+.bb-secret{position:absolute;top:calc(100% + 14px);left:50%;transform:translateX(-50%);white-space:nowrap;color:#fff;font-weight:700;font-size:1.05rem;text-shadow:0 2px 8px rgba(0,0,0,.6)}
