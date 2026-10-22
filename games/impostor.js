@@ -56,6 +56,7 @@ function tally(s) {
 
 export const impostor = {
   id: 'impostor',
+  inProgress: s => ['clues', 'vote', 'guess'].includes(s.phase),
   name: 'Impostor',
   emoji: '🕵️',
 

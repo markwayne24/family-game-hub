@@ -19,6 +19,7 @@ let mine = { round: 0, k: null };
 
 export const rps = {
   id: 'rps',
+  inProgress: s => s.phase === 'pick' && Object.keys(s.picks).length > 0, // a round that has started
   name: 'Rock Paper Scissors',
   emoji: '✂️',
 

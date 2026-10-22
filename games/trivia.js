@@ -34,6 +34,7 @@ export function parseCustom(text) {
 
 export const trivia = {
   id: 'trivia',
+  inProgress: s => s.phase !== 'end',
   name: 'Trivia',
   emoji: '🧠',
   options: [{ key: 'pack', label: 'Questions', choices: Object.entries(PACKS).map(([k, p]) => [k, p.name]) }],

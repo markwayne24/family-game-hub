@@ -30,6 +30,7 @@ const toReveal = (s, env, guesser = null) => ({ ...s, phase: 'reveal', result: {
 
 export const charades = {
   id: 'charades',
+  inProgress: s => s.phase !== 'end',
   name: 'Charades',
   emoji: '🎭',
   options: [{ key: 'type', label: 'Prompts', choices: [['all', 'Everything'], ['animals', 'Animals'], ['actions', 'Actions'], ['jobs', 'Jobs'], ['filipino', 'Filipino fun']] }],

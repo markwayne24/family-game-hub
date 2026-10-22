@@ -29,6 +29,7 @@ const PARTS = [
 
 export const hangman = {
   id: 'hangman',
+  inProgress: s => s.phase === 'play' && s.guessed.length > 0,
   name: 'Hangman',
   emoji: '🪢',
 

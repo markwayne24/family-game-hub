@@ -21,6 +21,7 @@ function findWin(b) {
 
 export const connect4 = {
   id: 'connect4',
+  inProgress: s => !s.winner && s.board.some(Boolean),
   name: 'Connect 4',
   emoji: '🔴🟡',
 

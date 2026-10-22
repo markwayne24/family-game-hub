@@ -14,6 +14,7 @@ const current = s => s.order[s.turn % s.order.length];
 
 export const memory = {
   id: 'memory',
+  inProgress: s => s.phase !== 'end',
   name: 'Memory Match',
   emoji: '🃏',
 

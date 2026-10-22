@@ -50,6 +50,7 @@ function paint(ctx, st) {
 
 export const drawing = {
   id: 'drawing',
+  inProgress: s => s.phase !== 'end',
   name: 'Draw & Guess',
   emoji: '🎨',
   options: [{ key: 'level', label: 'Words', choices: [['easy', 'Easy (kids)'], ['medium', 'Medium'], ['hard', 'Hard'], ['mixed', 'Mixed']] }],

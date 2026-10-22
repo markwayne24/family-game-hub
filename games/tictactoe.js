@@ -9,6 +9,8 @@ function winnerOf(b) {
 
 export const tictactoe = {
   id: 'tictactoe',
+  // a game is running once a move is made, until someone wins or it is drawn
+  inProgress: s => !s.winner && s.board.some(Boolean),
   name: 'Tic-Tac-Toe',
   emoji: '❌⭕',
 

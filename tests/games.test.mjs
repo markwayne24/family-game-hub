@@ -734,4 +734,71 @@ import { admit, summary, freeHeld, RESERVE_MS } from '../games/capacity.js';
   assert.equal(Object.keys(big.admitted).length, 10); assert.equal(big.full.length, 991);
   assert.ok(big.admitted.p0 !== undefined && big.admitted.p8 !== undefined && big.admitted.p9 === undefined); // the earliest 9 guests + the host
 }
+
+
+// ---- people who join during a game
+import { lateMode, takePart, watchers, LATE_MODES } from '../games/participants.js';
+{
+  // what newcomers do: automatic follows the game, the host can force either way
+  assert.equal(lateMode('auto', GAMES.bingo), 'watch');            // Bingo: a latecomer's card would have every called number marked
+  for (const id of ['tictactoe', 'connect4', 'trivia', 'rps', 'memory', 'drawing', 'impostor', 'hangman', 'wordrace', 'charades'])
+    assert.equal(lateMode('auto', GAMES[id]), 'join', `${id} lets newcomers in by default`);
+  assert.equal(lateMode(undefined, GAMES.bingo), 'watch'); assert.equal(lateMode('', GAMES.trivia), 'join'); assert.equal(lateMode('auto', undefined), 'join');
+  assert.equal(lateMode('watch', GAMES.trivia), 'watch'); assert.equal(lateMode('join', GAMES.bingo), 'join'); // the host's choice wins
+  assert.deepEqual(Object.keys(LATE_MODES), ['auto', 'watch', 'join']);
+
+  // who takes part when the game begins
+  const now = 1_000_000, WITHIN = 5 * 60 * 1000;
+  const admitted = { host: now, a: now, b: now - 60_000, old: now - WITHIN - 1 };        // old = gone for more than 5 minutes
+  const set = takePart(admitted, ['host', 'a', 'c'], 'host', now, WITHIN);
+  assert.ok(set.has('host') && set.has('a') && set.has('c'));                              // connected
+  assert.ok(set.has('b'));                                                                  // dropped a minute ago: still a player
+  assert.ok(!set.has('old'));                                                               // gone too long: not counted
+  assert.ok(takePart({}, [], 'host', now, WITHIN).has('host'));                             // the host always takes part
+  assert.ok(takePart(admitted, ['host', 'a'], 'host', now, WITHIN - 0).has('b'));
+  assert.ok(!takePart({ x: now - WITHIN - 1 }, [], 'host', now, WITHIN).has('x'));
+  assert.ok(takePart({ x: now - WITHIN }, [], 'host', now, WITHIN).has('x'));               // exactly at the limit still counts
+
+  // who is a watcher: connected people who arrived after the game began
+  const connected = [{ id: 'host', host: true }, { id: 'a' }, { id: 'c' }, { id: 'late1' }, { id: 'late2' }];
+  assert.deepEqual(watchers(set, connected), ['late1', 'late2']);
+  assert.deepEqual(watchers(set, connected.slice(0, 3)), []);                               // nobody new: nobody watches
+  assert.deepEqual(watchers(new Set(), [{ id: 'host', host: true }, { id: 'a' }]), ['a']);  // the host is never a watcher, even with an empty set
+  // a player who dropped and came back is still a player, not a watcher
+  const returning = takePart({ host: now, a: now, b: now }, ['host', 'a'], 'host', now, WITHIN);
+  assert.deepEqual(watchers(returning, [...connected.slice(0, 2), { id: 'b' }]), []);
+  // when the game ends (or the host lets them in) a fresh snapshot includes the watchers
+  const next = takePart({ ...admitted, late1: now, late2: now }, ['host', 'a', 'c', 'late1', 'late2'], 'host', now, WITHIN);
+  assert.deepEqual(watchers(next, connected), []);
+}
+{ // "is a game running?" for each game (used to decide when newcomers must wait)
+  const run = (id, s) => GAMES[id].inProgress(s);
+  for (const id of Object.keys(GAMES)) assert.equal(typeof GAMES[id].inProgress, 'function', `${id} says when a game is running`);
+  // bingo: from Start until New game (the results screen still counts, so watchers don't see a card they never played)
+  const b0 = bg.init(env(), {}); assert.equal(run('bingo', b0), false);
+  const b1 = bg.reduce(b0, A('h', 'start'), env()); assert.equal(run('bingo', b1), true);
+  const b2 = bg.reduce(b1, A('h', 'end'), env()); assert.equal(b2.phase, 'over'); assert.equal(run('bingo', b2), true);
+  assert.equal(run('bingo', bg.reduce(b2, A('h', 'reset'), env())), false);
+  // tic-tac-toe / connect 4: a game is running once a move is made and until someone wins
+  let ttt = GAMES.tictactoe.init(env()); assert.equal(run('tictactoe', ttt), false);
+  ttt = GAMES.tictactoe.reduce(ttt, A('h', 'move', { i: 0 }), env()); assert.equal(run('tictactoe', ttt), true);
+  assert.equal(run('tictactoe', { ...ttt, winner: 'X' }), false);
+  let c4g = GAMES.connect4.init(env()); assert.equal(run('connect4', c4g), false);
+  c4g = GAMES.connect4.reduce(c4g, A('h', 'drop', { col: 0 }), env()); assert.equal(run('connect4', c4g), true);
+  // trivia, memory, drawing, charades: running until the end screen
+  assert.equal(run('trivia', GAMES.trivia.init(env())), true); assert.equal(run('trivia', { ...GAMES.trivia.init(env()), phase: 'end' }), false);
+  assert.equal(run('memory', GAMES.memory.init(env())), true); assert.equal(run('memory', { ...GAMES.memory.init(env()), phase: 'end' }), false);
+  assert.equal(run('drawing', GAMES.drawing.init(env({ now: 0 }))), true); assert.equal(run('drawing', { ...GAMES.drawing.init(env({ now: 0 })), phase: 'end' }), false);
+  assert.equal(run('charades', GAMES.charades.init(env({ now: 0 }), {})), true); assert.equal(run('charades', { ...GAMES.charades.init(env({ now: 0 }), {}), phase: 'end' }), false);
+  // impostor: while clues / voting / the impostor's last guess; not in the waiting room or on the results screen
+  const imp = GAMES.impostor.init(env()); assert.equal(run('impostor', imp), true);
+  assert.equal(run('impostor', { ...imp, phase: 'result' }), false); assert.equal(run('impostor', { phase: 'need' }), false);
+  // rock paper scissors, hangman, word race: a round that has started
+  let rp = GAMES.rps.init(env()); assert.equal(run('rps', rp), false);
+  rp = GAMES.rps.reduce(rp, A('h', 'pick', { choice: 0 }), env()); assert.equal(run('rps', rp), true);
+  let hm2 = GAMES.hangman.init(env()); assert.equal(run('hangman', hm2), false);
+  hm2 = GAMES.hangman.reduce(hm2, A('h', 'guess', { letter: 'e' }), env()); assert.equal(run('hangman', hm2), true);
+  let wr2 = GAMES.wordrace.init(env()); assert.equal(run('wordrace', wr2), false);
+  wr2 = GAMES.wordrace.reduce(wr2, A('h', 'guess', { word: 'xxxxx' }), env()); assert.equal(run('wordrace', wr2), true);
+}
 console.log('all game tests passed');

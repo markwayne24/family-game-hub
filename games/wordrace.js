@@ -35,6 +35,7 @@ function newRound(s) {
 
 export const wordrace = {
   id: 'wordrace',
+  inProgress: s => s.phase === 'play' && Object.keys(s.guesses).length > 0,
   name: 'Word Race',
   emoji: '🔤',
 

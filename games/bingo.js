@@ -119,6 +119,9 @@ const nextNumber = s => {
 
 export const bingo = {
   id: 'bingo',
+  // Newcomers watch until the next game: their card would otherwise start with every called number already marked.
+  lateJoin: 'watch',
+  inProgress: s => s.phase === 'play' || s.phase === 'over', // the results screen still counts, so watchers never see a card they did not play
   name: 'Bingo',
   emoji: '🎱',
   options: [
