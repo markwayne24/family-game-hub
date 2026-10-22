@@ -1,4 +1,4 @@
-import { fresh, confetti, sfx } from './fx.js';
+import { fresh, memo, confetti, sfx } from './fx.js';
 
 const CATEGORIES = {
   Food: ['pizza', 'burger', 'sushi', 'pasta', 'taco', 'salad', 'pancake', 'ice cream'],
@@ -122,67 +122,118 @@ export const impostor = {
     const board = Object.entries(s.scores).sort((a, b) => b[1] - a[1])
       .map(([id, pts]) => `<tr><td>${name(id)}</td><td><b>${pts}</b></td></tr>`).join('');
     const hostBtns = ui.isHost ? '<div class="row"><button class="ghost" id="reset">New game</button></div>' : '';
+    const later = (ms, fn) => setTimeout(fn, ms);
     let body = '';
+    let mood = ''; // a class on the whole screen for the current moment
+
+    // sounds for the move from one phase to the next
+    const prevPhase = memo(el, 'phase', s.phase);
+    if (prevPhase !== undefined && prevPhase !== s.phase) {
+      if (s.phase === 'vote') { sfx('flip'); later(200, () => sfx('whoosh')); }
+      else if (s.phase === 'guess') { sfx('gasp'); later(250, () => sfx('drumroll')); }
+    }
 
     if (s.phase === 'need') {
       body = `<p>Need at least ${MIN_PLAYERS} players. ${ui.players.length} here now.</p>
         ${ui.isHost ? '<button id="start">Start round</button>' : '<p class="muted">Waiting for the host to start…</p>'}`;
     } else if (s.phase === 'result') {
+      /* ---- the big reveal, one beat at a time ---- */
       const r = s.result;
-      const newRes = fresh(el, 'res', s.round);
-      if (newRes) { if (r.impostorWins) sfx('lose'); else { confetti(); sfx('win'); } }
-      const votes = Object.entries(s.votes).map(([from, t]) => `${name(from)} → ${t === 'skip' ? 'skip' : name(t)}`).join(' · ');
-      body = `<h3 class="${newRes ? 'status-pop' : ''}">${r.impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</h3>
-        <p>The impostor was <b>${name(s.impostor)}</b>. The word was <b>${ui.esc(s.word)}</b>.</p>
-        ${r.ejected ? `<p>Voted out: <b>${name(r.ejected)}</b>${r.guess ? ` · impostor guessed “${ui.esc(r.guess)}”` : ''}</p>` : '<p>Nobody was voted out.</p>'}
-        <p class="muted">${votes}</p>
-        ${ui.isHost ? '<button id="start">Next round</button>' : ''}`;
+      const entries = Object.entries(s.votes);
+      const anim = fresh(el, 'res', s.round);
+      const step = 0.35;
+      const t1 = entries.length * step + 0.5;   // "The impostor was…"
+      const t2 = t1 + 1.7;                      // their name
+      const t3 = t2 + 1;                        // the secret word
+      const t4 = t3 + 0.9;                      // who won
+      const inGame = s.order.includes(ui.me);
+      const mine = inGame ? (ui.me === s.impostor ? r.impostorWins : !r.impostorWins) : null;
+      if (anim) {
+        entries.forEach((_, i) => later(i * step * 1000, () => sfx('vote')));
+        later(t1 * 1000, () => sfx('drumroll'));
+        later(t2 * 1000, () => sfx(ui.me === s.impostor ? 'gasp' : 'thud'));
+        later(t3 * 1000, () => sfx('ding'));
+        later(t4 * 1000, () => { if (mine === false) sfx('lose'); else { confetti(); sfx('win'); } if (r.impostorWins && mine !== true) sfx('growl'); });
+      }
+      const d = sec => (anim ? `style="--d:${sec.toFixed(2)}s"` : '');
+      const rd = anim ? 'rd' : '';
+      mood = 'imp-reveal';
+      body = `<h3>🗳️ The votes</h3>
+        <div class="imp-votes">${entries.map(([from, tgt], i) => `<div class="step ${rd}" ${d(i * step)}>${name(from)} → <b>${tgt === 'skip' ? 'skip' : name(tgt)}</b></div>`).join('') || '<p class="muted">Nobody voted.</p>'}</div>
+        <div class="step ${rd} imp-suspense" ${d(t1)}>🕵️ The impostor was…</div>
+        <div class="step ${rd} imp-name" ${d(t2)}>${name(s.impostor)}</div>
+        <div class="step ${rd}" ${d(t3)}><p>The secret word was <b class="imp-word">${ui.esc(s.word)}</b></p>
+          ${r.ejected ? `<p>Voted out: <b>${name(r.ejected)}</b>${r.guess ? ` · the impostor guessed “${ui.esc(r.guess)}”` : ''}</p>` : '<p>Nobody was voted out.</p>'}</div>
+        <div class="step ${rd} imp-verdict ${r.impostorWins ? 'bad' : 'good'}" ${d(t4)}>${r.impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</div>
+        ${ui.isHost ? `<div class="step ${rd}" ${d(t4 + 0.3)}><button id="start">Next round</button></div>` : ''}`;
     } else {
       const me = ui.priv;
       const newRole = !!me && fresh(el, 'role', s.round);
-      if (newRole) sfx('whoosh');
+      if (newRole) {
+        sfx('whoosh');
+        later(500, () => sfx(me.role === 'impostor' ? 'growl' : 'ding'));
+        if (me.role === 'impostor') later(1100, () => sfx('heartbeat'));
+        try { navigator.vibrate?.(me.role === 'impostor' ? [120, 80, 120] : 60); } catch { /* not supported */ }
+      }
       const card = !me ? '<div class="banner">You joined mid-round. Watching this one!</div>'
         : me.role === 'impostor'
-          ? `<div class="role bad ${newRole ? 'flip' : ''}">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`
-          : `<div class="role ${newRole ? 'flip' : ''}">Your secret word: <b>${ui.esc(me.word)}</b><br><small>Category: ${ui.esc(s.cat)}. Find the impostor.</small></div>`;
-      const clues = s.clues.map(c => `<div><b>${name(c.id)}:</b> ${ui.esc(c.text)}</div>`).join('');
+          ? `<div class="role bad imp-card imp-evil ${newRole ? 'flip' : ''}">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`
+          : `<div class="role imp-card imp-crew ${newRole ? 'flip' : ''}">Your secret word<br><b class="imp-word">${ui.esc(me.word)}</b><br><small>Category: ${ui.esc(s.cat)}. Find the impostor.</small></div>`;
+      const nClues = memo(el, 'clues', s.clues.length);
+      const newClue = nClues !== undefined && s.clues.length > nClues;
+      if (newClue) sfx('pop');
+      const clues = s.clues.map((c, i) => `<div class="${newClue && i === s.clues.length - 1 ? 'in' : ''}"><b>${name(c.id)}:</b> ${ui.esc(c.text)}</div>`).join('');
       if (s.phase === 'clues') {
         const turn = s.order[s.clueIdx];
-        body = `${card}<h3>Give a one-word clue</h3><div class="chat">${clues || '<span class="muted">No clues yet</span>'}</div>
-          ${turn === ui.me
-            ? '<form id="cf" class="row"><input class="grow" maxlength="30" placeholder="Your clue (don\'t say the word!)" autocomplete="off"><button>Send</button></form>'
-            : `<p class="muted">Waiting for ${name(turn)}…</p>`}
+        const myTurn = turn === ui.me;
+        if (fresh(el, 'turn', `${s.round}-${s.clueIdx}`) && myTurn) { sfx('blip'); later(180, () => sfx('blip')); try { navigator.vibrate?.(150); } catch { /* not supported */ } }
+        const order = s.order.map((id, i) => `<span class="chip ${i < s.clueIdx ? 'done' : ''} ${i === s.clueIdx ? 'cur' : ''} ${id === ui.me ? 'me' : ''}">${i < s.clueIdx ? '✓' : i === s.clueIdx ? '🎤' : i + 1} ${name(id)}</span>`).join('');
+        mood = myTurn ? 'imp-myturn' : '';
+        body = `${card}<h3>Give a one-word clue</h3>
+          <div class="imp-order" aria-label="Turn order">${order}</div>
+          <div class="chat">${clues || '<span class="muted">No clues yet</span>'}</div>
+          ${myTurn
+            ? '<div class="imp-turn">🎤 <b>Your turn!</b> One word that hints at the secret.</div><form id="cf" class="row"><input class="grow" maxlength="30" placeholder="Your clue (don\'t say the word!)" autocomplete="off"><button>Send</button></form>'
+            : `<p class="imp-wait">✍️ <b>${name(turn)}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span></p>`}
           ${ui.isHost ? '<button class="ghost" id="skipclue">Skip this player</button>' : ''}`;
       } else if (s.phase === 'vote') {
         const voted = s.votes[ui.me] !== undefined;
-        body = `${card}<h3>Who is the impostor?</h3><div class="chat">${clues}</div>
-          <p class="muted">Discuss out loud, then vote. ${Object.keys(s.votes).length}/${s.order.length} voted.</p>
+        const nVoted = Object.keys(s.votes).length;
+        const prev = memo(el, 'voted', nVoted);
+        if (prev !== undefined && nVoted > prev && !(voted && nVoted === prev + 1 && el._mine)) sfx('tick');
+        const chips = s.order.map(id => `<span class="chip ${s.votes[id] !== undefined ? 'new' : ''}">${s.votes[id] !== undefined ? '✅' : '⏳'} ${name(id)}</span>`).join('');
+        body = `${card}<h3>🗳️ Who is the impostor?</h3><div class="chat">${clues}</div>
+          <p class="muted">Discuss out loud, then vote. ${nVoted}/${s.order.length} voted.</p>
+          <div class="bar"><i style="width:${s.order.length ? (nVoted / s.order.length) * 100 : 0}%"></i></div>
           ${s.order.includes(ui.me) && !voted
-            ? `<div class="votes">${s.order.filter(id => id !== ui.me).map(id => `<button data-v="${id}">${name(id)}</button>`).join('')}<button class="ghost" data-v="skip">Skip</button></div>`
-            : '<p class="muted">Vote locked in. Waiting for the others…</p>'}
+            ? `<div class="votes">${s.order.filter(id => id !== ui.me).map(id => `<button data-v="${id}">${name(id)}</button>`).join('')}</div><button class="ghost imp-skip" data-v="skip">Skip (vote for nobody)</button>`
+            : '<p class="muted">🔒 Vote locked in. Waiting for the others…</p>'}
+          <div class="chips imp-voted">${chips}</div>
           ${ui.isHost ? '<button class="ghost" id="endvote">Count votes now</button>' : ''}`;
       } else if (s.phase === 'guess') {
-        body = `${card}<h3>${name(s.ejected)} was voted out, and was the impostor!</h3>
-          ${ui.me === s.ejected
-            ? '<p>One last chance: guess the secret word to win.</p><form id="gf" class="row"><input class="grow" maxlength="30" placeholder="The word is…" autocomplete="off"><button>Guess</button></form>'
-            : '<p class="muted">Waiting for the impostor’s final guess…</p>'}`;
+        const me2 = ui.me === s.ejected;
+        mood = 'imp-caught';
+        body = `${card}<div class="imp-alarm">🚨 <b>${name(s.ejected)}</b> was voted out, and was the impostor!</div>
+          ${me2
+            ? '<div class="imp-turn bad">😈 <b>Last chance!</b> Guess the secret word and you still win.</div><form id="gf" class="row"><input class="grow" maxlength="30" placeholder="The word is…" autocomplete="off"><button>Guess</button></form>'
+            : '<p class="imp-wait">😬 Waiting for the impostor’s final guess<span class="dots"><i>.</i><i>.</i><i>.</i></span></p>'}`;
       }
     }
 
-    el.innerHTML = `<h2>Impostor</h2><p class="muted">Round ${s.round}. Everyone but one player knows the secret word.</p>${body}
-      <h3>Scores</h3><table class="table">${board || '<tr><td class="muted">No points yet</td></tr>'}</table>${hostBtns}`;
+    el.innerHTML = `<div class="imp ${mood}"><h2><span class="imp-mag">🔎</span> Impostor</h2><p class="muted">Round ${s.round}. Everyone but one player knows the secret word.</p>${body}
+      <h3>Scores</h3><table class="table">${board || '<tr><td class="muted">No points yet</td></tr>'}</table>${hostBtns}</div>`;
 
     const input = el.querySelector('form input');
     if (input && typed) input.value = typed;
     if (input && focused) input.focus();
-    const send = (id, type, key) => el.querySelector(id)?.addEventListener('submit', e => {
+    const send = (id, type) => el.querySelector(id)?.addEventListener('submit', e => {
       e.preventDefault();
       const v = e.target.querySelector('input').value.trim();
-      if (v) ui.act(type, { text: v });
+      if (v) { sfx(type === 'clue' ? 'pop' : 'drumroll'); ui.act(type, { text: v }); }
     });
     send('#cf', 'clue');
     send('#gf', 'guessword');
-    el.querySelectorAll('[data-v]').forEach(b => b.onclick = () => ui.act('vote', { target: b.dataset.v }));
+    el.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { sfx('vote'); el._mine = true; setTimeout(() => { el._mine = false; }, 1500); ui.act('vote', { target: b.dataset.v }); });
     el.querySelector('#start')?.addEventListener('click', () => ui.act('start'));
     el.querySelector('#skipclue')?.addEventListener('click', () => ui.act('skipclue'));
     el.querySelector('#endvote')?.addEventListener('click', () => ui.act('endvote'));

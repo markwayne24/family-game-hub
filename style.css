@@ -591,3 +591,40 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 @keyframes donePop{from{transform:translateY(8px) scale(.96);opacity:0}to{transform:none;opacity:1}}
 @keyframes readyPulse{0%,100%{box-shadow:0 0 0 0 #2f9e4488}50%{box-shadow:0 0 0 10px #2f9e4400}}
 .ww-why{margin:0;text-align:center;font-size:.9rem;color:var(--mute)}
+
+/* Impostor */
+.imp-mag{display:inline-block;animation:magScan 3.2s ease-in-out infinite;transform-origin:30% 70%}
+@keyframes magScan{0%,100%{transform:translateX(0) rotate(-8deg)}50%{transform:translateX(14px) rotate(12deg)}}
+.imp-card.imp-evil{animation:flipIn .6s ease,evilPulse 2.2s ease-in-out .6s infinite}
+@keyframes evilPulse{0%,100%{box-shadow:0 0 0 0 #d6454566}50%{box-shadow:0 0 26px 6px #d64545aa}}
+.imp-card.imp-crew{box-shadow:0 0 0 2px #6c4cf544}
+.imp-word{display:inline-block;font-size:1.8rem;letter-spacing:.02em;animation:stamp .6s .3s ease both}
+.imp-order{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
+.imp-order .chip.done{opacity:.7}
+.imp-order .chip.cur{outline:2px solid var(--accent);animation:pulse 1.3s ease-in-out infinite}
+.imp-turn{background:#e7f5ff;color:#0b4a7a;border-radius:12px;padding:10px 12px;margin:10px 0;text-align:center;animation:donePop .45s ease both,turnGlow 1.8s ease-in-out .5s infinite}
+.imp-turn.bad{background:#ffe3e3;color:#8a1c1c}
+@keyframes turnGlow{0%,100%{box-shadow:0 0 0 0 #1c7ed688}50%{box-shadow:0 0 0 8px #1c7ed600}}
+.imp-wait{text-align:center;margin:12px 0}
+.dots i{font-style:normal;display:inline-block;animation:dotJump 1.2s infinite}
+.dots i:nth-child(2){animation-delay:.2s}.dots i:nth-child(3){animation-delay:.4s}
+@keyframes dotJump{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-5px)}}
+.imp-skip{display:block;width:100%;margin-top:10px;min-height:44px}
+.imp-voted{margin:10px 0}
+.imp .votes{margin:8px 0}
+.imp-alarm{background:#ffe3e3;color:#8a1c1c;border:2px solid #e03131;border-radius:14px;padding:12px;margin:10px 0;text-align:center;font-size:1.1rem;animation:shake .6s ease,alarm 1s ease-in-out .6s infinite}
+@keyframes alarm{0%,100%{background:#ffe3e3}50%{background:#ffc9c9}}
+.imp-votes{display:grid;gap:4px;margin:8px 0}
+.imp .step.rd{opacity:0;animation:fadeUp .5s var(--d) ease forwards}
+.imp-suspense{margin:14px 0 4px;font-size:1.15rem;text-align:center}
+.imp-name{font-size:2rem;font-weight:800;text-align:center;margin:4px 0 12px}
+.imp-name.rd{animation:stamp .7s var(--d) ease both}
+.imp-verdict{margin:12px 0;padding:12px;border-radius:14px;text-align:center;font-size:1.3rem;font-weight:800}
+.imp-verdict.good{background:#d3f9d8;color:#0b5d1e}
+.imp-verdict.bad{background:#ffe3e3;color:#8a1c1c}
+@media (prefers-color-scheme:dark){
+  .imp-turn{background:#10304a;color:#a5d8ff}.imp-turn.bad{background:#4a1515;color:#ffc9c9}
+  .imp-alarm{background:#4a1515;color:#ffc9c9}@keyframes alarm{0%,100%{background:#4a1515}50%{background:#6b1c1c}}
+  .imp-verdict.good{background:#12381f;color:#b2f2bb}.imp-verdict.bad{background:#4a1515;color:#ffc9c9}
+}
+@media (prefers-reduced-motion:reduce){.imp *{animation:none!important}.imp .step.rd{opacity:1}}
