@@ -350,3 +350,13 @@ summary{min-height:44px;display:flex;align-items:center}
 /* all five pattern groups always fit on a phone */
 .pattabs{display:grid;grid-template-columns:repeat(5,1fr);gap:4px;overflow:visible}
 .pattabs .tab{padding:8px 2px;font-size:.82rem;min-width:0}
+
+/* ---------- total players and the player limit ---------- */
+.metarow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:2px 0 8px}
+.metarow .whoami{margin:0}
+.total{display:inline-block;padding:6px 14px;border-radius:99px;background:var(--line);font-size:.95rem}
+.fullflag{color:var(--bad);font-weight:700}
+.chip.pick{border:0;cursor:pointer;min-height:40px;background:var(--line);color:var(--ink);font-weight:600}
+.chip.pick.sel{background:var(--accent);color:#fff}
+#limitpanel{background:var(--bg);border-radius:14px;padding:8px 12px;margin:8px 0}
+#limitpanel .row input{flex:1;width:auto;min-width:0;margin:0}

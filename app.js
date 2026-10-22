@@ -5,6 +5,7 @@ import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
 import { resolveName } from './games/names.js';
 import { search, paginate } from './games/list.js';
+import { admit, summary, freeHeld } from './games/capacity.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 const app = document.getElementById('app');
@@ -18,7 +19,8 @@ const store = {
 };
 
 // S.raw is the host's full game state; S.state is what everyone (including the host) renders.
-const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0, pq: '', ppage: 0, pOpen: false };
+const S = { code: null, me: null, isHost: false, channel: null, game: 'lobby', raw: null, state: null, priv: null, timer: null, stageView: null, seen: new Set(), banned: new Set(), memory: {}, baseName: '', name: '', joinedAt: 0, pq: '', ppage: 0, pOpen: false,
+  maxPlayers: 0, admitted: {}, blocked: new Set(), fullSent: new Map(), room: { max: 0, used: 0, held: 0, full: false }, roomSig: '', limitOpen: false, subscribed: false };
 
 /* ---------- entry ---------- */
 
@@ -138,11 +140,16 @@ async function joinScreen(code, msg = '') {
 
 /* ---------- room ---------- */
 
-function players() {
+function connected() {
   const state = S.channel.presenceState();
   return Object.entries(state)
     .map(([id, metas]) => ({ id, ...metas[0] }))
     .sort((a, b) => a.t - b.t);
+}
+// Everyone who counts as being in the room. The host leaves out people it has turned away because the room is full.
+function players() {
+  const all = connected();
+  return S.blocked.size ? all.filter(p => !S.blocked.has(p.id)) : all;
 }
 const nameOf = id => players().find(p => p.id === id)?.name ?? '(waiting)';
 const env = () => ({ players: players(), hostId: S.me, now: Date.now() });
@@ -152,10 +159,10 @@ function pushState() {
   const g = GAMES[S.game];
   const state = g ? (g.view ? g.view(S.raw) : S.raw) : null;
   const priv = g?.priv ? g.priv(S.raw) : undefined;
-  S.channel.send({ type: 'broadcast', event: 'state', payload: { game: S.game, state, priv } });
+  S.channel.send({ type: 'broadcast', event: 'state', payload: { game: S.game, state, priv, room: S.room } });
   // Games can ask the room to remember things (e.g. Bingo history) after the host moves on to another game.
   if (g?.remember && S.raw) S.memory[g.id] = g.remember(S.raw);
-  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw, memory: S.memory }));
+  store.set(`hubState:${S.code}`, JSON.stringify({ game: S.game, raw: S.raw, memory: S.memory, limit: S.maxPlayers, admitted: S.admitted }));
   // Games with a clock (drawing turns, memory flips) ask the host to fire a 'timeout' action when it runs out.
   clearTimeout(S.timer);
   const at = g?.deadline?.(S.raw);
@@ -188,6 +195,8 @@ function enterRoom(code, name, isHost) {
       const saved = JSON.parse(store.get(`hubState:${code}`) || 'null');
       if (saved && GAMES[saved.game]) { S.game = saved.game; S.raw = saved.raw; }
       S.memory = saved?.memory ?? {};
+      S.maxPlayers = saved?.limit ?? 0;
+      S.admitted = saved?.admitted ?? {};
       S.banned = new Set(JSON.parse(store.get(`hubBanned:${code}`) || '[]'));
     } catch { /* start fresh */ }
   }
@@ -197,10 +206,12 @@ function enterRoom(code, name, isHost) {
     .on('broadcast', { event: 'action' }, ({ payload }) => { if (S.isHost) hostHandle(payload); })
     .on('broadcast', { event: 'state' }, ({ payload }) => {
       S.game = payload.game; S.state = payload.state; S.priv = payload.priv?.[S.me] ?? null;
+      if (payload.room && !S.isHost) S.room = payload.room;
       render();
     })
     .on('presence', { event: 'sync' }, render)
     .on('broadcast', { event: 'kick' }, ({ payload }) => { if (payload.id === S.me) removedScreen('You were removed from the room by the host.', true); })
+    .on('broadcast', { event: 'full' }, ({ payload }) => { if (payload.id === S.me) fullScreen(payload.max); })
     .on('broadcast', { event: 'closed' }, () => { if (!S.isHost) removedScreen('The host closed this room. Thanks for playing!'); })
     .on('presence', { event: 'join' }, ({ key }) => {
       if (!S.isHost) return;
@@ -209,6 +220,7 @@ function enterRoom(code, name, isHost) {
     })
     .subscribe(async status => {
       if (status !== 'SUBSCRIBED') return;
+      S.subscribed = true;
       await S.channel.track({ name: S.name, t: S.joinedAt, host: isHost });
       if (isHost) pushState();
       render();
@@ -223,7 +235,7 @@ function buildShell() {
       <button class="ghost" id="mute" aria-label="Sound on/off"></button>
       <button class="ghost" id="copy">Copy invite link</button>
     </div>
-    <div class="whoami" id="whoami"></div>
+    <div class="metarow"><div class="whoami" id="whoami"></div><div class="total" id="total" aria-live="polite"></div></div>
     <div id="banner"></div>
     <div class="card" id="stage"></div>
     <div class="row">
@@ -232,7 +244,14 @@ function buildShell() {
       <button class="ghost" id="leave">Leave room</button>
     </div>
     <div class="card" id="players">
-      <div class="row"><div class="muted grow" id="pcount"></div><button class="ghost small" id="pmore" hidden></button></div>
+      <div class="row"><div class="muted grow" id="pcount"></div><button class="ghost small" id="limitbtn" hidden></button><button class="ghost small" id="pmore" hidden></button></div>
+      <div id="limitpanel" hidden>
+        <p class="muted" style="margin:6px 0">Most players allowed in this room (you count as one). Players already in are never removed.</p>
+        <div class="chips presets">${[0, 4, 6, 8, 10, 12, 15, 20, 30, 50].map(n => `<button class="chip pick" data-limit="${n}">${n ? n : 'No limit'}</button>`).join('')}</div>
+        <div class="row"><input id="limitnum" type="number" min="2" max="500" inputmode="numeric" placeholder="Other number" aria-label="Other player limit"><button class="ghost" id="limitset">Set</button></div>
+        <p class="muted" id="limitnote"></p>
+        <button class="ghost small" id="freeheld" hidden>Free the held seats now</button>
+      </div>
       <div class="chips" id="chips"></div>
       <div id="pfull" hidden>
         <input id="psearch" type="search" placeholder="Search players…" autocomplete="off" aria-label="Search players">
@@ -241,6 +260,14 @@ function buildShell() {
       </div>
     </div>`;
   S.stageView = null;
+  app.querySelector('#limitbtn').onclick = () => { S.limitOpen = !S.limitOpen; render(); };
+  app.querySelectorAll('[data-limit]').forEach(b => b.onclick = () => setLimit(+b.dataset.limit));
+  app.querySelector('#limitset').onclick = () => {
+    const n = Math.floor(+app.querySelector('#limitnum').value);
+    if (n >= 2 && n <= 500) { setLimit(n); app.querySelector('#limitnum').value = ''; }
+    else app.querySelector('#limitnote').textContent = 'Pick a number from 2 to 500.';
+  };
+  app.querySelector('#freeheld').onclick = () => { S.admitted = freeHeld(S.admitted, connected()); S.roomSig = ''; enforceLimit(); render(); };
   app.querySelector('#pmore').onclick = () => { S.pOpen = !S.pOpen; S.pq = ''; S.ppage = 0; app.querySelector('#psearch').value = ''; render(); };
   app.querySelector('#psearch').oninput = e => { S.pq = e.target.value; S.ppage = 0; render(); };
   app.querySelector('#lobby').onclick = () => hostHandle({ from: S.me, type: 'select', data: { game: 'lobby' } });
@@ -265,6 +292,7 @@ function buildShell() {
 
 function stopChannel() {
   allowSleep();
+  S.subscribed = false;
   clearTimeout(S.timer);
   if (S.channel) sb.removeChannel(S.channel);
   S.channel = null;
@@ -277,6 +305,41 @@ function removedScreen(message, kicked = false) {
   store.set('hubLast', 'null');
   stopChannel();
   app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p>${esc(message)}</p></div>`;
+}
+
+function fullScreen(max) {
+  const code = S.code;
+  stopChannel();
+  app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><h2>🚪 This room is full</h2>
+    <p>The host set a limit of <b>${esc(max)}</b> players, and every seat is taken. Ask the host to make room, then try again.</p>
+    <button id="retry">Try again</button></div>`;
+  app.querySelector('#retry').onclick = () => joinScreen(code);
+}
+
+// Host only: decide who gets a seat, tell everyone else the room is full, and keep the totals up to date.
+function enforceLimit() {
+  const all = connected();
+  const { admitted, full } = admit(S.admitted, all, S.maxPlayers, Date.now());
+  S.admitted = admitted;
+  S.blocked = new Set(full);
+  const now = Date.now();
+  for (const id of full) {
+    if ((S.fullSent.get(id) ?? 0) + 4000 < now) { // keep telling them until they have left
+      S.fullSent.set(id, now);
+      S.channel.send({ type: 'broadcast', event: 'full', payload: { id, max: S.maxPlayers } });
+    }
+  }
+  S.room = summary(S.admitted, players(), S.maxPlayers);
+  const sig = `${S.room.max}/${S.room.used}/${S.room.held}/${players().length}`;
+  if (sig !== S.roomSig) { S.roomSig = sig; pushState(); } // everyone's totals changed
+}
+
+function setLimit(n) {
+  S.maxPlayers = n;
+  S.fullSent.clear();
+  enforceLimit();
+  pushState();
+  render();
 }
 
 function kick(id) {
@@ -334,6 +397,29 @@ document.addEventListener('visibilitychange', () => {
 });
 addEventListener('online', resync);
 
+// "👥 7 / 10 players" for everyone, plus the host's controls for the limit.
+function renderTotals(ps) {
+  const room = S.room;
+  const n = ps.length;
+  const spots = room.max ? Math.max(0, room.max - room.used) : 0;
+  const total = app.querySelector('#total');
+  total.innerHTML = `👥 <b>${n}${room.max ? ` / ${room.max}` : ''}</b> player${n === 1 ? '' : 's'}${
+    room.max ? (room.full ? ' · <span class="fullflag">Room full</span>' : ` · ${spots} spot${spots === 1 ? '' : 's'} left`) : ''}`;
+  total.title = room.held ? `${room.held} seat${room.held === 1 ? ' is' : 's are'} held for players who dropped out` : '';
+
+  const btn = app.querySelector('#limitbtn');
+  btn.hidden = !S.isHost;
+  btn.textContent = `⚙ Limit: ${S.maxPlayers || 'none'}`;
+  const panel = app.querySelector('#limitpanel');
+  panel.hidden = !(S.isHost && S.limitOpen);
+  if (!panel.hidden) {
+    app.querySelectorAll('[data-limit]').forEach(b => b.classList.toggle('sel', +b.dataset.limit === S.maxPlayers));
+    const over = S.maxPlayers && room.used > S.maxPlayers;
+    app.querySelector('#limitnote').textContent = `${room.used} seat${room.used === 1 ? '' : 's'} in use${room.held ? `, ${room.held} held for players who dropped out` : ''}.${over ? ' Already over the limit: it only blocks new players.' : ''}`;
+    app.querySelector('#freeheld').hidden = !room.held;
+  }
+}
+
 // Small rooms show everyone as chips. Big rooms show the host, you and a few others, with a searchable, paged full list.
 const CHIP_LIMIT = 12;
 const PAGE_SIZE = 10;
@@ -390,6 +476,7 @@ function pickerHtml() {
 function render() {
   if (!S.channel) return;
   if (!app.querySelector('#stage')) buildShell();
+  if (S.isHost && S.subscribed) enforceLimit();
   const ps = players();
   const g = GAMES[S.game];
   const stage = app.querySelector('#stage');
@@ -408,6 +495,7 @@ function render() {
   // Always show people their own name, as everyone else sees it.
   app.querySelector('#whoami').innerHTML = `${S.isHost ? '👑' : '👤'} You are <b>${esc(S.name)}</b>`;
   app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed;
+  renderTotals(ps);
   renderPlayers(ps);
   if (S.seen.size && ps.some(p => !S.seen.has(p.id) && p.id !== S.me)) sfx('blip');
   ps.forEach(p => S.seen.add(p.id));
