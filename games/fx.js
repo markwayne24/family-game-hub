@@ -101,6 +101,86 @@ const SOUNDS = {
   lose: () => [392, 330, 262].forEach((f, i) => tone(f, 0.3, { delay: i * 0.16, type: 'triangle' })),
 };
 
+// A short burst of filtered noise (wind, claws, gasps).
+function noise(dur, { gain = 0.1, delay = 0, freq = 1000, to = null, q = 1, type = 'bandpass' } = {}) {
+  const t0 = audio.currentTime + delay;
+  const n = Math.floor(audio.sampleRate * dur);
+  const buf = audio.createBuffer(1, n, audio.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+  const src = audio.createBufferSource();
+  src.buffer = buf;
+  const f = audio.createBiquadFilter();
+  f.type = type; f.Q.value = q;
+  f.frequency.setValueAtTime(freq, t0);
+  if (to) f.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+  const amp = audio.createGain();
+  amp.gain.setValueAtTime(0.0001, t0);
+  amp.gain.exponentialRampToValueAtTime(gain, t0 + dur * 0.15);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  src.connect(f).connect(amp).connect(audio.destination);
+  src.start(t0);
+}
+
+// A wolf howl: a wobbling note that climbs, holds, then sinks.
+function howl(gain = 0.12, len = 2.2) {
+  const t0 = audio.currentTime;
+  const osc = audio.createOscillator();
+  const lp = audio.createBiquadFilter();
+  const amp = audio.createGain();
+  const lfo = audio.createOscillator();
+  const lfoAmp = audio.createGain();
+  osc.type = 'sawtooth';
+  lp.type = 'lowpass'; lp.frequency.value = 900;
+  osc.frequency.setValueAtTime(260, t0);
+  osc.frequency.exponentialRampToValueAtTime(640, t0 + len * 0.35);
+  osc.frequency.setValueAtTime(640, t0 + len * 0.6);
+  osc.frequency.exponentialRampToValueAtTime(360, t0 + len);
+  lfo.frequency.value = 6; lfoAmp.gain.value = 14;
+  lfo.connect(lfoAmp).connect(osc.frequency);
+  amp.gain.setValueAtTime(0.0001, t0);
+  amp.gain.exponentialRampToValueAtTime(gain, t0 + 0.4);
+  amp.gain.setValueAtTime(gain, t0 + len * 0.6);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+  osc.connect(lp).connect(amp).connect(audio.destination);
+  osc.start(t0); lfo.start(t0);
+  osc.stop(t0 + len + 0.05); lfo.stop(t0 + len + 0.05);
+}
+
+// Low rumbling growl: a saw wave chopped by a fast tremolo.
+function growl(gain = 0.16, len = 0.8) {
+  const t0 = audio.currentTime;
+  const osc = audio.createOscillator();
+  const lp = audio.createBiquadFilter();
+  const amp = audio.createGain();
+  const lfo = audio.createOscillator();
+  const lfoAmp = audio.createGain();
+  osc.type = 'sawtooth'; osc.frequency.setValueAtTime(75, t0); osc.frequency.linearRampToValueAtTime(55, t0 + len);
+  lp.type = 'lowpass'; lp.frequency.value = 400;
+  lfo.frequency.value = 30; lfoAmp.gain.value = gain * 0.6;
+  amp.gain.setValueAtTime(gain * 0.5, t0);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
+  lfo.connect(lfoAmp).connect(amp.gain);
+  osc.connect(lp).connect(amp).connect(audio.destination);
+  osc.start(t0); lfo.start(t0);
+  osc.stop(t0 + len + 0.05); lfo.stop(t0 + len + 0.05);
+}
+
+const SOUNDS_SPOOKY = {
+  howl: () => howl(0.12, 2.2),
+  farhowl: () => howl(0.04, 2.6),
+  growl: () => growl(),
+  slash: () => { [0, 0.07, 0.14].forEach(d => noise(0.16, { delay: d, freq: 5000, to: 1500, q: 2, gain: 0.2 })); tone(110, 0.3, { to: 40, gain: 0.2, delay: 0.1 }); },
+  heartbeat: () => { tone(72, 0.13, { to: 40, gain: 0.28 }); tone(64, 0.16, { to: 38, gain: 0.22, delay: 0.17 }); },
+  cricket: () => [0, 0.07, 0.14].forEach(d => tone(4300, 0.035, { type: 'square', gain: 0.012, delay: d })),
+  wind: () => noise(2.4, { freq: 300, to: 700, q: 0.7, gain: 0.05 }),
+  gasp: () => noise(0.35, { freq: 2500, q: 0.8, gain: 0.08 }),
+  rooster: () => [[523, 0.12, 0], [784, 0.1, 0.14], [659, 0.12, 0.28], [988, 0.45, 0.44]].forEach(([f, d, at]) => tone(f, d, { type: 'triangle', delay: at, gain: 0.1 })),
+  shield: () => { tone(1046, 0.5, { gain: 0.09 }); tone(1568, 0.7, { gain: 0.07, delay: 0.12 }); },
+  mystic: () => { tone(494, 0.7, { to: 740, gain: 0.07 }); tone(740, 0.9, { to: 988, gain: 0.05, delay: 0.15 }); },
+};
+Object.assign(SOUNDS, SOUNDS_SPOOKY);
+
 export function sfx(name) {
   if (muted) return;
   try {

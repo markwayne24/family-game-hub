@@ -1,4 +1,5 @@
 import { fresh, memo, confetti, sfx } from './fx.js';
+import { nightSky, dawnCinematic } from './werewolf-fx.js';
 
 /* ---------- roles and settings ---------- */
 
@@ -310,6 +311,12 @@ export const werewolf = {
         if (!el.isConnected) { clearInterval(d.tick); d.tick = null; return; }
         const at = d.at;
         const left = at ? Math.max(0, at - Date.now()) : 0;
+        d.n = (d.n ?? 0) + 1;
+        if (d.s.phase === 'night') {
+          if (at && left <= 10000 && d.n % 2 === 0) sfx('heartbeat'); // the last ten seconds beat like a heart
+          else if (d.n % 5 === 0) sfx(Math.random() < 0.2 ? 'wind' : 'cricket');
+          if (d.n % 40 === 0) sfx('farhowl');
+        } else if (d.s.phase === 'vote' && at && left <= 10000 && d.n % 2 === 0) sfx('tick');
         const t = el.querySelector('#timer');
         if (t) t.textContent = `${Math.ceil(left / 1000)}s`;
         const bar = el.querySelector('.bar i');
@@ -338,7 +345,13 @@ export const werewolf = {
 
     const prevPhase = memo(el, 'phase', s.phase);
     if (prevPhase !== undefined && prevPhase !== s.phase) {
-      sfx(s.phase === 'night' ? 'whoosh' : s.phase === 'dawn' ? 'ding' : s.phase === 'vote' ? 'flip' : 'whoosh');
+      if (s.phase === 'night') { sfx('howl'); }
+      else if (s.phase === 'dawn') {
+        const gone = s.dawn?.died?.[0];
+        dawnCinematic(gone ? { name: ui.nameOf(gone), role: s.revealed[gone] ? R(s.revealed[gone]).name : '' } : null);
+      }
+      else if (s.phase === 'result') sfx(s.tally?.eliminated ? 'thud' : 'blip');
+      else sfx(s.phase === 'vote' ? 'flip' : 'whoosh');
     }
 
     const players = chips => `<div class="chips ww-players">${chips}</div>`;
@@ -449,7 +462,7 @@ export const werewolf = {
           ? '<h3>🩺 Protection set</h3><p class="muted">Now wait for the morning.</p>'
           : `<h3>🩺 Who do you protect tonight?</h3><p class="muted">Can be yourself, but not the same person as last night.</p>${targets(aliveIdsOf(s), 'data-doc', null, me.lastProtect ? [me.lastProtect] : [])}`;
       } else act = '<div class="ww-sleep">😴<p>Eyes closed. The night is quiet…</p></div>';
-      body = `<h3>🌙 Night ${s.round}</h3>${roleCard()}${act}${timer}${isMod ? '' : ''}`;
+      body = `${nightSky()}<h3>🌙 Night ${s.round}</h3>${roleCard()}${act}${timer}`;
     }
 
     /* ---------------- dawn ---------------- */
@@ -505,6 +518,7 @@ export const werewolf = {
     else if (s.phase === 'end') {
       if (fresh(el, 'end', s.history.length)) {
         const mine = role ? R(role).team === s.winner : null;
+        if (s.winner === 'wolves') sfx('howl');
         if (mine === false) sfx('lose'); else { confetti(); sfx('win'); }
       }
       body = `<h3 class="status-pop">${s.winner === 'wolves' ? '🐺 The werewolves win!' : '🏡 The village wins!'}</h3>
@@ -534,10 +548,10 @@ export const werewolf = {
     on('#start', () => ui.act('start'));
     on('#peek', () => { d.show = true; this.render(el, d.s, ui); });
     on('#hide', () => { d.show = false; this.render(el, d.s, ui); });
-    on('[data-wolf]', b => ui.act('wolf', { target: b.dataset.wolf }));
-    on('[data-seer]', b => ui.act('seer', { target: b.dataset.seer }));
-    on('[data-doc]', b => ui.act('doctor', { target: b.dataset.doc }));
-    on('[data-shoot]', b => ui.act('shoot', { target: b.dataset.shoot }));
+    on('[data-wolf]', b => sfx('blip') || ui.act('wolf', { target: b.dataset.wolf }));
+    on('[data-seer]', b => sfx('blip') || ui.act('seer', { target: b.dataset.seer }));
+    on('[data-doc]', b => sfx('blip') || ui.act('doctor', { target: b.dataset.doc }));
+    on('[data-shoot]', b => sfx('slash') || ui.act('shoot', { target: b.dataset.shoot }));
     on('[data-vote]', b => { d.myVote = b.dataset.vote; ui.act('vote', { target: b.dataset.vote }); });
     on('#ready', () => ui.act('ready'));
     on('#adv', () => ui.act('advance'));

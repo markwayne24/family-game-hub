@@ -41,3 +41,5 @@ Needs 5+ players. The host picks who runs the game:
 - **A player moderates** – the host picks one player to moderate; the host plays.
 
 Roles: Werewolf, Villager, Seer, Doctor, optional Hunter. Wolves count is automatic or fixed; the host can toggle roles, whether the dead's roles are shown, and whether the dead can see everyone's roles. Roles and night actions are sent encrypted to each player.
+
+Werewolf atmosphere: the night screen has a moonlit sky with a howling wolf, bats and twinkling stars, crickets and wind, a far-off howl, and a heartbeat in the last 10 seconds. Each morning every phone plays the same short scene (tap to skip): a wolf lunges out of the dark and either claws the victim's name or is driven back. The scene is identical on every device and the night-action buttons all make the same quiet sound, so nothing gives away who the wolves are. Respects the sound mute button and "reduce motion".
