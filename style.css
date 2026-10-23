@@ -789,3 +789,8 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 /* Nothing may widen the page: on phones a transient overflow (a scaling animation) widens the layout viewport and pushes full-screen scenes off-centre */
 #app{overflow-x:clip}
 .imp-hero{animation:fadeUp .5s ease both}
+
+/* Impostor: the secret stays hidden until tapped */
+.imp-peek{display:block;width:100%;margin:12px 0;padding:18px 14px;border-radius:18px;background:var(--card);color:var(--accent);border:2px dashed var(--accent);font-size:1.1rem;font-weight:700;line-height:1.35}
+.imp-peek small{display:block;margin-top:4px;font-weight:500;color:var(--mute)}
+.imp-hidebtn{display:block;width:100%;min-height:46px;margin:0 0 12px}

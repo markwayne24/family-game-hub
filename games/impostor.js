@@ -140,6 +140,8 @@ export const impostor = {
 
   render(el, s, ui) {
     el.classList.add('impstage'); // the screen is made of separate cards, so the stage itself stays plain
+    el._s = s; el._ui = ui;
+    const redraw = () => { if (el.isConnected && el.classList.contains('impstage')) this.render(el, el._s, el._ui); }; // always with the newest data
     const keep = el.querySelector('input');
     const typed = keep?.value ?? '';
     const focused = keep && document.activeElement === keep;
@@ -214,17 +216,14 @@ export const impostor = {
         ${ui.isHost ? `${panel('🎯 Words for the next round', `<details class="imp-nextcat" ${el._catOpen ? 'open' : ''}><summary>${cats.length ? cats.map(ui.esc).join(', ') : 'Everything'} · tap to change</summary>${catChips(false)}</details>`)}<div class="imp-bar"><button id="start">▶ Next round</button></div>` : ''}`;
     } else {
       const me = ui.priv;
-      const newRole = !!me && fresh(el, 'role', s.round);
-      if (newRole) {
-        sfx('whoosh');
-        later(500, () => sfx(me.role === 'impostor' ? 'growl' : 'ding'));
-        if (me.role === 'impostor') later(1100, () => sfx('heartbeat'));
-        try { navigator.vibrate?.(me.role === 'impostor' ? [120, 80, 120] : 60); } catch { /* not supported */ }
-      }
+      // Playing in the same room: the secret stays hidden until you tap, and looks the same for everyone, so nobody can tell who the impostor is.
+      if (fresh(el, 'roleRound', s.round)) { el._show = false; clearTimeout(el._hideT); sfx('whoosh'); }
+      const real = !me ? '' : me.role === 'impostor'
+        ? `<div class="role bad imp-card imp-evil flip">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`
+        : `<div class="role imp-card imp-crew flip">Your secret word<br><b class="imp-word">${ui.esc(me.word)}</b><br><small>Category: ${ui.esc(s.cat)}. Find the impostor.</small></div>`;
       const card = !me ? '<div class="banner">You joined mid-round. Watching this one!</div>'
-        : me.role === 'impostor'
-          ? `<div class="role bad imp-card imp-evil ${newRole ? 'flip' : ''}">🕵️ You are the IMPOSTOR<br><small>Category: ${ui.esc(s.cat)}. Blend in!</small></div>`
-          : `<div class="role imp-card imp-crew ${newRole ? 'flip' : ''}">Your secret word<br><b class="imp-word">${ui.esc(me.word)}</b><br><small>Category: ${ui.esc(s.cat)}. Find the impostor.</small></div>`;
+        : el._show ? `${real}<button class="ghost imp-hidebtn" id="hideRole">🙈 Hide my secret</button>`
+        : '<button class="imp-peek" id="peekRole">👁 Tap to see your secret<br><small>Keep your screen private. It hides again after a few seconds.</small></button>';
       const nClues = memo(el, 'clues', s.clues.length);
       const newClue = nClues !== undefined && s.clues.length > nClues;
       if (newClue) sfx('pop');
@@ -236,7 +235,7 @@ export const impostor = {
         el._curTurn = key;
         if (fresh(el, 'turn', key)) {
           // The first turn waits a moment so people can see their role card first. Later turns show straight away.
-          later(s.clueIdx === 0 ? 2600 : 0, () => {
+          later(s.clueIdx === 0 ? 1200 : 0, () => {
             if (!el.isConnected || el._curTurn !== key) return; // the game has moved on
             turnCinematic({ name: ui.nameOf(turn), mine: myTurn, n: s.clueIdx + 1, total: s.order.length, onDone: () => { if (myTurn) el.querySelector('#cf input')?.focus(); } });
           });
@@ -291,6 +290,12 @@ export const impostor = {
     el.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { sfx('vote'); el._mine = true; setTimeout(() => { el._mine = false; }, 1500); ui.act('vote', { target: b.dataset.v }); });
     el.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { sfx('pop'); ui.act('config', b.dataset.cat === '__all' ? { all: true } : { cat: b.dataset.cat }); }));
     el.querySelector('.imp-nextcat')?.addEventListener('toggle', e => { el._catOpen = e.target.open; });
+    el.querySelector('#peekRole')?.addEventListener('click', () => {
+      el._show = true; sfx('flip');
+      clearTimeout(el._hideT); el._hideT = setTimeout(() => { el._show = false; redraw(); }, 10000);
+      redraw();
+    });
+    el.querySelector('#hideRole')?.addEventListener('click', () => { el._show = false; clearTimeout(el._hideT); sfx('flip'); redraw(); });
     el.querySelector('#start')?.addEventListener('click', () => ui.act('start'));
     el.querySelector('#skipclue')?.addEventListener('click', () => ui.act('skipclue'));
     el.querySelector('#endvote')?.addEventListener('click', () => ui.act('endvote'));
