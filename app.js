@@ -168,30 +168,39 @@ const catalogHtml = () => `<section class="card">
     <details class="howto"><summary>❓ How do the games work?</summary>${Object.values(GAMES).map(x => `<details><summary>${x.emoji} ${esc(x.name)}</summary>${howtoHtml(x)}</details>`).join('')}</details>
   </section>`;
 
+// Top of the signed-in home: who you are and a clear way out.
+const accountBarHtml = user => `<div class="account"><span class="muted">Signed in as</span> <b>${esc(user.email || 'your account')}</b><button class="ghost small" id="out">Sign out</button></div>`;
+async function signOut() {
+  await sb.auth.signOut();
+  history.replaceState(null, '', location.pathname);
+  loginScreen();
+}
+
 async function hostHome(user, msg = '') {
   S.me = user.id;
   let { data: row } = await sb.from('hosts').select('user_id').maybeSingle();
   if (!row) {
     const { data: claimed } = await sb.rpc('claim_host');
     if (!claimed) {
-      app.innerHTML = `<h1>🎲 ${BRAND}</h1>
-        <div class="card"><p class="err">Could not set up hosting for this account. Try signing out and in again.</p><button class="ghost" id="out">Sign out</button></div>
+      app.innerHTML = `${accountBarHtml(user)}<h1>🎲 ${BRAND}</h1>
+        <div class="card"><p class="err">Could not set up hosting for this account. Try signing out and in again.</p></div>
         ${joinCodeHtml()}${catalogHtml()}`;
       bindJoinCode();
-      app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
+      app.querySelector('#out').onclick = signOut;
       return;
     }
   }
   app.innerHTML = `
+    ${accountBarHtml(user)}
     <h1>🎲 ${BRAND}</h1>
     <div class="card">
       <p>Your name in the room</p>
       <input id="name" value="${esc(store.get('hubName') || 'Host')}" maxlength="20">
       <p class="err">${esc(msg)}</p>
-      <div class="row"><button id="create">Create a room</button><button class="ghost" id="out">Sign out</button></div>
+      <div class="row"><button id="create">Create a room</button></div>
     </div>
     ${catalogHtml()}`;
-  app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
+  app.querySelector('#out').onclick = signOut;
   app.querySelector('#create').onclick = async () => {
     const name = app.querySelector('#name').value.trim() || 'Host';
     store.set('hubName', name);
@@ -411,6 +420,7 @@ function buildShell() {
           <button class="ghost small" id="letin" hidden>Let the watchers join now</button>
         </div>
         <button class="ghost danger wide" id="close">Close room</button>
+        <button class="ghost wide" id="signout">Sign out</button>
       </div>
       <div id="guestmenu"><button class="ghost wide" id="leave">Leave room</button></div>
     </div>
@@ -440,7 +450,7 @@ function buildShell() {
   app.querySelector('#gear').onclick = () => setMenu(!S.menuOpen);
   app.querySelector('#menuclose').onclick = () => setMenu(false);
   app.querySelector('#menuback').onclick = () => setMenu(false);
-  for (const id of ['#lobby', '#close', '#leave']) app.querySelector(id).addEventListener('click', () => setMenu(false));
+  for (const id of ['#lobby', '#close', '#leave', '#signout']) app.querySelector(id).addEventListener('click', () => setMenu(false));
   document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.menuOpen) setMenu(false); });
   app.querySelectorAll('[data-limit]').forEach(b => b.onclick = () => setLimit(+b.dataset.limit));
   app.querySelectorAll('[data-late]').forEach(b => b.onclick = () => setLate(b.dataset.late));
@@ -457,7 +467,8 @@ function buildShell() {
   const mute = app.querySelector('#mute');
   mute.textContent = isMuted() ? '🔇' : '🔊';
   mute.onclick = () => { setMuted(!isMuted()); mute.textContent = isMuted() ? '🔇' : '🔊'; sfx('pop'); };
-  app.querySelector('#close').onclick = closeRoom;
+  app.querySelector('#close').onclick = () => closeRoom();
+  app.querySelector('#signout').onclick = () => closeRoom({ signOut: true });
   app.querySelector('#leave').onclick = leaveRoom;
   // On phones, open the native share sheet (WhatsApp, Messenger, ...); elsewhere copy the link.
   const copy = app.querySelector('#copy');
@@ -570,8 +581,10 @@ function leaveRoom() {
   joinScreen(code);
 }
 
-async function closeRoom() {
-  if (!confirm('Close this room for everyone? Players will be disconnected.')) return;
+// Signing out from inside a room closes it first: the host's phone runs the game, so the room can't outlive the host.
+async function closeRoom({ signOut: andSignOut = false } = {}) {
+  const ask = andSignOut ? 'Sign out? This closes the room for everyone and disconnects the players.' : 'Close this room for everyone? Players will be disconnected.';
+  if (!confirm(ask)) return;
   const code = S.code;
   S.channel.send({ type: 'broadcast', event: 'closed', payload: {} });
   await sb.from('rooms').delete().eq('code', code);
@@ -579,6 +592,7 @@ async function closeRoom() {
   store.set(`hubBanned:${code}`, '[]');
   stopChannel();
   history.replaceState(null, '', location.pathname);
+  if (andSignOut) return signOut();
   const { data: { user } } = await sb.auth.getUser();
   user ? hostHome(user) : loginScreen();
 }
