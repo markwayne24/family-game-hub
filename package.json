@@ -1,5 +1,5 @@
 {
   "private": true,
   "type": "module",
-  "scripts": { "test": "node tests/games.test.mjs && node tests/werewolf.test.mjs && node tests/bunutan.test.mjs" }
+  "scripts": { "test": "node tests/games.test.mjs && node tests/werewolf.test.mjs && node tests/bunutan.test.mjs && node tests/secret.test.mjs" }
 }
