@@ -310,6 +310,12 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
   assert.equal(step(f3, e0, b2, 'share', { round: 1 }).shared[0].by, b2); assert.equal(step(f3, e0, a, 'share', { round: 1 }).shared[0].by, a);
   // (f) a round nobody scored has no clue to share
   const none = step(startRound(), { ...e0, now: 3000 }, 'h', 'endRound'); assert.equal(step(none, e0, none.players[0], 'share', { round: 1 }), none);
+  // (h) a player sitting out for a wrong accusation still holds their team's clue and can share it; a late joiner cannot
+  { let s5 = startRound(); const w5 = s5.players.find(id => s5.team[id] !== s5.team[s5.millionaire]); let g5 = step(winnersWith(s5, w5), { ...e0, now: 60000 }, 'h', 'endRound');
+    const who = g5.clues[0].to.find(id => id !== g5.millionaire && id !== w5) ?? w5; const wrongTarget = g5.players.find(id => id !== who && id !== g5.millionaire);
+    g5 = step(g5, e0, who, 'accuse', { target: wrongTarget }); assert.ok(g5.jailed[who], 'the accuser is jailed');
+    assert.equal(step(g5, e0, who, 'share', { round: 1 }).shared.length, 1, 'a jailed holder can still share');
+    assert.equal(step(g5, e0, 'late-joiner', 'share', { round: 1 }), g5); }
   // (g) not in the waiting room or after the game; and every round's clue is its own
   assert.equal(step(startRound(), e0, 'p1', 'share', { round: 1 }).shared.length, 0);
   let s4 = startRound(); const x = s4.players.find(id => s4.team[id] === 0); let g4 = step(play(s4, e0, { [x]: [['kitchen', true, 2000]] }), { ...e0, now: 60000 }, 'h', 'endRound');
