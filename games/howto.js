@@ -68,6 +68,7 @@ export const HOWTO = {
       'Everyone who opens the host\'s link joins the draw. The host waits until all the players are here, then taps "Draw the names".',
       'Everyone sees the names being mixed. Then each person taps their own gift box to open it and watch the names spin until one lands.',
       'Your name is hidden again after a few seconds. Tap "Tap to see who you drew" any time to look again, even if you leave and come back.',
+      'Even if the host closes the room, your draw stays saved on this phone. Open the link again and tap "Open my gift".',
       'Tap "Save as image" to get a picture of your name, with the event details, so you don\'t need a screenshot.',
       'Buy a gift for the person you drew and keep it a secret until the exchange!',
     ],

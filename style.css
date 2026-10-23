@@ -968,3 +968,10 @@ button.google{display:flex;align-items:center;justify-content:center;gap:10px;wi
 @media (prefers-reduced-motion:reduce){.bn-head *,.bn-gift,.bn-box-gift,.bn-who,.bn-panel{animation:none!important}}
 .bnm-btns.two{grid-template-columns:1fr 1fr}
 .bnm-close{width:100%;margin-top:8px;min-height:46px}
+
+/* saved-on-this-device list (keepsakes) */
+.keeps .keep{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line,#ffffff22)}
+.keeps .keep:first-of-type{border-top:0}
+.keeps .keep button{flex:none;width:auto}
+.keepview .bn-card-name{word-break:break-word}
+.bn-saved{margin:10px 0 0;font-size:.85rem}

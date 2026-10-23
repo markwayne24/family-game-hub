@@ -1,3 +1,4 @@
+import { addKeep } from './keepsakes.js';
 import { fresh, memo, confetti, sfx } from './fx.js';
 import { shuffleCinematic, openGiftCinematic, makeCardImage, saveImage, avatar } from './bunutan-fx.js';
 
@@ -49,7 +50,7 @@ export const bunutan = {
     if (opts?.memory?.saved) return opts.memory.saved;
     return {
       phase: 'lobby', title: 'Bunutan', budget: '', date: '', note: '', hostIn: true, noSwap: true, avoid: [],
-      drawers: [], names: {}, assign: {}, revealed: {}, error: null, round: 0,
+      drawers: [], names: {}, assign: {}, revealed: {}, saved: {}, error: null, round: 0,
     };
   },
   remember: s => ({ saved: s }),
@@ -87,7 +88,7 @@ export const bunutan = {
         const assign = makeDraw(ids, { avoid, noSwap: s.noSwap });
         if (!assign) return { ...s, error: 'Those rules can\'t all be met. Try removing a "keep apart" pair or turning off "no swaps".' };
         return {
-          ...s, phase: 'drawn', drawers: ids, assign, revealed: {}, error: null, round: s.round + 1,
+          ...s, phase: 'drawn', drawers: ids, assign, revealed: {}, saved: {}, error: null, round: s.round + 1,
           names: Object.fromEntries(env.players.filter(p => ids.includes(p.id)).map(p => [p.id, p.name])),
         };
       }
@@ -96,6 +97,8 @@ export const bunutan = {
 
     // after the draw: each person opens their own gift once; the host can only start over
     if (a.type === 'reveal' && s.drawers.includes(a.from) && !s.revealed[a.from]) return { ...s, revealed: { ...s.revealed, [a.from]: true } };
+    // a person tells the host they saved (downloaded or shared) their picture; only the fact is kept, never the name
+    if (a.type === 'saved' && s.drawers.includes(a.from) && ['share', 'download'].includes(a.data?.how)) return { ...s, saved: { ...s.saved, [a.from]: a.data.how } };
     return s;
   },
 
@@ -120,6 +123,10 @@ export const bunutan = {
     const nm = id => ui.nameOf(id) === '(waiting)' ? (s.names?.[id] ?? '?') : ui.nameOf(id);
     const panel = (title, inner, cls = '') => `<section class="bn-panel ${cls}">${title ? `<h3 class="bn-ph">${title}</h3>` : ''}${inner}</section>`;
     const me = ui.priv;
+    // keep a copy on this person's own device so they can look again even after the host has gone
+    if (s.phase === 'drawn' && me?.toName && ui.room && fresh(el, 'keep', `${ui.room}:${s.round}:${!!s.revealed[ui.me]}`)) {
+      addKeep({ room: ui.room, game: 'bunutan', round: s.round, title: s.title, toName: me.toName, names: s.drawers.map(id => s.names[id]), budget: s.budget, date: s.date, note: s.note, fromName: nm(ui.me), opened: !!s.revealed[ui.me] || undefined });
+    }
     const drawer = s.drawers.includes(ui.me);
 
     // remember what is being typed so a new person joining doesn't wipe it
@@ -177,7 +184,8 @@ export const bunutan = {
       const mineSeen = !!s.revealed[ui.me];
       const progress = panel(`🎁 Who has drawn <span class="bn-count">${nRev}/${s.drawers.length}</span>`,
         `<div class="bn-bar-track"><i style="width:${s.drawers.length ? (nRev / s.drawers.length) * 100 : 0}%"></i></div>
-         <div class="bn-whos">${s.drawers.map(id => `<span class="bn-who ${s.revealed[id] ? 'done' : ''} ${id === ui.me ? 'me' : ''}">${avatar(nm(id))}<b>${esc(nm(id))}</b><small>${s.revealed[id] ? '✅ drawn' : '⏳'}</small></span>`).join('')}</div>
+         <div class="bn-whos">${s.drawers.map(id => `<span class="bn-who ${s.revealed[id] ? 'done' : ''} ${id === ui.me ? 'me' : ''}">${avatar(nm(id))}<b>${esc(nm(id))}</b><small>${s.revealed[id] ? `✅ drawn${s.saved?.[id] ? (s.saved[id] === 'share' ? ' · 📤' : ' · 📥') : ''}` : '⏳'}</small></span>`).join('')}</div>
+         <p class="muted bn-saved">📷 ${Object.keys(s.saved ?? {}).length}/${s.drawers.length} saved their picture (📥 downloaded · 📤 shared)</p>
          ${nRev === s.drawers.length ? '<p class="bn-alldone">🎉 Everyone has drawn their name!</p>' : ''}`);
       let mine = '';
       if (!drawer) {
@@ -227,7 +235,7 @@ export const bunutan = {
       b.disabled = true; const label = b.textContent; b.textContent = 'Making your picture…';
       try {
         const blob = await makeCardImage({ title: s.title, toName: me.toName, fromName: nm(ui.me), budget: s.budget, date: s.date, note: s.note });
-        await saveImage(blob, `bunutan-${me.toName.replace(/[^\w-]+/g, '_') || 'name'}.png`);
+        await saveImage(blob, `bunutan-${me.toName.replace(/[^\w-]+/g, '_') || 'name'}.png`, { onSaved: how => ui.act('saved', { how }) });
         sfx('ding');
       } catch (e) { console.warn(e); }
       b.disabled = false; b.textContent = label;

@@ -153,7 +153,7 @@ export async function makeCardImage({ title, toName, fromName, budget, date, not
 }
 
 // Show the picture (so it can also be saved by long-pressing it) and offer to share or download it.
-export function saveImage(blob, filename) {
+export function saveImage(blob, filename, { onSaved } = {}) {
   return new Promise(resolve => {
     const url = URL.createObjectURL(blob);
     const file = new File([blob], filename, { type: 'image/png' });
@@ -167,10 +167,11 @@ export function saveImage(blob, filename) {
     m.querySelector('#bnmClose').addEventListener('click', close);
     m.addEventListener('click', e => { if (e.target === m) close(); });
     m.querySelector('#bnmShare')?.addEventListener('click', async () => {
-      try { await navigator.share({ files: [file], title: 'My bunutan', text: 'Shh! My bunutan 🎁' }); } catch (e) { if (e?.name !== 'AbortError') console.warn(e); }
+      try { await navigator.share({ files: [file], title: 'My bunutan', text: 'Shh! My bunutan 🎁' }); onSaved?.('share'); } catch (e) { if (e?.name !== 'AbortError') console.warn(e); }
     });
     m.querySelector('#bnmDl').addEventListener('click', () => {
       const a = document.createElement('a'); a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
+      onSaved?.('download');
       sfx('ding');
     });
     document.body.append(m);

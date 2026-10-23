@@ -5,6 +5,7 @@ import { META, TYPES, playersLabel, fitsGroup } from './games/meta.js';
 import { GAMES } from './games/index.js';
 import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
+import { keepsFor, keepsHtml, wireKeeps } from './games/keepsakes.js';
 import { resolveName } from './games/names.js';
 import { search, paginate } from './games/list.js';
 import { admit, summary, freeHeld, RESERVE_MS } from './games/capacity.js';
@@ -259,7 +260,9 @@ async function joinScreen(code, msg = '') {
   if (!session) await sb.auth.signInAnonymously();
   const { data: ok } = await sb.rpc('room_exists', { room_code: code });
   if (!ok) {
-    app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
+    const keeps = keepsFor(code);
+    app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p>${keeps.length ? '<p class="muted">It may have been closed, but what you drew is still saved on this phone.</p>' : ''}</div>${keepsHtml(keeps)}`;
+    wireKeeps(app, keeps);
     return;
   }
   if ((JSON.parse(store.get('hubKicked') || '[]')).includes(code)) {
@@ -539,7 +542,9 @@ function removedScreen(message, kicked = false) {
   if (kicked) store.set('hubKicked', JSON.stringify([...new Set([...JSON.parse(store.get('hubKicked') || '[]'), S.code])]));
   store.set('hubLast', 'null');
   stopChannel();
-  app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p>${esc(message)}</p></div>`;
+  const keeps = kicked ? [] : keepsFor(S.code);
+  app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p>${esc(message)}</p></div>${keepsHtml(keeps)}`;
+  wireKeeps(app, keeps);
 }
 
 function fullScreen(max) {
@@ -774,7 +779,10 @@ function render() {
   const renamed = S.name !== S.baseName ? `<div class="banner">Someone already has the name “${esc(S.baseName)}”, so you appear as “${esc(S.name)}”. The number lets the host tell you apart.</div>` : '';
   // Always show people their own name, as everyone else sees it.
   app.querySelector('#whoami').innerHTML = `${S.isHost ? '👑' : '👤'} You are <b>${esc(S.name)}</b>`;
-  app.querySelector('#banner').innerHTML = (ps.some(p => p.host) ? '' : '<div class="banner">The host is offline. Waiting for them to come back…</div>') + renamed + watchNote;
+  const hostGone = !S.isHost && !ps.some(p => p.host);
+  const keeps = hostGone ? keepsFor(S.code) : [];
+  app.querySelector('#banner').innerHTML = (hostGone ? '<div class="banner">The host is offline. Waiting for them to come back…</div>' : '') + renamed + watchNote + keepsHtml(keeps, '🎁 Your saved draw');
+  wireKeeps(app.querySelector('#banner'), keeps);
   renderTotals(ps);
   renderPlayers(ps);
   if (S.seen.size && ps.some(p => !S.seen.has(p.id) && p.id !== S.me)) sfx('blip');
@@ -828,7 +836,7 @@ function render() {
   stage.classList.toggle('spectating', spectator);
   if (g && S.state) {
     // `raw` is the host's own full game state; it never leaves the host's browser, so games can keep host-only info there.
-    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps.filter(p => !watching.has(p.id)), watching: ps.filter(p => watching.has(p.id)), spectator, nameOf, act, esc, priv: S.priv, raw: S.isHost ? S.raw : null });
+    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps.filter(p => !watching.has(p.id)), watching: ps.filter(p => watching.has(p.id)), spectator, nameOf, act, esc, room: S.code, priv: S.priv, raw: S.isHost ? S.raw : null });
   }
 }
 

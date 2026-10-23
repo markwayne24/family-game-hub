@@ -92,4 +92,12 @@ for (let k = 0; k < 100; k++) {
   assert.deepEqual(Object.values(p).map(q => q.to).sort(), ids(7).sort());
   for (const [id, q] of Object.entries(p)) { assert.notEqual(q.to, id); assert.notEqual(p[q.to].to, id); }
 }
+// the host can tell who saved their picture (only the fact, never the name)
+const sv = step(d, e, 'p1', 'saved', { how: 'download' }); assert.deepEqual(sv.saved, { p1: 'download' });
+assert.deepEqual(step(sv, e, 'p2', 'saved', { how: 'share' }).saved, { p1: 'download', p2: 'share' });
+assert.deepEqual(step(d, e, 'stranger', 'saved', { how: 'share' }).saved, {});
+assert.deepEqual(step(d, e, 'p1', 'saved', { how: 'evil' }).saved, {});
+assert.ok(!JSON.stringify(B.view(sv)).includes('"assign"'));
+assert.deepEqual(step(sv, e, 'h', 'reset').saved, {});
+assert.deepEqual(step(step(sv, e, 'h', 'reset'), e, 'h', 'draw').saved, {});
 console.log('bunutan tests passed');
