@@ -637,12 +637,14 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 .ic-q{position:absolute;font-style:normal;font-weight:800;color:#ffffff22;font-size:4rem;animation:qFloat 6s ease-in-out infinite}
 .ic-q.q1{left:8%;top:14%}.ic-q.q2{right:10%;top:22%;animation-delay:-1.5s;font-size:6rem}.ic-q.q3{left:14%;bottom:18%;animation-delay:-3s;font-size:5rem}.ic-q.q4{right:16%;bottom:12%;animation-delay:-4s}.ic-q.q5{left:46%;top:6%;animation-delay:-2s;font-size:3rem}
 @keyframes qFloat{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-22px) rotate(10deg)}}
-.ic-det{position:absolute;top:14%;left:50%;margin-left:-3.2rem;font-size:5.5rem;white-space:nowrap;animation:detIn 1.1s .2s cubic-bezier(.2,.8,.3,1) both,detOut .5s 2.5s ease forwards}
-.ic-mag{display:inline-block;margin-left:-.4em;animation:magScan 1.4s ease-in-out infinite}
+.ic-det{display:flex;justify-content:center;align-items:center;font-size:5.5rem;line-height:1;white-space:nowrap;max-height:7rem;overflow:hidden;animation:detIn 1.1s .2s cubic-bezier(.2,.8,.3,1) both,detOut .6s 2.5s ease forwards}
+.ic-man{display:inline-block;animation:detBob 1.2s ease-in-out infinite}
+.ic-mag{display:inline-block;margin-left:-.35em;font-size:.8em;animation:magScan 1.4s ease-in-out infinite}
+@keyframes detBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes detIn{from{transform:translateX(-120vw) rotate(-10deg)}to{transform:none}}
-@keyframes detOut{to{opacity:0;transform:translateY(-30px) scale(.7)}}
+@keyframes detOut{to{opacity:0;max-height:0;transform:scale(.6)}}
 .ic-lines{position:relative;text-align:center;padding:0 18px;width:100%;max-width:560px}
-.ic-was{margin:0;font-size:1.5rem;opacity:0;animation:fadeUp .6s .8s ease forwards}
+.ic-was{margin:.2em 0 0;font-size:1.8rem;font-weight:700;opacity:0;animation:fadeUp .6s .8s ease forwards}
 .ic-name{font-size:clamp(2.6rem,15vw,5.5rem);font-weight:900;line-height:1.05;margin:.15em 0;opacity:0;text-shadow:0 0 30px #ff3b3b,0 0 60px #ff3b3b88;animation:nameSlam .7s 2.6s cubic-bezier(.2,1.6,.4,1) forwards}
 .ic-name.long{font-size:clamp(1.8rem,10vw,3.4rem)}
 @keyframes nameSlam{0%{opacity:0;transform:scale(3)}60%{opacity:1;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
@@ -674,3 +676,138 @@ a.btn{display:inline-block;background:var(--accent);color:#fff;font-weight:600;t
 button.google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
 .divider{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:.9rem;margin:14px 0 6px}
 .divider::before,.divider::after{content:"";flex:1;border-top:1px solid var(--line)}
+
+/* Impostor: whose turn is it */
+.imp-turnfx{position:fixed;inset:0;z-index:58;display:grid;place-content:center;justify-items:center;gap:6px;text-align:center;color:#fff;background:#0b0d22d9;backdrop-filter:blur(2px);cursor:pointer;animation:bbIn .2s ease both}
+.imp-turnfx.out{animation:bbOut .35s ease both}
+.imp-turnfx.mine{background:#1b3a7ae6}
+.tf-mic{font-size:5.5rem;animation:micBounce .7s ease-in-out infinite;position:relative;z-index:1}
+.tf-title{font-size:clamp(2rem,11vw,3.4rem);font-weight:900;letter-spacing:.02em;animation:stamp .55s .1s ease both}
+.imp-turnfx.mine .tf-title{color:#ffd43b;text-shadow:0 0 24px #ffd43b99}
+.tf-sub{font-size:1.15rem;opacity:.9;animation:fadeUp .5s .35s ease both}
+.tf-count{font-size:.85rem;opacity:.6;margin-top:10px}
+.tf-ring{position:absolute;top:50%;left:50%;margin:-21vmin 0 0 -21vmin;width:42vmin;height:42vmin;border-radius:50%;border:4px solid #ffffff55;animation:tfRing 1.1s ease-out infinite}
+.imp-turnfx.mine .tf-ring{border-color:#ffd43baa}
+@keyframes micBounce{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-14px) rotate(6deg)}}
+@keyframes tfRing{0%{transform:scale(.5);opacity:.9}100%{transform:scale(1.8);opacity:0}}
+
+/* Impostor: the score count-up after the reveal */
+.imp-plus{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:99px;background:#d3f9d8;color:#0b5d1e;font-size:.85rem;font-weight:800;animation:pop .5s ease}
+.imp-cine .ic-lines{transition:opacity .5s}
+.imp-cine.scores .ic-lines{opacity:0;pointer-events:none}
+.ic-scores{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:0 16px;max-width:560px;margin:0 auto;opacity:0;pointer-events:none;transition:opacity .5s}
+.imp-cine.scores .ic-scores{opacity:1}
+.ic-scores h3{text-align:center;font-size:1.7rem;margin:0 0 10px;color:#ffd43b;text-shadow:0 0 18px #ffd43b66}
+
+/* The score card: podium + list (used in the scene and on the result page) */
+.sb{--fg:var(--ink);--mut:var(--mute);--track:var(--line);--ph0:112px;--ph1:86px;--ph2:66px}
+.imp-cine .sb{--fg:#fff;--mut:#ffffffaa;--track:#ffffff22}
+.sb-podium{display:flex;align-items:flex-end;justify-content:center;gap:8px;margin:6px 0 14px}
+.sb-col{flex:1 1 0;max-width:136px;min-width:0;display:flex;flex-direction:column;align-items:center}
+.sb-top{position:relative;text-align:center;max-width:100%;margin-bottom:6px}
+.sb-av{display:inline-grid;place-items:center;width:50px;height:50px;border-radius:50%;background:linear-gradient(135deg,hsl(var(--h) 75% 62%),hsl(calc(var(--h) + 40) 70% 45%));color:#fff;font-weight:800;font-size:1.3rem;border:3px solid #ffffffcc;box-shadow:0 4px 12px #0003;flex:none}
+.sb-col.r0 .sb-av{width:62px;height:62px;font-size:1.6rem;border-color:#ffd43b;box-shadow:0 0 0 3px #ffd43b55,0 0 22px #ffd43baa}
+.sb-crown{position:absolute;top:-24px;left:50%;transform:translateX(-50%) rotate(-8deg);font-size:1.7rem;animation:crownBob 2s ease-in-out infinite}
+@keyframes crownBob{0%,100%{transform:translateX(-50%) rotate(-8deg) translateY(0)}50%{transform:translateX(-50%) rotate(-8deg) translateY(-4px)}}
+.sb-nm{font-weight:700;color:var(--fg);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:100%;margin-top:4px}
+.sb-col.me .sb-nm,.sb-row.me .sb-nm{color:#e8590c}
+.imp-cine .sb-col.me .sb-nm,.imp-cine .sb-row.me .sb-nm{color:#ffd43b}
+.sb-ped{width:100%;border-radius:14px 14px 4px 4px;display:flex;flex-direction:column;align-items:center;padding-top:8px;color:#2b2110;box-shadow:inset 0 2px 0 #fff8,0 6px 14px #0002;height:var(--ph)}
+.sb-col.r0 .sb-ped{--ph:var(--ph0);background:linear-gradient(#ffe88a,#f2b32a)}
+.sb-col.r1 .sb-ped{--ph:var(--ph1);background:linear-gradient(#f4f7fb,#b4c0cf)}
+.sb-col.r2 .sb-ped{--ph:var(--ph2);background:linear-gradient(#f6c196,#c97a3e)}
+.sb-medal{font-size:1.35rem;line-height:1}
+.sb-pts{font-size:1.5rem;font-weight:900;font-variant-numeric:tabular-nums;line-height:1.15}
+.sb-plus{position:absolute;top:-6px;right:-20px;font-style:normal;font-weight:900;font-size:.85rem;color:#fff;background:#2f9e44;padding:1px 8px;border-radius:99px;box-shadow:0 2px 8px #2f9e4488}
+.sb-list{display:grid;gap:8px}
+.sb-row{position:relative;display:grid;grid-template-columns:24px 36px minmax(54px,28%) 1fr 34px;align-items:center;gap:8px;padding:8px 10px;border-radius:14px;background:color-mix(in srgb,var(--track) 55%,transparent)}
+.sb-row .sb-av{width:34px;height:34px;font-size:.95rem;border-width:2px}
+.sb-row .sb-nm{margin:0}
+.sb-row .sb-rk{text-align:center;font-weight:800;color:var(--mut)}
+.sb-bar{display:block;height:10px;border-radius:99px;background:var(--track);overflow:hidden}
+.sb-bar i{display:block;height:100%;width:var(--w);border-radius:99px;background:linear-gradient(90deg,#74c0fc,#9775fa)}
+.sb-row .sb-pts{font-size:1.1rem;text-align:right}
+.sb-row .sb-plus{position:absolute;right:-4px;top:-8px}
+.sb-row.me{outline:2px solid #f08c0088}
+.imp-cine .sb-row.me{outline-color:#ffd43b88}
+.sb-none{text-align:center;color:var(--mut);margin:6px 0}
+/* the scene counts everything in */
+.sb.anim .sb-col .sb-top,.sb.anim .sb-row,.sb.anim .sb-plus{opacity:0}
+.sb.anim .sb-ped{height:0;overflow:hidden}
+.imp-cine.scores .sb.anim .sb-col .sb-top{animation:sbDrop .6s calc(var(--d) + .25s) cubic-bezier(.2,1.4,.4,1) forwards}
+.imp-cine.scores .sb.anim .sb-ped{animation:pedUp .8s var(--d) cubic-bezier(.2,.9,.3,1) forwards}
+.imp-cine.scores .sb.anim .sb-row{animation:rowIn .5s var(--d) ease forwards}
+.imp-cine.scores .sb.anim .sb-bar i{animation:barGrow .9s calc(var(--d) + .3s) cubic-bezier(.2,.8,.3,1) both}
+.imp-cine.scores .sb.anim .sb-plus{animation:plusPop .7s var(--p) ease forwards}
+@keyframes sbDrop{from{opacity:0;transform:translateY(-24px) scale(.7)}to{opacity:1;transform:none}}
+@keyframes pedUp{from{height:0}to{height:var(--ph)}}
+@keyframes rowIn{from{opacity:0;transform:translateX(-26px)}to{opacity:1;transform:none}}
+@keyframes barGrow{from{width:0}to{width:var(--w)}}
+@keyframes plusPop{0%{opacity:0;transform:translateY(10px) scale(.4)}60%{opacity:1;transform:translateY(-6px) scale(1.3)}100%{opacity:1;transform:none}}
+@media (min-width:480px){.sb{--ph0:132px;--ph1:100px;--ph2:76px}}
+
+/* Impostor: the result-page score card and the host's category picker */
+.imp-scorecard{background:linear-gradient(160deg,#f3f0ff,#fff7e0);border:1px solid var(--line);border-radius:18px;padding:14px;margin:14px 0}
+.imp-scorecard h3{margin:0 0 8px;text-align:center}
+@media (prefers-color-scheme:dark){.imp-scorecard{background:linear-gradient(160deg,#2a2552,#3a3018)}}
+.imp-cats{display:flex;flex-wrap:wrap;gap:8px;margin:8px 0}
+.imp-cats .chip.pick{min-height:44px;padding:8px 14px}
+.imp-cats .chip.pick[disabled]{opacity:1;cursor:default}
+.imp-bar{position:sticky;bottom:0;z-index:5;margin:16px -16px -16px;padding:12px 16px max(12px,env(safe-area-inset-bottom));background:var(--card);border-top:1px solid var(--line);box-shadow:0 -8px 20px #0001;border-radius:0 0 16px 16px}
+.imp-bar button{width:100%;min-height:50px;font-size:1.05rem}
+.imp-bar p{margin:0 0 8px;text-align:center;font-size:.9rem}
+.imp-lobbyhead{display:flex;align-items:center;gap:10px}
+.sb-podium{margin-top:30px}
+.imp-scorecard h3{margin-bottom:12px}
+
+/* Impostor: a screen made of separate cards */
+#stage.impstage{background:transparent;border:0;padding:0;box-shadow:none;overflow:visible;margin-top:8px}
+.imp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:linear-gradient(135deg,#4c3bd6,#7b5cf0 60%,#a06cf5);color:#fff;border-radius:18px;padding:12px 14px;margin:0 0 12px;box-shadow:0 6px 18px #6c4cf544}
+.imp-title{font-size:1.35rem;font-weight:800}
+.imp-pills{display:flex;gap:6px;flex-wrap:wrap}
+.imp-pill{background:#ffffff2b;border-radius:99px;padding:3px 11px;font-size:.85rem;font-weight:600}
+.imp-panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0;box-shadow:0 2px 10px #0000000a;animation:fadeUp .45s ease both}
+.imp-ph{margin:0 0 10px;font-size:1.05rem}
+.imp .role{margin:12px 0;border-radius:18px;box-shadow:0 2px 10px #0000000a}
+.imp .chat{max-height:200px}
+.imp .chat div{display:flex;align-items:center;gap:6px;margin:4px 0}
+.imp .chat .sb-av{width:24px;height:24px;font-size:.72rem;border-width:1px;box-shadow:none}
+.imp-foot{text-align:center;margin:8px 0 4px}
+.imp-bar{margin:14px -16px 0;border-radius:0}
+.imp-hero{border-radius:22px;padding:22px 16px;text-align:center;color:#fff;margin:12px 0;box-shadow:0 10px 26px #0003;animation:stamp .6s ease both}
+.imp-hero.good{background:linear-gradient(135deg,#2b9348,#55c76d)}
+.imp-hero.bad{background:linear-gradient(135deg,#c2255c,#e8590c)}
+.ih-emoji{font-size:3.2rem;line-height:1}
+.ih-title{font-size:1.7rem;font-weight:900;margin:6px 0 2px}
+.ih-sub{opacity:.92}
+.imp-reveal2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.irv{text-align:center;background:var(--bg);border-radius:14px;padding:12px 8px;min-width:0}
+.irv-lbl{font-size:.8rem;font-weight:700;color:var(--mute);margin-bottom:8px}
+.irv .sb-av{width:56px;height:56px;font-size:1.5rem}
+.irv .imp-name{font-size:1.35rem;font-weight:900;margin-top:6px;overflow:hidden;text-overflow:ellipsis}
+.imp-word2{font-size:1.5rem;font-weight:900;color:#b8860b;background:#fff3bf;border-radius:12px;padding:12px 6px;overflow:hidden;text-overflow:ellipsis}
+.irv-sub{font-size:.85rem;color:var(--mute);margin-top:8px}
+.iv-row{display:grid;grid-template-columns:40px 1fr 28px;gap:10px;align-items:center;padding:10px;border-radius:14px;background:var(--bg);margin:8px 0}
+.iv-row.out{outline:2px solid #e0313188}
+.iv-row .sb-av{width:38px;height:38px;font-size:1rem;border-width:2px}
+.iv-nm{font-weight:800}
+.iv-tag{font-size:.7rem;font-weight:800;background:#ffe3e3;color:#a61e1e;border-radius:99px;padding:1px 7px;margin-left:4px;vertical-align:middle}
+.iv-tag.bad{background:#212529;color:#fff}
+.iv-from{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.iv-from .chip{font-size:.8rem;padding:2px 8px}
+.iv-bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.iv-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#74c0fc,#9775fa)}
+.iv-row.out .iv-bar i{background:linear-gradient(90deg,#ff8787,#e03131)}
+.iv-n{font-size:1.3rem;text-align:center}
+.iv-skip{margin:8px 0 0}
+.imp-nextcat summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+@media (prefers-color-scheme:dark){.imp-word2{background:#4a3b0a;color:#ffd43b}.iv-tag{background:#4a1515;color:#ffc9c9}}
+
+/* Nothing may widen the page: on phones a transient overflow (a scaling animation) widens the layout viewport and pushes full-screen scenes off-centre */
+#app{overflow-x:clip}
+.imp-hero{animation:fadeUp .5s ease both}
+
+/* Impostor: the secret stays hidden until tapped */
+.imp-peek{display:block;width:100%;margin:12px 0;padding:18px 14px;border-radius:18px;background:var(--card);color:var(--accent);border:2px dashed var(--accent);font-size:1.1rem;font-weight:700;line-height:1.35}
+.imp-peek small{display:block;margin-top:4px;font-weight:500;color:var(--mute)}
+.imp-hidebtn{display:block;width:100%;min-height:46px;margin:0 0 12px}

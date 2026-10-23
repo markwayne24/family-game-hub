@@ -34,7 +34,7 @@ export const HOWTO = {
   impostor: {
     goal: 'Crew: find the impostor. Impostor: blend in without knowing the word.',
     steps: ['Everyone but one player (the impostor) sees the same secret word. The impostor only sees the category.', 'In turn, each player gives a one-word clue related to the word. Don\'t make it too obvious!', 'Then everyone discusses and votes for who they think the impostor is.', 'If the impostor is caught, they get one last chance to guess the word. Otherwise the impostor wins.'],
-    tips: ['Needs at least 3 players.'],
+    tips: ['Needs at least 3 players.', 'Playing in the same room? Your secret stays hidden until you tap "Tap to see your secret", and it hides itself again after 10 seconds. The hidden card looks the same for everyone, so nobody can tell who the impostor is.', 'Before the game starts the host picks which categories the secret words come from (or everything). They can change it between rounds.'],
   },
   hangman: {
     goal: 'Work together to guess the hidden word before the drawing is complete.',
