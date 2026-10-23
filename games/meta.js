@@ -9,6 +9,7 @@ export const TYPES = {
 };
 
 export const META = {
+  secret: { pitch: 'Hidden Millionaire, team tasks, clues and a final vote. The host is the game master.', min: 4, max: null, minutes: '20–30', type: 'party', kids: false },
   bunutan: { pitch: 'Secret gift exchange: everyone draws one name that only they can see, then saves it as a picture.', min: 3, max: null, minutes: '5', type: 'party', kids: true },
   werewolf: { pitch: 'Secret roles, night kills and day votes. Find the wolves before they find you.', min: 5, max: null, minutes: '20–40', type: 'party', kids: false },
   impostor: { pitch: 'Everyone knows the secret word except one. Give clues and catch the faker.', min: 3, max: null, minutes: '10–15', type: 'party', kids: true },

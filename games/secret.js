@@ -119,8 +119,8 @@ export const secret = {
 
   // What everyone may see. Who the Millionaire is, the agenda, the clues and the task log stay out of it until the end.
   view(s) {
-    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, ...pub } = s;
-    const out = { ...pub, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))] };
+    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, ...pub } = s;
+    const out = { ...pub, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))], voted: Object.keys(votes) };
     if (s.phase === 'end') Object.assign(out, { millionaire, agendaRes, clues: clues.map(({ round, text }) => ({ round, text })) });
     return out;
   },
@@ -129,10 +129,10 @@ export const secret = {
   priv(s) {
     const out = {};
     for (const id of s.players) {
-      out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text })) };
+      out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text })), doneRooms: Object.keys(s.done[id] ?? {}), myVote: s.votes[id] ?? null };
       if (id === s.millionaire) Object.assign(out[id], { millionaire: true, agenda: s.agenda, agendaRes: s.agendaRes, bonus: s.bonus });
     }
-    out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, clues: s.clues, done: s.done, pts: s.pts };
+    out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
     return out;
   },
 

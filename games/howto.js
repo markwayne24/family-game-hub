@@ -74,4 +74,16 @@ export const HOWTO = {
     ],
     tips: ['Nobody can draw themselves. The host can also keep two people (like partners) from drawing each other, and choose whether the host is in the draw.', 'Playing in the same room? Keep your screen private when you reveal your name.'],
   },
+  secret: {
+    goal: 'One player is secretly a Millionaire. Win tasks for your team to earn clues, then work out who it is before the final vote.',
+    steps: [
+      'The host is the game master: they run the game and do not play. Everyone else is split into two teams, mixed again every round.',
+      'In each round, tap a room in the mansion to walk in and play its little task. Everyone can see which room you are in.',
+      'The team with the most points at the end of the round gets a secret clue about the Millionaire. You can share it, or lie about it.',
+      'The Millionaire gets a secret agenda each round, like "visit the Library" or "make your team lose". Watch for suspicious behaviour!',
+      'Between rounds, each player can accuse someone once. If you are right, you win. If you are wrong, you sit out the next round.',
+      'After the last round everyone votes. If most of you pick the Millionaire, you split the pot. If not, they take it all.',
+    ],
+    tips: ['Cross names off in your notebook as clues come in.', 'If you are the Millionaire, do your tasks like everyone else so you blend in.'],
+  },
 };

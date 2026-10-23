@@ -318,7 +318,13 @@ const participating = () => (S.spectators.size ? players().filter(p => !S.specta
 const env = () => ({ players: participating(), hostId: S.me, now: Date.now() });
 // What we tell the room about ourselves. `pk` is our public key, so the host can send us private messages.
 const meta = () => ({ name: S.name, t: S.joinedAt, host: S.isHost, pk: S.keys?.publicJwk });
-const act = (type, data) => S.channel.send({ type: 'broadcast', event: 'action', payload: { from: S.me, type, data } });
+// The host's own actions go straight to the game, so choices only the host makes (like which player is the
+// secret millionaire) never travel over the room's shared channel where guests could read them.
+const act = (type, data) => {
+  const payload = { from: S.me, type, data };
+  if (S.isHost && S.subscribed) return hostHandle(payload);
+  return S.channel.send({ type: 'broadcast', event: 'action', payload });
+};
 
 // Decrypt the private message addressed to us, using the host's public key from the room.
 async function openPrivate() {
@@ -801,7 +807,7 @@ function render() {
     stage.innerHTML = '';
     stage._d = null;
     stage._fx = null;
-    stage.classList.remove('enter', 'wwstage', 'impstage', 'bnstage');
+    stage.classList.remove('enter', 'wwstage', 'impstage', 'bnstage', 'smstage');
     void stage.offsetWidth;
     stage.classList.add('enter');
     if (view === 'picker') {
