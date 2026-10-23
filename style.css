@@ -740,3 +740,46 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 .imp-lobbyhead{display:flex;align-items:center;gap:10px}
 .sb-podium{margin-top:30px}
 .imp-scorecard h3{margin-bottom:12px}
+
+/* Impostor: a screen made of separate cards */
+#stage.impstage{background:transparent;border:0;padding:0;box-shadow:none;overflow:visible;margin-top:8px}
+.imp-head{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;background:linear-gradient(135deg,#4c3bd6,#7b5cf0 60%,#a06cf5);color:#fff;border-radius:18px;padding:12px 14px;margin:0 0 12px;box-shadow:0 6px 18px #6c4cf544}
+.imp-title{font-size:1.35rem;font-weight:800}
+.imp-pills{display:flex;gap:6px;flex-wrap:wrap}
+.imp-pill{background:#ffffff2b;border-radius:99px;padding:3px 11px;font-size:.85rem;font-weight:600}
+.imp-panel{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px;margin:12px 0;box-shadow:0 2px 10px #0000000a;animation:fadeUp .45s ease both}
+.imp-ph{margin:0 0 10px;font-size:1.05rem}
+.imp .role{margin:12px 0;border-radius:18px;box-shadow:0 2px 10px #0000000a}
+.imp .chat{max-height:200px}
+.imp .chat div{display:flex;align-items:center;gap:6px;margin:4px 0}
+.imp .chat .sb-av{width:24px;height:24px;font-size:.72rem;border-width:1px;box-shadow:none}
+.imp-foot{text-align:center;margin:8px 0 4px}
+.imp-bar{margin:14px -16px 0;border-radius:0}
+.imp-hero{border-radius:22px;padding:22px 16px;text-align:center;color:#fff;margin:12px 0;box-shadow:0 10px 26px #0003;animation:stamp .6s ease both}
+.imp-hero.good{background:linear-gradient(135deg,#2b9348,#55c76d)}
+.imp-hero.bad{background:linear-gradient(135deg,#c2255c,#e8590c)}
+.ih-emoji{font-size:3.2rem;line-height:1}
+.ih-title{font-size:1.7rem;font-weight:900;margin:6px 0 2px}
+.ih-sub{opacity:.92}
+.imp-reveal2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.irv{text-align:center;background:var(--bg);border-radius:14px;padding:12px 8px;min-width:0}
+.irv-lbl{font-size:.8rem;font-weight:700;color:var(--mute);margin-bottom:8px}
+.irv .sb-av{width:56px;height:56px;font-size:1.5rem}
+.irv .imp-name{font-size:1.35rem;font-weight:900;margin-top:6px;overflow:hidden;text-overflow:ellipsis}
+.imp-word2{font-size:1.5rem;font-weight:900;color:#b8860b;background:#fff3bf;border-radius:12px;padding:12px 6px;overflow:hidden;text-overflow:ellipsis}
+.irv-sub{font-size:.85rem;color:var(--mute);margin-top:8px}
+.iv-row{display:grid;grid-template-columns:40px 1fr 28px;gap:10px;align-items:center;padding:10px;border-radius:14px;background:var(--bg);margin:8px 0}
+.iv-row.out{outline:2px solid #e0313188}
+.iv-row .sb-av{width:38px;height:38px;font-size:1rem;border-width:2px}
+.iv-nm{font-weight:800}
+.iv-tag{font-size:.7rem;font-weight:800;background:#ffe3e3;color:#a61e1e;border-radius:99px;padding:1px 7px;margin-left:4px;vertical-align:middle}
+.iv-tag.bad{background:#212529;color:#fff}
+.iv-from{display:flex;flex-wrap:wrap;gap:4px;margin:4px 0}
+.iv-from .chip{font-size:.8rem;padding:2px 8px}
+.iv-bar{height:8px;border-radius:99px;background:var(--line);overflow:hidden}
+.iv-bar i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,#74c0fc,#9775fa)}
+.iv-row.out .iv-bar i{background:linear-gradient(90deg,#ff8787,#e03131)}
+.iv-n{font-size:1.3rem;text-align:center}
+.iv-skip{margin:8px 0 0}
+.imp-nextcat summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
+@media (prefers-color-scheme:dark){.imp-word2{background:#4a3b0a;color:#ffd43b}.iv-tag{background:#4a1515;color:#ffc9c9}}

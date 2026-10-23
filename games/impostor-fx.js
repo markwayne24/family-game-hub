@@ -3,7 +3,7 @@ import { sfx, confetti, reduceMotion } from './fx.js';
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 const hue = name => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
-const avatar = name => `<span class="sb-av" style="--h:${hue(name)}">${esc(String(name).trim().charAt(0).toUpperCase() || '?')}</span>`;
+export const avatar = name => `<span class="sb-av" style="--h:${hue(name)}">${esc(String(name).trim().charAt(0).toUpperCase() || '?')}</span>`;
 const MEDALS = ['🥇', '🥈', '🥉'];
 
 // The score card: a podium for the top three and a tidy list for everyone else.
