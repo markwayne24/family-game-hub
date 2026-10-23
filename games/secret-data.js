@@ -2,27 +2,32 @@
 
 // Each room has a few different tasks; one is picked at random every time someone walks in.
 export const ROOMS = [
-  { id: 'kitchen', name: 'Kitchen', emoji: '🍳', title: 'Kitchen duty', tasks: ['reaction', 'catch', 'simmer'] },
-  { id: 'library', name: 'Library', emoji: '📚', title: 'Study time', tasks: ['sequence', 'oddone', 'scramble'] },
-  { id: 'garage', name: 'Garage', emoji: '🔧', title: 'Fix it up', tasks: ['numbers', 'wires', 'pump'] },
-  { id: 'garden', name: 'Garden', emoji: '🌿', title: 'Garden work', tasks: ['sums', 'whack', 'harvest'] },
-  { id: 'vault', name: 'Vault', emoji: '🔐', title: 'Crack the vault', tasks: ['timing', 'code', 'pairs'] },
+  { id: 'kitchen', name: 'Kitchen', emoji: '🍳', title: 'Kitchen duty', tasks: ['reaction', 'catch', 'simmer', 'order'] },
+  { id: 'library', name: 'Library', emoji: '📚', title: 'Study time', tasks: ['sequence', 'oddone', 'scramble', 'quiz'] },
+  { id: 'garage', name: 'Garage', emoji: '🔧', title: 'Fix it up', tasks: ['numbers', 'wires', 'pump', 'stopclock'] },
+  { id: 'garden', name: 'Garden', emoji: '🌿', title: 'Garden work', tasks: ['sums', 'whack', 'harvest', 'water'] },
+  { id: 'vault', name: 'Vault', emoji: '🔐', title: 'Crack the vault', tasks: ['timing', 'code', 'pairs', 'lights'] },
 ];
 export const TASKS = {
   reaction: { title: 'Flip the pancakes', how: 'Tap the moment each pancake turns golden. Not before!' },
   simmer: { title: 'Simmer the soup', how: 'Press and HOLD to heat the pot. Let go when the soup is in the green zone. Get two of three pots right.' },
+  order: { title: 'Order up!', how: 'Remember the dishes on the order slip. They disappear, then pick them from the menu and serve.' },
   catch: { title: 'Catch the eggs', how: 'Tap the falling eggs before they hit the floor. Catch at least 7 of 10.' },
   sequence: { title: 'Book order', how: 'Watch the glowing books, then tap them in the same order.' },
   scramble: { title: 'Unscramble the word', how: 'The letters are jumbled. Tap them in the right order to spell a book word. Three slips allowed.' },
+  quiz: { title: 'Library quiz', how: 'Answer quick questions before the clock runs out.' },
   oddone: { title: 'Spot the odd one out', how: 'One picture in each grid is slightly different. Tap it. Three grids, one slip allowed.' },
   numbers: { title: 'Rewire the engine', how: 'Tap the numbers from 1 to 9 as fast as you can.' },
   pump: { title: 'Pump the tyre', how: 'Tap PUMP as fast as you can. The tyre slowly leaks, so keep going until it is full!' },
+  stopclock: { title: 'Stop the clock', how: 'A clock counts up, then hides. Tap STOP when you think it hits the target time.' },
   wires: { title: 'Match the wires', how: 'Tap a wire on the left, then the wire of the same colour on the right.' },
   sums: { title: 'Count the flowers', how: 'Answer four quick sums. Get three right.' },
   harvest: { title: 'Harvest the ripe ones', how: 'Pick every ripe tomato 🍅 and leave the green apples 🍏. One slip allowed.' },
+  water: { title: 'Water the plants', how: 'Give each plant exactly the drops it needs. Too much and it wilts!' },
   whack: { title: 'Squash the bugs', how: 'Tap the bugs 🐛 as they pop up. Do NOT tap the bees 🐝. Get at least 7 points.' },
   timing: { title: 'Crack the vault', how: 'Stop the dial inside the gold zone, three times.' },
   pairs: { title: 'Match the gems', how: 'Flip two cards at a time and find all the matching pairs. Up to 6 wrong tries.' },
+  lights: { title: 'Lights out', how: 'Tapping a light flips it and its neighbours. Turn every light OFF.' },
   code: { title: 'Crack the code', how: 'Guess the 3-digit code. After each try, arrows show if the real digit is higher or lower. You have 6 tries.' },
 };
 export const roomOf = id => ROOMS.find(r => r.id === id);
@@ -33,6 +38,9 @@ export const TEAMS = [
 ];
 
 export const MIN_PLAYERS = 4;
+export const DIFFICULTIES = { easy: 'Easy', normal: 'Normal', hard: 'Hard', rising: 'Rising: gets harder every round' };
+// How hard the tasks are in a given round: 0 (easiest) to 2 (hardest).
+export const levelFor = (difficulty, round, rounds) => difficulty === 'easy' ? 0 : difficulty === 'hard' ? 2 : difficulty === 'rising' ? Math.round(((Math.max(1, round) - 1) / Math.max(1, rounds - 1)) * 2) : 1;
 export const TOTAL_POT = 1000000;
 export const BONUS = 50000;           // what the Millionaire earns for finishing a secret agenda
 export const money = n => '$' + Math.round(n).toLocaleString('en-US');

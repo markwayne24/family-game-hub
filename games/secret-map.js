@@ -23,7 +23,7 @@ export function createLiveMap(o) {
   let opt = o, destroyed = false, raf = 0, off = 0, last = performance.now(), t = 0;
   const idx = id => Math.max(0, opt.players.indexOf(id));
   const st = { me: { ...spawn(idx(opt.me), opt.players.length) }, others: {}, input: { dx: 0, dy: 0 }, keys: new Set(), joy: null, near: null, room: null, visited: new Set(), busy: null, face: 1, sentAt: 0, sent: { x: -1, y: -1, b: null }, dirty: true };
-  const api = { box, st, setInput(dx, dy) { st.input.dx = dx; st.input.dy = dy; }, teleport(x, y) { if (canStand(x, y)) { st.me.x = x; st.me.y = y; st.dirty = true; } }, update, destroy, setBusy };
+  const api = { box, st, opt: () => opt, setInput(dx, dy) { st.input.dx = dx; st.input.dy = dy; }, teleport(x, y) { if (canStand(x, y)) { st.me.x = x; st.me.y = y; st.dirty = true; } }, update, destroy, setBusy };
 
   function other(id) {
     return (st.others[id] ??= { ...spawn(idx(id), opt.players.length), tx: 0, ty: 0, busy: null, face: 1, init: false });
@@ -68,7 +68,7 @@ export function createLiveMap(o) {
   // The map is picked up and put back whenever the game screen redraws, so the drag is tracked on the whole window.
   cv.addEventListener('pointerdown', e => { if (!opt.canMove) return; e.preventDefault(); const [x, y] = pt(e); st.joy = { id: e.pointerId, ox: x, oy: y, x, y }; });
   const mv = e => { if (st.joy && e.pointerId === st.joy.id) { const [x, y] = pt(e); st.joy.x = x; st.joy.y = y; } };
-  const end = e => { if (st.joy && e.pointerId === st.joy.id) st.joy = null; };
+  const end = e => { if (st.joy && e.pointerId === st.joy.id) { st.joy = null; setTimeout(() => opt.onRelease?.(), 0); } };
   addEventListener('pointermove', mv); addEventListener('pointerup', end); addEventListener('pointercancel', end);
   const KEYS = { ArrowUp: [0, -1], ArrowDown: [0, 1], ArrowLeft: [-1, 0], ArrowRight: [1, 0], w: [0, -1], s: [0, 1], a: [-1, 0], d: [1, 0] };
   const kd = e => { if (e.target.closest?.('input,textarea,select')) return; const k = KEYS[e.key] && e.key; if (k) { e.preventDefault(); st.keys.add(k); } };

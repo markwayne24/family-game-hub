@@ -77,13 +77,14 @@ export const HOWTO = {
   secret: {
     goal: 'One player is secretly a Millionaire. Win tasks for your team to earn clues, then work out who it is before the final vote.',
     steps: [
-      'The host is the game master: they run the game and do not play. Everyone else is split into two teams, mixed again every round.',
-      'In each round, walk around the mansion: drag on the map (or use the arrow keys) and step onto a glowing pad in a room to play its little task. Everyone can see where you are. The host can also choose a simple room list instead of walking.',
-      'The team with the most points at the end of the round gets a secret clue about the Millionaire. You can share it, or lie about it.',
+      'Before the game, the host chooses who moderates: the host, another player, or nobody (the app runs it on timers). A moderator does not play, but knows who the Millionaire is.',
+      'Everyone else is split into two teams, mixed again every round. When the game starts, tap to see your secret role. It is hidden again when you tap Hide, so nobody can peek.',
+      'In each round, walk around the mansion: drag on the map (or use the arrow keys) and step onto a glowing pad in a room to play its task. Tasks get harder as the rounds go on, unless the host chose otherwise.',
+      'The team with the most points gets a secret clue about the Millionaire. The holders choose: share it with everyone, or keep it secret.',
       'The Millionaire gets a secret agenda each round, like "visit the Library" or "make your team lose". Watch for suspicious behaviour!',
       'Between rounds, each player can accuse someone once. If you are right, you win. If you are wrong, you sit out the next round.',
       'After the last round everyone votes. If most of you pick the Millionaire, you split the pot. If not, they take it all.',
     ],
-    tips: ['Cross names off in your notebook as clues come in.', 'If you are the Millionaire, do your tasks like everyone else so you blend in.'],
+    tips: ['Cross names off in your notebook as clues come in.', 'If you are the Millionaire, do your tasks like everyone else so you blend in.', 'The moderator can end a round at any time, add time, or remove the time limit.'],
   },
 };

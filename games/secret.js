@@ -1,4 +1,4 @@
-import { ROOMS, TEAMS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf } from './secret-data.js';
+import { ROOMS, TEAMS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
 import { makeClue, taskPoints } from './secret-clues.js';
 import { renderSecret } from './secret-ui.js';
 
@@ -6,7 +6,14 @@ export { MIN_PLAYERS };
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pickOne = a => a[Math.floor(Math.random() * a.length)];
 const MIN_TASK_MS = 1200;   // a task can't be finished faster than this (stops fake results)
-const VOTE_MS = 120000;
+export const MODERATORS = {
+  host: { name: 'The host moderates', emoji: '🎬', blurb: 'The host runs the game and does not play. They know who the Millionaire is and can steer the secret agenda.' },
+  player: { name: 'Another player moderates', emoji: '🎙️', blurb: 'The host plays. One chosen player runs the game and does not play.' },
+  none: { name: 'No moderator', emoji: '🤖', blurb: 'The app runs the game on timers. Everyone plays, including the host. Nobody knows the secrets.' },
+};
+export const SECS = [0, 60, 90, 120, 180, 240, 300];
+export const BREAK_SECS = [0, 15, 30, 45, 60, 90, 120, 180];
+export const VOTE_SECS = [0, 60, 90, 120, 180, 300];
 
 // Two teams, as even as possible, mixed up again every round.
 export function makeTeams(ids) {
@@ -28,42 +35,64 @@ export const secret = {
   init(env, opts) {
     if (opts?.memory?.saved) return opts.memory.saved;
     return {
-      phase: 'lobby', gm: env.hostId, rounds: 4, secs: 120, mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
-      players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, voteEnd: 0,
+      phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
+      mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
+      players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, breakEnd: 0, voteEnd: 0, shared: [],
       loc: {}, visited: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
       millionaire: null, agenda: null, nextAgenda: null, agendaRes: [], bonus: 0,
       clues: [], accusations: [], jailed: {}, votes: {}, outcome: null, error: null,
     };
   },
   remember: s => ({ saved: s }),
-  deadline: s => (s.phase === 'round' ? s.endAt : s.phase === 'vote' ? s.voteEnd : 0),
+  deadline: s => (s.phase === 'round' ? s.endAt : s.phase === 'break' ? s.breakEnd : s.phase === 'vote' ? s.voteEnd : 0) || 0,
 
   reduce(s, a, env) {
     const isHost = a.from === env.hostId;
-    const live = () => s.players.filter(id => !s.jailedNow?.includes(id));
-    if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.filter(p => p.id !== env.hostId).map(p => [p.id, p.name])) };
+    // who may press the buttons that move the game along: the host always (like Werewolf), and the chosen moderator
+    const ctl = isHost || (s.gm != null && a.from === s.gm);
+    // who may touch the secrets (the Millionaire and their agenda): only the person moderating
+    const secretsOk = s.gm != null && a.from === s.gm;
+    if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.map(p => [p.id, p.name])) };
 
-    if (a.type === 'reset' && isHost) return { ...this.init(env), rounds: s.rounds, secs: s.secs, mode: s.mode, speed: s.speed, pickMode: s.pickMode, pick: s.pick };
+    if (a.type === 'reset' && isHost) { const k = this.init(env); const keep = ['mod', 'moderator', 'rounds', 'secs', 'breakSecs', 'voteSecs', 'difficulty', 'mode', 'speed', 'pickMode', 'pick']; for (const f of keep) k[f] = s[f]; return k; }
 
     /* ---------- the waiting room ---------- */
     if (s.phase === 'lobby') {
-      if (a.type === 'config' && isHost) {
+      // who is moderating, if anyone: the host, a chosen player, or nobody
+      const modId = s.mod === 'host' ? env.hostId : s.mod === 'player' ? s.moderator : null;
+      if (a.type === 'config' && (isHost || (modId != null && a.from === modId))) {
         const p = a.data ?? {};
         const n = { ...s, error: null };
-        if (Number.isInteger(p.rounds) && p.rounds >= 3 && p.rounds <= 6) n.rounds = p.rounds;
-        if ([60, 90, 120, 180, 240].includes(p.secs)) n.secs = p.secs;
-        if (p.mode === 'map' || p.mode === 'rooms') n.mode = p.mode;
-        if (['slow', 'normal', 'fast'].includes(p.speed)) n.speed = p.speed;
-        if (p.pickMode === 'random' || p.pickMode === 'host') n.pickMode = p.pickMode;
-        if ('pick' in p) n.pick = s.names[p.pick] != null ? p.pick : null;
-        if ('agenda' in p) n.nextAgenda = agendaOf(p.agenda) ? p.agenda : null;
+        if (isHost) {
+          if (Number.isInteger(p.rounds) && p.rounds >= 3 && p.rounds <= 6) n.rounds = p.rounds;
+          if (SECS.includes(p.secs)) n.secs = p.secs;
+          if (BREAK_SECS.includes(p.breakSecs)) n.breakSecs = p.breakSecs;
+          if (VOTE_SECS.includes(p.voteSecs)) n.voteSecs = p.voteSecs;
+          if (p.difficulty in DIFFICULTIES) n.difficulty = p.difficulty;
+          if (p.mode === 'map' || p.mode === 'rooms') n.mode = p.mode;
+          if (['slow', 'normal', 'fast'].includes(p.speed)) n.speed = p.speed;
+          if (p.mod in MODERATORS) { n.mod = p.mod; if (p.mod !== 'player') n.moderator = null; if (p.mod !== 'host') { n.pickMode = 'random'; n.pick = null; n.nextAgenda = null; } }
+          if (n.mod === 'player' && typeof p.moderator === 'string' && p.moderator !== env.hostId && s.names[p.moderator] != null) n.moderator = p.moderator;
+          if (n.mod === 'player' && n.moderator != null && s.names[n.moderator] == null) n.moderator = null;
+        }
+        // the secrets are the moderator's to choose (the host moderates by default)
+        const mod2 = n.mod === 'host' ? env.hostId : n.mod === 'player' ? n.moderator : null;
+        if (mod2 != null && a.from === mod2) {
+          if (p.pickMode === 'random' || p.pickMode === 'host') n.pickMode = p.pickMode;
+          if ('pick' in p) n.pick = s.names[p.pick] != null && p.pick !== mod2 ? p.pick : null;
+          if ('agenda' in p) n.nextAgenda = agendaOf(p.agenda) ? p.agenda : null;
+        }
         return n;
       }
       if (a.type === 'start' && isHost) {
-        const players = Object.keys(s.names);
-        if (players.length < MIN_PLAYERS) return { ...s, error: `Need at least ${MIN_PLAYERS} players besides you (${players.length} here).` };
-        const m = s.pickMode === 'host' && players.includes(s.pick) ? s.pick : pickOne(players);
-        return beginRound({ ...s, players, millionaire: m, round: 0, total: Object.fromEntries(players.map(id => [id, 0])), error: null }, env.now);
+        if (s.mod === 'player' && (s.moderator == null || s.names[s.moderator] == null)) return { ...s, error: 'Pick which player moderates.' };
+        const gm = s.mod === 'host' ? env.hostId : s.mod === 'player' ? s.moderator : null;
+        const players = Object.keys(s.names).filter(id => id !== gm);
+        if (players.length < MIN_PLAYERS) return { ...s, error: `Need at least ${MIN_PLAYERS} players${gm ? ', not counting the moderator' : ''} (${players.length} here).` };
+        // with nobody moderating the app must run itself, so every clock has to be on
+        const secs = s.mod === 'none' && !s.secs ? 120 : s.secs, breakSecs = s.mod === 'none' && !s.breakSecs ? 45 : s.breakSecs, voteSecs = s.mod === 'none' && !s.voteSecs ? 120 : s.voteSecs;
+        const m = s.mod === 'host' || s.mod === 'player' ? (s.pickMode === 'host' && players.includes(s.pick) ? s.pick : pickOne(players)) : pickOne(players);
+        return beginRound({ ...s, gm, secs, breakSecs, voteSecs, players, millionaire: m, round: 0, total: Object.fromEntries(players.map(id => [id, 0])), error: null }, env.now);
       }
       return s;
     }
@@ -92,16 +121,27 @@ export const secret = {
         const all = s.players.filter(id => !sits(id)).every(id => ROOMS.every(r => n.done[id]?.[r.id]));
         return all ? finishRound(n, env.now) : n;
       }
-      if (a.type === 'agenda' && isHost) return { ...s, agenda: agendaOf(a.data?.key) ? { key: a.data.key } : s.agenda };
-      if (a.type === 'endRound' && isHost) return finishRound(s, env.now);
-      if (a.type === 'timeout' && env.now >= s.endAt - 200) return finishRound(s, env.now);
+      if (a.type === 'agenda' && secretsOk) return { ...s, agenda: agendaOf(a.data?.key) ? { key: a.data.key } : s.agenda };
+      if (a.type === 'endRound' && ctl) return finishRound(s, env.now);
+      // the moderator (or the host) can start, extend or stop the countdown; with nobody moderating it can't be stopped
+      if (a.type === 'timer' && ctl) {
+        const d = a.data ?? {};
+        if (Number.isFinite(d.add) && d.add > 0 && d.add <= 600) return { ...s, endAt: Math.max(s.endAt || env.now, env.now) + Math.round(d.add) * 1000 };
+        if (Number.isFinite(d.secs) && d.secs > 0 && d.secs <= 3600) return { ...s, endAt: env.now + Math.round(d.secs) * 1000 };
+        if (d.secs === 0 && s.gm != null) return { ...s, endAt: 0 };
+        return s;
+      }
+      if (a.type === 'timeout' && s.endAt && env.now >= s.endAt - 200) return finishRound(s, env.now);
+      if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
       return s;
     }
 
     /* ---------- between rounds: results, clues, accusations ---------- */
     if (s.phase === 'break') {
-      if (a.type === 'agenda' && isHost) return { ...s, nextAgenda: agendaOf(a.data?.key) ? a.data.key : null };
-      if (a.type === 'next' && isHost) return beginRound(s, env.now);
+      if (a.type === 'agenda' && secretsOk) return { ...s, nextAgenda: agendaOf(a.data?.key) ? a.data.key : null };
+      if (a.type === 'next' && ctl) return beginRound(s, env.now);
+      if (a.type === 'timeout' && s.breakEnd && env.now >= s.breakEnd - 200) return beginRound(s, env.now);
+      if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
       if (a.type === 'accuse' && s.players.includes(a.from) && s.players.includes(a.data?.target) && a.data.target !== a.from && !s.accusations.some(x => x.by === a.from)) {
         const ok = a.data.target === s.millionaire;
         const accusations = [...s.accusations, { r: s.round, by: a.from, target: a.data.target, ok }];
@@ -117,7 +157,8 @@ export const secret = {
         const n = { ...s, votes: { ...s.votes, [a.from]: a.data.target } };
         return s.players.every(id => n.votes[id]) ? resolveVote(n) : n;
       }
-      if ((a.type === 'resolve' && isHost) || (a.type === 'timeout' && env.now >= s.voteEnd - 200)) return resolveVote(s);
+      if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
+      if ((a.type === 'resolve' && ctl) || (a.type === 'timeout' && s.voteEnd && env.now >= s.voteEnd - 200)) return resolveVote(s);
       return s;
     }
     return s;
@@ -135,10 +176,12 @@ export const secret = {
   priv(s) {
     const out = {};
     for (const id of s.players) {
-      out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text })), doneRooms: Object.keys(s.done[id] ?? {}), myVote: s.votes[id] ?? null };
+      out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text, shared: s.shared.some(x => x.round === round) })), doneRooms: Object.keys(s.done[id] ?? {}), myVote: s.votes[id] ?? null };
       if (id === s.millionaire) Object.assign(out[id], { millionaire: true, agenda: s.agenda, agendaRes: s.agendaRes, bonus: s.bonus });
     }
-    out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, visited: s.visited, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
+    // in the waiting room the moderator (when it is a player) sees the secrets they have chosen so far
+    if (s.phase === 'lobby' && s.mod === 'player' && s.moderator) out[s.moderator] = { lobby: { pick: s.pick, agenda: s.nextAgenda } };
+    if (s.gm != null) out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, visited: s.visited, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
     return out;
   },
 
@@ -151,7 +194,7 @@ function beginRound(s, now) {
   const round = s.round + 1;
   const sitting = s.players.filter(id => s.jailed[id] === round);
   return {
-    ...s, phase: 'round', round, startAt: now, endAt: now + s.secs * 1000,
+    ...s, phase: 'round', round, startAt: now, endAt: s.secs ? now + s.secs * 1000 : 0, breakEnd: 0, level: levelFor(s.difficulty, round, s.rounds),
     team: makeTeams(s.players), teamPts: [0, 0], loc: {}, visited: {}, done: {}, goAt: {}, pts: {}, jailedNow: sitting,
     agenda: { key: s.nextAgenda ?? randomAgenda() }, nextAgenda: null, error: null,
   };
@@ -169,7 +212,7 @@ function finishRound(s, now) {
   const mine = roundLog.filter(e => e.id === s.millionaire);
   const res = agendaOf(s.agenda?.key)?.check({ visited, done: mine.length, ok: mine.filter(e => e.ok).length, won: winners.includes(s.team[s.millionaire]) }) ?? false;
   const n = {
-    ...s, phase: s.round < s.rounds ? 'break' : 'vote', voteEnd: s.round < s.rounds ? 0 : now + VOTE_MS,
+    ...s, phase: s.round < s.rounds ? 'break' : 'vote', endAt: 0, breakEnd: s.round < s.rounds && s.breakSecs ? now + s.breakSecs * 1000 : 0, voteEnd: s.round >= s.rounds && s.voteSecs ? now + s.voteSecs * 1000 : 0,
     total: Object.fromEntries(s.players.map(id => [id, (s.total[id] ?? 0) + per[id]])),
     history: [...s.history, { round: s.round, teamPts: s.teamPts, winners, per, team: s.team, sat: s.jailedNow ?? [] }],
     clues: clue ? [...s.clues, { round: s.round, kind: clue.kind, text: clue.text, to }] : s.clues,
@@ -177,6 +220,13 @@ function finishRound(s, now) {
     loc: {},
   };
   return n;
+}
+
+// A clue holder tells everyone the clue (it can't be changed, only shared or kept). Once is enough for the whole team.
+function shareClue(s, from, round) {
+  const c = s.clues.find(x => x.round === round);
+  if (!c || !c.to.includes(from) || s.shared.some(x => x.round === round)) return s;
+  return { ...s, shared: [...s.shared, { round, by: from, text: c.text }] };
 }
 
 function resolveVote(s) {
