@@ -5,7 +5,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 // The end-of-round scene, played full screen on every phone (tap to skip):
 // a spotlight sweeps the dark, the detective arrives, a drum roll builds, the impostor's name slams in,
 // the secret word flips over, and the verdict lands.
-export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor, ejected, guess }) {
+export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor, ejected, guess, scores = [] }) {
   const timers = [];
   const at = (ms, fn) => timers.push(setTimeout(fn, ms));
   at(0, () => sfx('whoosh'));
@@ -16,6 +16,14 @@ export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor
     if (mine === false) sfx('lose'); else { confetti(); sfx('win'); }
     if (impostorWins && mine !== true) sfx('growl');
   });
+  const SC = 7200, ROW = 0.38;                       // when the scores start (ms) and the gap between rows (s)
+  if (scores.length) {
+    at(SC - 200, () => sfx('whoosh'));
+    scores.forEach((r, i) => {
+      at(SC + 300 + i * ROW * 1000, () => sfx('vote'));
+      if (r.gain) at(SC + 900 + i * ROW * 1000, () => sfx('ding'));
+    });
+  }
   if (reduceMotion()) return;
 
   const box = document.createElement('div');
@@ -32,11 +40,27 @@ export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor
       <div class="ic-verdict">${impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</div>
     </div>
     <div class="ic-flash"></div>
+    ${scores.length ? `<div class="ic-scores"><h3>🏆 Scores</h3>${(() => {
+      const max = Math.max(1, ...scores.map(r => r.after));
+      return scores.map((r, i) => `<div class="ic-row ${r.me ? 'me' : ''}" style="--d:${(0.3 + i * ROW).toFixed(2)}s;--w:${Math.round((r.after / max) * 100)}%">
+        <span class="rk">${i === 0 && r.after > 0 ? '👑' : i + 1}</span><span class="nm">${esc(r.name)}</span>
+        <span class="bar"><i></i></span><b class="pts" data-from="${r.before}" data-to="${r.after}">${r.before}</b>${r.gain ? `<em class="plus" style="--p:${(0.9 + i * ROW).toFixed(2)}s">+${r.gain}</em>` : '<em class="plus none"></em>'}</div>`).join('');
+    })()}</div>` : ''}
     <small class="ic-skip">tap to skip</small>`;
   const done = () => { timers.forEach(clearTimeout); box.classList.add('out'); setTimeout(() => box.remove(), 500); };
   box.addEventListener('click', done);
   document.body.append(box);
-  timers.push(setTimeout(done, 8200));
+  if (scores.length) {
+    // after the verdict, swap to the scores and count each total up
+    at(SC, () => box.classList.add('scores'));
+    box.querySelectorAll('.pts').forEach((el, i) => at(SC + 900 + i * ROW * 1000, () => {
+      const from = +el.dataset.from, to = +el.dataset.to, t0 = performance.now();
+      if (from === to) return;
+      const tick = now => { const k = Math.min(1, (now - t0) / 700); el.textContent = Math.round(from + (to - from) * k); if (k < 1 && el.isConnected) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    }));
+  }
+  timers.push(setTimeout(done, scores.length ? SC + 1500 + scores.length * ROW * 1000 + 3500 : 8200));
 }
 
 // A short full-screen "whose turn is it" banner for the clue round, so nobody misses their turn.

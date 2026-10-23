@@ -671,3 +671,25 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 .imp-turnfx.mine .tf-ring{border-color:#ffd43baa}
 @keyframes micBounce{0%,100%{transform:translateY(0) rotate(-6deg)}50%{transform:translateY(-14px) rotate(6deg)}}
 @keyframes tfRing{0%{transform:scale(.5);opacity:.9}100%{transform:scale(1.8);opacity:0}}
+
+/* Impostor: the score count-up after the reveal */
+.imp-plus{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:99px;background:#d3f9d8;color:#0b5d1e;font-size:.85rem;font-weight:800;animation:pop .5s ease}
+.imp-cine .ic-lines{transition:opacity .5s}
+.imp-cine.scores .ic-lines{opacity:0;pointer-events:none}
+.ic-scores{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;padding:0 18px;max-width:560px;margin:0 auto;opacity:0;pointer-events:none;transition:opacity .5s}
+.imp-cine.scores .ic-scores{opacity:1}
+.ic-scores h3{text-align:center;font-size:1.6rem;margin:0 0 14px;color:#ffd43b}
+.ic-row{display:grid;grid-template-columns:30px minmax(60px,26%) 1fr 34px 44px;align-items:center;gap:8px;margin:7px 0;opacity:0;transform:translateX(-26px)}
+.imp-cine.scores .ic-row{animation:rowIn .5s var(--d) ease forwards}
+.ic-row.me .nm{color:#ffd43b;font-weight:800}
+.ic-row .rk{text-align:center;font-weight:800;opacity:.8}
+.ic-row .nm{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ic-row .bar{display:block;height:14px;background:#ffffff1f;border-radius:99px;overflow:hidden;margin:0}
+.ic-row .bar i{display:block;height:100%;width:0;background:linear-gradient(90deg,#74c0fc,#a78bfa);border-radius:99px}
+.imp-cine.scores .ic-row .bar i{animation:barGrow .9s calc(var(--d) + .3s) cubic-bezier(.2,.8,.3,1) forwards}
+.ic-row .pts{text-align:right;font-size:1.2rem;font-variant-numeric:tabular-nums}
+.ic-row .plus{font-style:normal;font-weight:900;color:#69db7c;opacity:0}
+.imp-cine.scores .ic-row .plus{animation:plusPop .7s var(--p) ease forwards}
+@keyframes rowIn{to{opacity:1;transform:none}}
+@keyframes barGrow{to{width:var(--w)}}
+@keyframes plusPop{0%{opacity:0;transform:translateY(10px) scale(.4)}60%{opacity:1;transform:translateY(-6px) scale(1.3)}100%{opacity:1;transform:none}}

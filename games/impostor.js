@@ -120,8 +120,10 @@ export const impostor = {
     const typed = keep?.value ?? '';
     const focused = keep && document.activeElement === keep;
     const name = id => ui.esc(ui.nameOf(id));
+    const gains = {};
+    if (s.phase === 'result' && s.result) for (const id of s.order) gains[id] = id === s.impostor ? (s.result.impostorWins ? 2 : 0) : s.result.impostorWins ? 0 : 1;
     const board = Object.entries(s.scores).sort((a, b) => b[1] - a[1])
-      .map(([id, pts]) => `<tr><td>${name(id)}</td><td><b>${pts}</b></td></tr>`).join('');
+      .map(([id, pts]) => `<tr><td>${name(id)}</td><td><b>${pts}</b>${gains[id] ? ` <span class="imp-plus">+${gains[id]}</span>` : ''}</td></tr>`).join('');
     const hostBtns = ui.isHost ? '<div class="row"><button class="ghost" id="reset">New game</button></div>' : '';
     const later = (ms, fn) => setTimeout(fn, ms);
     let body = '';
@@ -149,8 +151,11 @@ export const impostor = {
       const t4 = t3 + 0.9;                      // who won
       const inGame = s.order.includes(ui.me);
       const mine = inGame ? (ui.me === s.impostor ? r.impostorWins : !r.impostorWins) : null;
+      // Who got what this round (the rules: crew +1 if they win, the impostor +2 if they win).
+      const gainOf = id => (id === s.impostor ? (r.impostorWins ? 2 : 0) : r.impostorWins ? 0 : 1);
+      const roundScores = s.order.map(id => { const after = s.scores[id] ?? 0, gain = gainOf(id); return { id, name: ui.nameOf(id), before: after - gain, after, gain, me: id === ui.me }; }).sort((a, b) => b.after - a.after);
       // The whole-screen scene plays the sounds itself; the page underneath just shows the final result.
-      if (anim) revealCinematic({ impostor: ui.nameOf(s.impostor), word: s.word, impostorWins: r.impostorWins, mine, isImpostor: ui.me === s.impostor, ejected: r.ejected ? ui.nameOf(r.ejected) : null, guess: r.guess });
+      if (anim) revealCinematic({ scores: roundScores,  impostor: ui.nameOf(s.impostor), word: s.word, impostorWins: r.impostorWins, mine, isImpostor: ui.me === s.impostor, ejected: r.ejected ? ui.nameOf(r.ejected) : null, guess: r.guess });
       const d = () => '';
       const rd = '';
       mood = 'imp-reveal';
