@@ -28,6 +28,8 @@ Host tools: pick a game and its options (question pack, word difficulty, prompt 
 
 Home screen: after signing in you get a "Start a game night" card (create a room, or join a friend's with a code) and every game as a card: a one-line pitch, players (e.g. 5+), typical length, type (Party, Classic, Words & quiz, Draw & act), a Kid-friendly badge, and How to play. Filter by how many are playing and by type. The details live in `games/meta.js`; a new game must be added there too (the tests check it).
 
+Privacy and terms: `privacy.html` and `terms.html` are plain pages served at `/privacy` and `/terms` (`vercel.json` turns on clean URLs). Every home screen links to them in the footer, and the sign-in form links to them too, as Google's OAuth branding check requires. Update them if the app starts collecting anything new.
+
 Landing page: signed-out visitors see a landing page with three games as a teaser (the rest are locked), how it works, the sign-in form and a "Got a room code?" box. After signing in, the home screen lists every game with its goal and how to play. Guests with an invite link or room code still join without an account.
 
 Accounts: anyone can sign up and host rooms, with **Continue with Google** or with an email and a password (8+ characters). A new email account gets a 6-digit code by email and must enter it (or tap the link in the email) before it can sign in, so only real addresses get in. Guests joining a room still don't need an account.

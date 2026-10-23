@@ -83,10 +83,12 @@ function loginScreen(msg = '') {
         <input name="email" type="email" placeholder="Email" required autocomplete="email">
         <input name="password" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password">
         <p class="err" id="ferr">${esc(msg)}</p>
+        <p class="muted fine">By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
         <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
       </form>
     </div>
-    ${joinCodeHtml()}`;
+    ${joinCodeHtml()}
+    ${footerHtml()}`;
   bindJoinCode();
   const f = app.querySelector('#f');
   const ferr = app.querySelector('#ferr');
@@ -203,6 +205,9 @@ function bindCatalog() {
   draw();
 }
 
+// Every home screen ends with these links (Google sign-in requires the privacy policy to be linked from the home page).
+const footerHtml = () => `<footer class="site-foot"><a href="/privacy">Privacy Policy</a> · <a href="/terms">Terms of Service</a> · <a href="mailto:mwpulido24@gmail.com">Contact</a></footer>`;
+
 // Top of the signed-in home: who you are and a clear way out.
 const accountBarHtml = user => `<div class="account"><span class="muted">Signed in as</span> <b>${esc(user.email || 'your account')}</b><button class="ghost small" id="out">Sign out</button></div>`;
 async function signOut() {
@@ -219,7 +224,7 @@ async function hostHome(user, msg = '') {
     if (!claimed) {
       app.innerHTML = `${accountBarHtml(user)}<h1>🎲 ${BRAND}</h1>
         <div class="card"><p class="err">Could not set up hosting for this account. Try signing out and in again.</p></div>
-        ${joinCodeHtml()}${catalogHtml()}`;
+        ${joinCodeHtml()}${catalogHtml()}${footerHtml()}`;
       bindJoinCode();
       bindCatalog();
       app.querySelector('#out').onclick = signOut;
@@ -238,7 +243,8 @@ async function hostHome(user, msg = '') {
       <p class="muted or">Joining a friend's game instead?</p>
       <form id="jc" class="row"><input class="grow" name="code" placeholder="Room code, e.g. K7Q2M" maxlength="5" autocapitalize="characters" autocomplete="off" required aria-label="Room code"><button type="submit" class="ghost">Join</button></form>
     </section>
-    ${catalogHtml()}`;
+    ${catalogHtml()}
+    ${footerHtml()}`;
   bindJoinCode();
   bindCatalog();
   app.querySelector('#out').onclick = signOut;
