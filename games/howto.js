@@ -62,4 +62,16 @@ export const HOWTO = {
     tips: ['With a moderator, the game does not move on by itself. The moderator gets a green "everyone is done" prompt (with a beep) when everyone has acted, voted or is ready, and presses the big button to continue.', 'The moderator (or host) can pause the game for a break. If someone goes offline, the host can wait, let the app play for them, or remove them.', 'At the end you get a night-by-night recap of what everyone did.', 'The host can switch on open voting (see votes live) and a runoff vote when there is a tie.', 'The host chooses who runs the game: no moderator (timers), the host, or another player.', 'Playing in the same room? The host can turn on Face-to-face mode: at night everyone gets the same screen and must pick a player (only the right picks count), so nobody can tell who the wolves are. Skip the night and you can\'t vote the next day.',
       'If you are out, stay quiet and don\'t give hints!'],
   },
+  bunutan: {
+    goal: 'Draw a secret name for a gift exchange (Secret Santa / Monito Monita). Only you can see who you drew.',
+    steps: [
+      'Everyone who opens the host\'s link joins the draw. The host waits until all the players are here, then taps "Draw the names".',
+      'Everyone sees the names being mixed. Then each person taps their own gift box to open it and watch the names spin until one lands.',
+      'Your name is hidden again after a few seconds. Tap "Tap to see who you drew" any time to look again, even if you leave and come back.',
+      'Even if the host closes the room, your draw stays saved on this phone. Open the link again and tap "Open my gift".',
+      'Tap "Save as image" to get a picture of your name, with the event details, so you don\'t need a screenshot.',
+      'Buy a gift for the person you drew and keep it a secret until the exchange!',
+    ],
+    tips: ['Nobody can draw themselves. The host can also keep two people (like partners) from drawing each other, and choose whether the host is in the draw.', 'Playing in the same room? Keep your screen private when you reveal your name.'],
+  },
 };

@@ -180,6 +180,9 @@ const SOUNDS_SPOOKY = {
   mystic: () => { tone(494, 0.7, { to: 740, gain: 0.07 }); tone(740, 0.9, { to: 988, gain: 0.05, delay: 0.15 }); },
 };
 Object.assign(SOUNDS, SOUNDS_SPOOKY, {
+  shuffle: () => Array.from({ length: 9 }, (_, i) => noise(0.12, { delay: i * 0.1, freq: 1500 + Math.random() * 3000, q: 1.2, gain: 0.09 })),
+  rustle: () => { noise(0.45, { freq: 2200, to: 900, q: 0.7, gain: 0.1 }); noise(0.3, { freq: 3500, q: 1, gain: 0.05, delay: 0.1 }); },
+  sparkle: () => [1568, 1976, 2349, 3136].forEach((f, i) => tone(f, 0.28, { delay: i * 0.08, gain: 0.05 })),
   farewell: () => [392, 349, 311, 262].forEach((f, i) => tone(f, 0.55, { delay: i * 0.32, type: 'triangle', gain: 0.09 })),
   bang: () => { noise(0.25, { freq: 900, to: 200, q: 0.6, gain: 0.35 }); tone(90, 0.25, { to: 35, gain: 0.3 }); },
   drumroll: () => Array.from({ length: 14 }, (_, i) => tone(110 + (i % 2) * 14, 0.07, { type: 'triangle', gain: 0.05 + i * 0.006, delay: i * 0.09 })),

@@ -9,6 +9,7 @@ export const TYPES = {
 };
 
 export const META = {
+  bunutan: { pitch: 'Secret gift exchange: everyone draws one name that only they can see, then saves it as a picture.', min: 3, max: null, minutes: '5', type: 'party', kids: true },
   werewolf: { pitch: 'Secret roles, night kills and day votes. Find the wolves before they find you.', min: 5, max: null, minutes: '20–40', type: 'party', kids: false },
   impostor: { pitch: 'Everyone knows the secret word except one. Give clues and catch the faker.', min: 3, max: null, minutes: '10–15', type: 'party', kids: true },
   bingo: { pitch: 'Classic number bingo with 38 win shapes, from straight lines to a Christmas tree.', min: 2, max: null, minutes: '10–20', type: 'party', kids: true },
