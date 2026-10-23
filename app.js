@@ -318,6 +318,13 @@ const participating = () => (S.spectators.size ? players().filter(p => !S.specta
 const env = () => ({ players: participating(), hostId: S.me, now: Date.now() });
 // What we tell the room about ourselves. `pk` is our public key, so the host can send us private messages.
 const meta = () => ({ name: S.name, t: S.joinedAt, host: S.isHost, pk: S.keys?.publicJwk });
+// Fast, throw-away updates that don't belong in the game state (like where people are walking). Games get this as ui.live.
+const liveFns = new Set();
+const live = {
+  send: d => { try { S.channel?.send({ type: 'broadcast', event: 'live', payload: { from: S.me, d } }); } catch { /* not connected */ } },
+  on: fn => { liveFns.add(fn); return () => liveFns.delete(fn); },
+};
+
 // The host's own actions go straight to the game, so choices only the host makes (like which player is the
 // secret millionaire) never travel over the room's shared channel where guests could read them.
 const act = (type, data) => {
@@ -419,6 +426,7 @@ function enterRoom(code, name, isHost) {
   S.channel = sb.channel(`room:${code}`, { config: { broadcast: { self: true }, presence: { key: S.me } } });
   S.channel
     .on('broadcast', { event: 'action' }, ({ payload }) => { if (S.isHost) hostHandle(payload); })
+    .on('broadcast', { event: 'live' }, ({ payload }) => { if (payload?.from !== S.me) liveFns.forEach(f => f(payload)); })
     .on('broadcast', { event: 'state' }, ({ payload }) => {
       S.game = payload.game; S.state = payload.state;
       if (payload.room && !S.isHost) S.room = payload.room;
@@ -848,7 +856,7 @@ function render() {
   stage.classList.toggle('spectating', spectator);
   if (g && S.state) {
     // `raw` is the host's own full game state; it never leaves the host's browser, so games can keep host-only info there.
-    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps.filter(p => !watching.has(p.id)), watching: ps.filter(p => watching.has(p.id)), spectator, nameOf, act, esc, room: S.code, priv: S.priv, raw: S.isHost ? S.raw : null });
+    g.render(stage, S.state, { me: S.me, isHost: S.isHost, players: ps.filter(p => !watching.has(p.id)), watching: ps.filter(p => watching.has(p.id)), spectator, nameOf, act, live, esc, room: S.code, priv: S.priv, raw: S.isHost ? S.raw : null });
   }
 }
 

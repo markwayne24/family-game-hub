@@ -1131,3 +1131,12 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 .smc-money i{position:absolute;top:-10%;left:var(--x);font-size:var(--s);font-style:normal;animation:smFall 3.4s linear var(--d) infinite}
 @keyframes smFall{to{transform:translateY(120vh) rotate(360deg)}}
 @media (prefers-reduced-motion:reduce){.sm-coin,.sm-env,.sm-timer b.hot,.smc-money i{animation:none!important}}
+
+/* the live map */
+.sm-mappanel{padding:10px}
+.sm-livemap{display:flex;flex-direction:column;gap:10px}
+.sm-canvas{display:block;width:100%;max-width:440px;margin:0 auto;aspect-ratio:3/4;border-radius:16px;touch-action:none;user-select:none;-webkit-user-select:none;background:#1b1530;box-shadow:0 6px 18px #0003}
+.sm-use{display:grid;gap:8px}
+.sm-hint{margin:0;text-align:center;color:var(--mute);font-size:.9rem}
+.sm-usebtn{width:100%;min-height:54px;font-size:1.05rem;background:linear-gradient(135deg,#a06a00,#6c4cf5)}
+.sm-usebtn[hidden]{display:none}

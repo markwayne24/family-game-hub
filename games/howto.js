@@ -78,7 +78,7 @@ export const HOWTO = {
     goal: 'One player is secretly a Millionaire. Win tasks for your team to earn clues, then work out who it is before the final vote.',
     steps: [
       'The host is the game master: they run the game and do not play. Everyone else is split into two teams, mixed again every round.',
-      'In each round, tap a room in the mansion to walk in and play its little task. Everyone can see which room you are in.',
+      'In each round, walk around the mansion: drag on the map (or use the arrow keys) and step onto a glowing pad in a room to play its little task. Everyone can see where you are. The host can also choose a simple room list instead of walking.',
       'The team with the most points at the end of the round gets a secret clue about the Millionaire. You can share it, or lie about it.',
       'The Millionaire gets a secret agenda each round, like "visit the Library" or "make your team lose". Watch for suspicious behaviour!',
       'Between rounds, each player can accuse someone once. If you are right, you win. If you are wrong, you sit out the next round.',

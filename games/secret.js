@@ -28,9 +28,9 @@ export const secret = {
   init(env, opts) {
     if (opts?.memory?.saved) return opts.memory.saved;
     return {
-      phase: 'lobby', gm: env.hostId, rounds: 4, secs: 120, pickMode: 'random', pick: null,
+      phase: 'lobby', gm: env.hostId, rounds: 4, secs: 120, mode: 'map', pickMode: 'random', pick: null,
       players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, voteEnd: 0,
-      loc: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
+      loc: {}, visited: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
       millionaire: null, agenda: null, nextAgenda: null, agendaRes: [], bonus: 0,
       clues: [], accusations: [], jailed: {}, votes: {}, outcome: null, error: null,
     };
@@ -43,7 +43,7 @@ export const secret = {
     const live = () => s.players.filter(id => !s.jailedNow?.includes(id));
     if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.filter(p => p.id !== env.hostId).map(p => [p.id, p.name])) };
 
-    if (a.type === 'reset' && isHost) return { ...this.init(env), rounds: s.rounds, secs: s.secs, pickMode: s.pickMode, pick: s.pick };
+    if (a.type === 'reset' && isHost) return { ...this.init(env), rounds: s.rounds, secs: s.secs, mode: s.mode, pickMode: s.pickMode, pick: s.pick };
 
     /* ---------- the waiting room ---------- */
     if (s.phase === 'lobby') {
@@ -51,7 +51,8 @@ export const secret = {
         const p = a.data ?? {};
         const n = { ...s, error: null };
         if (Number.isInteger(p.rounds) && p.rounds >= 3 && p.rounds <= 6) n.rounds = p.rounds;
-        if ([60, 90, 120, 180].includes(p.secs)) n.secs = p.secs;
+        if ([60, 90, 120, 180, 240].includes(p.secs)) n.secs = p.secs;
+        if (p.mode === 'map' || p.mode === 'rooms') n.mode = p.mode;
         if (p.pickMode === 'random' || p.pickMode === 'host') n.pickMode = p.pickMode;
         if ('pick' in p) n.pick = s.names[p.pick] != null ? p.pick : null;
         if ('agenda' in p) n.nextAgenda = agendaOf(p.agenda) ? p.agenda : null;
@@ -70,7 +71,11 @@ export const secret = {
     if (s.phase === 'round') {
       const sits = id => s.jailedNow?.includes(id);
       if (a.type === 'go' && s.players.includes(a.from) && !sits(a.from) && ROOMS.some(r => r.id === a.data?.room) && !s.done[a.from]?.[a.data.room]) {
-        return { ...s, loc: { ...s.loc, [a.from]: a.data.room }, goAt: { ...s.goAt, [a.from]: env.now } };
+        return { ...s, loc: { ...s.loc, [a.from]: a.data.room }, goAt: { ...s.goAt, [a.from]: env.now }, visited: { ...s.visited, [a.from]: { ...s.visited[a.from], [a.data.room]: true } } };
+      }
+      // walking into a room on the live map (the first time this round) counts as a visit
+      if (a.type === 'visit' && s.players.includes(a.from) && !sits(a.from) && ROOMS.some(r => r.id === a.data?.room) && !s.visited[a.from]?.[a.data.room]) {
+        return { ...s, visited: { ...s.visited, [a.from]: { ...s.visited[a.from], [a.data.room]: true } } };
       }
       if (a.type === 'leave' && s.players.includes(a.from)) { const { [a.from]: _, ...loc } = s.loc; return { ...s, loc }; }
       if (a.type === 'done' && s.players.includes(a.from) && !sits(a.from)) {
@@ -119,7 +124,7 @@ export const secret = {
 
   // What everyone may see. Who the Millionaire is, the agenda, the clues and the task log stay out of it until the end.
   view(s) {
-    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, ...pub } = s;
+    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, visited, ...pub } = s;
     const out = { ...pub, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))], voted: Object.keys(votes) };
     if (s.phase === 'end') Object.assign(out, { millionaire, agendaRes, clues: clues.map(({ round, text }) => ({ round, text })) });
     return out;
@@ -132,7 +137,7 @@ export const secret = {
       out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text })), doneRooms: Object.keys(s.done[id] ?? {}), myVote: s.votes[id] ?? null };
       if (id === s.millionaire) Object.assign(out[id], { millionaire: true, agenda: s.agenda, agendaRes: s.agendaRes, bonus: s.bonus });
     }
-    out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
+    out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, visited: s.visited, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
     return out;
   },
 
@@ -146,7 +151,7 @@ function beginRound(s, now) {
   const sitting = s.players.filter(id => s.jailed[id] === round);
   return {
     ...s, phase: 'round', round, startAt: now, endAt: now + s.secs * 1000,
-    team: makeTeams(s.players), teamPts: [0, 0], loc: {}, done: {}, goAt: {}, pts: {}, jailedNow: sitting,
+    team: makeTeams(s.players), teamPts: [0, 0], loc: {}, visited: {}, done: {}, goAt: {}, pts: {}, jailedNow: sitting,
     agenda: { key: s.nextAgenda ?? randomAgenda() }, nextAgenda: null, error: null,
   };
 }
@@ -158,8 +163,8 @@ function finishRound(s, now) {
   const winners = top > 0 ? [0, 1].filter(t => s.teamPts[t] === top) : [];
   const to = s.players.filter(id => winners.includes(s.team[id]));
   const used = s.clues.map(c => c.kind);
-  const clue = to.length ? makeClue({ log: roundLog, team: s.team, players: s.players, names: s.names, millionaire: s.millionaire, used }) : null;
-  const visited = new Set(roundLog.filter(e => e.id === s.millionaire).map(e => e.room));
+  const clue = to.length ? makeClue({ log: roundLog, visited: Object.keys(s.visited[s.millionaire] ?? {}), team: s.team, players: s.players, names: s.names, millionaire: s.millionaire, used }) : null;
+  const visited = new Set([...Object.keys(s.visited[s.millionaire] ?? {}), ...roundLog.filter(e => e.id === s.millionaire).map(e => e.room)]);
   const mine = roundLog.filter(e => e.id === s.millionaire);
   const res = agendaOf(s.agenda?.key)?.check({ visited, done: mine.length, ok: mine.filter(e => e.ok).length, won: winners.includes(s.team[s.millionaire]) }) ?? false;
   const n = {

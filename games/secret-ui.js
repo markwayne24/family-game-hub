@@ -1,6 +1,7 @@
 import { sfx, fresh, memo, confetti } from './fx.js';
 import { ROOMS, TEAMS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money } from './secret-data.js';
 import { openTask } from './secret-tasks.js';
+import { createLiveMap } from './secret-map.js';
 import { revealScene } from './secret-fx.js';
 import { avatar, scoreBoardHtml } from './impostor-fx.js';
 
@@ -23,6 +24,27 @@ export function renderSecret(el, s, ui, game) {
   const chip = (id, extra = '') => `<span class="bn-who ${id === ui.me ? 'me' : ''}">${avatar(nm(id))}<b>${esc(nm(id))}</b>${extra}</span>`;
   const teamTag = t => `<span class="sm-team t${t}">${TEAMS[t].emoji} ${TEAMS[t].name}</span>`;
   const last = s.history[s.history.length - 1];
+
+  // the live map belongs to a round: it is created when the round starts and thrown away when it ends
+  const mapOn = s.phase === 'round' && s.mode === 'map';
+  if ((!mapOn || el._lmKey !== s.round) && el._lm) { el._lm.destroy(); el._lm = null; }
+  const launch = room => {
+    if (el._closeTask) return;
+    ui.act('go', { room });
+    sfx('whoosh');
+    el._lm?.setBusy(room);
+    el._closeTask = openTask(room, {
+      anchor: el,
+      onFinish: (ok, ms) => { el._closeTask = null; el._lm?.setBusy(null); ui.act('done', { room, ok, ms }); },
+      onQuit: () => { el._closeTask = null; el._lm?.setBusy(null); ui.act('leave'); },
+    });
+  };
+  if (mapOn) {
+    const lmOpts = { live: ui.live, me: ui.me, players: s.players, nameOf: nm, team: s.team, canMove: playing && !sits, watching: !playing, doneRooms: p?.doneRooms ?? [], onVisit: room => ui.act('visit', { room }), onUse: launch };
+    if (!el._lm) { el._lm = createLiveMap(lmOpts); el._lmKey = s.round; el.querySelector('.sm-livemap')?.remove(); }
+    el._lm.update(lmOpts);
+    window.__smap = el._lm;   // handy for testing
+  }
 
   // leaving a room's task when the round is over
   if (s.phase !== 'round' && el._closeTask) { el._closeTask(); el._closeTask = null; }
@@ -76,7 +98,8 @@ export function renderSecret(el, s, ui, game) {
       body = `${panel(`👥 Players <span class="bn-count">${here.length}</span>`, `<div class="bn-whos">${whos}</div><p class="muted">You run the game as the <b>game master</b>: you don't play, you know who the Millionaire is, and you can steer their secret agenda.</p>`)}
         ${panel('⚙️ Game settings', `<div class="sm-set">
           <label>Rounds<select data-cfg="rounds">${[3, 4, 5, 6].map(n => opt(n, s.rounds, `${n} rounds`)).join('')}</select></label>
-          <label>Time per round<select data-cfg="secs">${[60, 90, 120, 180].map(n => opt(n, s.secs, `${n / 60 >= 1 && n % 60 === 0 ? n / 60 + ' min' : n + ' sec'}`)).join('')}</select></label>
+          <label>Time per round<select data-cfg="secs">${[60, 90, 120, 180, 240].map(n => opt(n, s.secs, `${n % 60 === 0 ? n / 60 + ' min' : n + ' sec'}`)).join('')}</select></label>
+          <label>How players move<select id="modeSel"><option value="map" ${s.mode === 'map' ? 'selected' : ''}>🗺 Walk around the mansion (live)</option><option value="rooms" ${s.mode === 'rooms' ? 'selected' : ''}>📋 Pick a room from a list (uses less data)</option></select></label>
           <label>Who is the Millionaire?<select id="pickMode"><option value="random" ${s.pickMode === 'random' ? 'selected' : ''}>🎲 Pick at random</option>${here.map(x => opt('p:' + x.id, s.pickMode === 'host' ? 'p:' + (ui.raw ?? s).pick : '', `Choose ${esc(x.name)}`)).join('')}</select></label>
           <label>First round's secret agenda<select id="agenda0"><option value="">🎲 Random</option>${AGENDAS.map(a => opt(a.key, s.nextAgenda ?? '', esc(a.text))).join('')}</select></label>
         </div>`)}
@@ -114,7 +137,8 @@ export function renderSecret(el, s, ui, game) {
         <button class="ghost danger" id="endRound">⏭ End this round now</button>`);
     }
     body = `${myTag}${secretCard()}${panel(`🏆 Teams ${timer(s.endAt)}`, `<div class="sm-tbs">${teamBars}</div>`)}
-      ${panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, `${playing && !sits ? '<p class="muted" style="margin-top:0">Tap a room to walk in and do its task. Everyone can see which room you\'re in.</p>' : sits ? '<p class="sm-sitmsg">🚔 You guessed wrong, so you sit this round out. Watch the others!</p>' : '<p class="muted" style="margin-top:0">Watching the mansion live.</p>'}<div class="sm-map">${tiles}</div>`)}
+      ${mapOn ? panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, '<div id="mapSlot"></div>', 'sm-mappanel') : ''}
+      ${mapOn ? '' : panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, `${playing && !sits ? '<p class="muted" style="margin-top:0">Tap a room to walk in and do its task. Everyone can see which room you\'re in.</p>' : sits ? '<p class="sm-sitmsg">🚔 You guessed wrong, so you sit this round out. Watch the others!</p>' : '<p class="muted" style="margin-top:0">Watching the mansion live.</p>'}<div class="sm-map">${tiles}</div>`)}
       ${gmPanel}`;
   }
 
@@ -196,10 +220,14 @@ export function renderSecret(el, s, ui, game) {
 
   el.innerHTML = `<div class="sm ${s.phase === 'lobby' ? 'is-lobby' : ''}">${head}${body}${bar}</div>`;
 
+  const slot = el.querySelector('#mapSlot');
+  if (slot && el._lm) slot.replaceWith(el._lm.box);
+
   /* ---- wiring ---- */
   const on = (sel, fn) => el.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => fn(b)));
   el.querySelectorAll('select[data-cfg]').forEach(x => x.addEventListener('change', () => { sfx('pop'); ui.act('config', { [x.dataset.cfg]: +x.value }); }));
   el.querySelector('#pickMode')?.addEventListener('change', e => { sfx('pop'); const v = e.target.value; ui.act('config', v === 'random' ? { pickMode: 'random', pick: null } : { pickMode: 'host', pick: v.slice(2) }); });
+  el.querySelector('#modeSel')?.addEventListener('change', e => { sfx('pop'); ui.act('config', { mode: e.target.value }); });
   el.querySelector('#agenda0')?.addEventListener('change', e => ui.act('config', { agenda: e.target.value }));
   el.querySelector('#agendaNow')?.addEventListener('change', e => ui.act('agenda', { key: e.target.value }));
   el.querySelector('#agendaNext')?.addEventListener('change', e => ui.act('agenda', { key: e.target.value }));
@@ -216,15 +244,5 @@ export function renderSecret(el, s, ui, game) {
   on('#accCancel', () => { m.accuse = false; redraw(); });
   on('[data-acc]', b => { const t = b.dataset.acc; if (confirm(`Accuse ${nm(t)}? If you're wrong you sit out the next round.`)) { m.accuse = false; sfx('drumroll'); ui.act('accuse', { target: t }); redraw(); } });
   on('[data-vote]', b => { sfx('vote'); ui.act('vote', { target: b.dataset.vote }); });
-  on('[data-room]', b => {
-    if (el._closeTask) return;
-    const room = b.dataset.room;
-    ui.act('go', { room });
-    sfx('whoosh');
-    el._closeTask = openTask(room, {
-      anchor: el,
-      onFinish: (ok, ms) => { el._closeTask = null; ui.act('done', { room, ok, ms }); },
-      onQuit: () => { el._closeTask = null; ui.act('leave'); },
-    });
-  });
+  on('[data-room]', b => launch(b.dataset.room));
 }

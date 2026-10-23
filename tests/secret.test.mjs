@@ -166,4 +166,23 @@ for (let k = 0; k < 400; k++) {
   for (let k = 0; k < 30; k++) assert.equal(makeClue({ log, team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used }).kind, 'length');
 }
 assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
+// ---- walking into rooms on the live map
+{
+  let { e, s } = start(6, { mode: 'rooms', agenda: 'visit:vault' }, 1000);
+  assert.equal(s.mode, 'rooms'); assert.equal(G.reduce(G.init(env(6)), { from: 'h', type: 'config', data: { mode: 'bogus' } }, env(6)).mode, 'map', 'map is the default');
+  const m = s.millionaire, o = s.players.find(x => x !== m);
+  assert.equal(step(s, e, 'stranger', 'visit', { room: 'vault' }), s); assert.equal(step(s, e, o, 'visit', { room: 'attic' }), s);
+  const v = step(s, e, m, 'visit', { room: 'vault' }); assert.deepEqual(v.visited[m], { vault: true });
+  assert.equal(step(v, e, m, 'visit', { room: 'vault' }), v, 'only counted once');
+  assert.ok(!JSON.stringify(G.view(v)).includes('vault":true'), 'visits are private');
+  assert.deepEqual(G.priv(v).h.visited[m], { vault: true });
+  const f = step(v, { ...e, now: v.endAt + 1 }, 'h', 'timeout');
+  assert.equal(f.agendaRes[0].ok, true, 'walking in is enough for a visit agenda');
+  assert.deepEqual(step(f, e, 'h', 'next').visited, {}, 'a new round starts empty');
+  // a clue can say where the Millionaire walked, even without doing a task there
+  const c = makeClue({ log: [], visited: ['vault'], team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used: ['skip', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'length'] });
+  assert.equal(c.kind, 'visit'); assert.ok(c.text.includes('Vault'));
+  const c2 = makeClue({ log: [], visited: ['vault'], team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used: ['visit', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'length'] });
+  assert.ok(c2.kind === 'skip' && !c2.text.includes('Vault'), 'never says they skipped a room they walked into');
+}
 console.log('secret millionaire tests passed');

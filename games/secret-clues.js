@@ -6,11 +6,11 @@ const pick = a => a[Math.floor(Math.random() * a.length)];
 export const taskPoints = (ok, ms) => (ok ? 10 + Math.max(0, 5 - Math.floor(ms / 5000)) : 0);
 
 // A clue is always a TRUE fact about the Millionaire, taken from what really happened this round.
-// round: { log: [{id, room, ok, ms}], team: {id: 0|1}, players: [ids], names: {id: name}, millionaire, used: [kinds already given] }
+// round: { log: [{id, room, ok, ms}], visited: [room ids the Millionaire walked into], team: {id: 0|1}, players: [ids], names: {id: name}, millionaire, used: [kinds already given] }
 // Returns { kind, text } or null.
-export function makeClue({ log, team, players, names, millionaire: m, used = [] }) {
+export function makeClue({ log, visited: walked, team, players, names, millionaire: m, used = [] }) {
   const mine = log.filter(e => e.id === m);
-  const visited = [...new Set(mine.map(e => e.room))];
+  const visited = [...new Set([...(walked ?? []), ...mine.map(e => e.room)])];   // rooms walked into, plus rooms where a task was done
   const skipped = ROOMS.map(r => r.id).filter(r => !visited.includes(r));
   const okN = mine.filter(e => e.ok).length;
   const name = String(names[m] ?? '').trim();
