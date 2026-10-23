@@ -1163,3 +1163,20 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 .st-dig{font-size:2.6rem;font-weight:800;width:64px;text-align:center;background:var(--bg);border-radius:12px;padding:4px 0;font-variant-numeric:tabular-nums}
 .st-up,.st-dn{width:64px;min-height:44px;background:var(--line);color:var(--ink)}
 .st-hist{display:grid;gap:2px;font-variant-numeric:tabular-nums;font-size:1.05rem;max-height:120px;overflow:auto;width:100%}
+
+/* even more tasks */
+.st-gauge{position:relative;width:100%;height:46px;border-radius:99px;background:var(--bg);border:3px solid var(--line);overflow:hidden}
+.st-fill{position:absolute;left:0;top:0;bottom:0;width:0;background:linear-gradient(90deg,#74c0fc,#ff8787)}
+.st-zone2{position:absolute;top:0;bottom:0;background:#2f9e4488;border-left:3px solid #2f9e44;border-right:3px solid #2f9e44}
+.st-hold,.st-pumpbtn{width:100%;min-height:88px;font-size:1.6rem;background:linear-gradient(135deg,#a06a00,#6c4cf5);touch-action:none}
+.st-slots{display:flex;gap:8px;justify-content:center}
+.st-slot{width:48px;height:56px;border-radius:12px;background:var(--bg);border:3px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:1.8rem;font-weight:800}
+.st-letters{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}
+.st-letter{width:56px;height:60px;font-size:1.7rem;padding:0}.st-letter:disabled{opacity:.25}.st-letter.bad{background:var(--bad)}
+.st-tyre{position:relative;width:170px;height:170px;border-radius:50%;border:10px solid #222;background:var(--bg);overflow:hidden;display:flex;align-items:center;justify-content:center;font-size:4rem}
+.st-tyrefill{position:absolute;left:0;right:0;bottom:0;height:0;background:linear-gradient(180deg,#69db7c,#2f9e44);opacity:.75}
+.st-tyre span{position:relative}
+.st-fruits{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.st-fruit{aspect-ratio:1;font-size:2rem;padding:0;background:var(--bg);border:1px solid var(--line)}.st-fruit.picked{opacity:.4}.st-fruit.bad{background:var(--bad)}
+.st-cards{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;width:100%}
+.st-gem{aspect-ratio:1;font-size:2rem;padding:0;background:var(--accent);color:#fff}.st-gem.up{background:var(--bg);color:var(--ink);border:2px solid var(--accent)}.st-gem.found{background:#d3f9d8;opacity:.7}

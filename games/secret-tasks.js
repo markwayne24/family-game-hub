@@ -221,7 +221,90 @@ function code(box, finish) {
   draw();
 }
 
-const GAMES = { reaction, catch: catchEggs, sequence, oddone, numbers, wires, sums, whack, timing, code };
+/* ---------- Kitchen: hold to heat the soup, let go in the green ---------- */
+function simmer(box, finish, { later }) {
+  const LO = 62, HI = 82; let pot = 0, good = 0, v = 0, holding = false, over = false, locked = false, raf = 0, last = 0; const t0 = performance.now();
+  box.innerHTML = `<p class="st-say" id="say">Pot 1 of 3. Press and hold!</p><div class="st-gauge" id="g" data-v="0" data-lo="${LO}" data-hi="${HI}"><i class="st-fill" id="fill"></i><b class="st-zone2" style="left:${LO}%;width:${HI - LO}%"></b></div><button class="st-hold" id="hold">🍲 HOLD</button><div class="st-dots" id="dots"></div>`;
+  const say = box.querySelector('#say'), g = box.querySelector('#g'), fill = box.querySelector('#fill'), btn = box.querySelector('#hold'), dots = box.querySelector('#dots');
+  const paint = () => { dots.innerHTML = [0, 1, 2].map(i => `<i class="${i < good ? 'on' : i < pot ? 'bad' : ''}"></i>`).join(''); };
+  const setV = x => { v = x; g.dataset.v = Math.round(v); fill.style.width = v + '%'; };
+  const settle = ok => {
+    holding = false; locked = true; cancelAnimationFrame(raf); if (ok) good++; pot++; sfx(ok ? 'ding' : 'buzz'); paint();
+    say.textContent = ok ? 'Perfect!' : v >= 100 ? 'Boiled over!' : v < LO ? 'Too cold…' : 'Too hot!';
+    if (pot >= 3 || (3 - pot) + good < 2) { over = true; return later(() => finish(good >= 2, performance.now() - t0), 600); }
+    later(() => { setV(0); locked = false; say.textContent = `Pot ${pot + 1} of 3. Press and hold!`; }, 700);
+  };
+  const frame = now => { if (!holding) return; const dt = Math.min(0.05, (now - last) / 1000); last = now; setV(Math.min(100, v + dt * 70)); if (v >= 100) return settle(false); raf = requestAnimationFrame(frame); };
+  tap(btn, () => { if (over || holding || locked) return; holding = true; last = performance.now(); raf = requestAnimationFrame(frame); });
+  const up = () => { if (!holding) return; settle(v >= LO && v <= HI); };
+  addEventListener('pointerup', up); addEventListener('pointercancel', up);
+  box._stop = () => { cancelAnimationFrame(raf); removeEventListener('pointerup', up); removeEventListener('pointercancel', up); };
+  paint();
+}
+
+/* ---------- Library: unscramble a word ---------- */
+const WORDS = ['BOOKS', 'PAGES', 'NOVEL', 'SHELF', 'STORY', 'WRITE', 'POEMS', 'PROSE', 'VERSE', 'TALES', 'PLOTS', 'INDEX'];
+function scramble(box, finish) {
+  const word = WORDS[rnd(WORDS.length)]; let letters; do letters = shuffle(word.split('')); while (letters.join('') === word);
+  let pos = 0, mistakes = 0; const t0 = performance.now();
+  box.innerHTML = `<div class="st-slots" id="slots" data-ans="${word}">${word.split('').map(() => '<span class="st-slot"></span>').join('')}</div><p class="st-say" id="say">Tap the letters in order.</p><div class="st-letters">${letters.map((c, i) => `<button class="st-letter" data-i="${i}">${c}</button>`).join('')}</div><div class="st-dots">${[0, 1, 2].map(() => '<i></i>').join('')}</div>`;
+  const slots = [...box.querySelectorAll('.st-slot')], say = box.querySelector('#say'), dots = [...box.querySelectorAll('.st-dots i')];
+  box.querySelectorAll('.st-letter').forEach(b => tap(b, () => {
+    if (b.disabled) return;
+    if (b.textContent === word[pos]) { slots[pos].textContent = b.textContent; pos++; b.disabled = true; sfx('tick'); if (pos === word.length) { sfx('ding'); finish(true, performance.now() - t0); } }
+    else { sfx('buzz'); dots[mistakes]?.classList.add('bad'); b.classList.add('bad'); setTimeout(() => b.classList.remove('bad'), 300); say.textContent = 'Not that one!'; if (++mistakes >= 3) { box.querySelectorAll('.st-letter').forEach(x => (x.disabled = true)); setTimeout(() => finish(false, performance.now() - t0), 500); } }
+  }));
+}
+
+/* ---------- Garage: pump the tyre by tapping fast ---------- */
+function pump(box, finish) {
+  let v = 0, over = false, raf = 0;
+  const LIMIT = 8000, t0 = performance.now(); let last = t0;
+  box.innerHTML = `<div class="st-tyre"><div class="st-tyrefill" id="tf"></div><span>🛞</span></div><p class="st-say" id="say">Tap PUMP as fast as you can!</p><button class="st-pumpbtn" id="pump">⬆ PUMP</button><div class="st-clock" id="clk"></div>`;
+  const tf = box.querySelector('#tf'), clk = box.querySelector('#clk'), say = box.querySelector('#say');
+  const frame = now => {
+    if (over) return;
+    const dt = Math.min(0.05, (now - last) / 1000); last = now;
+    { v = Math.max(0, v - dt * 8); clk.textContent = ((LIMIT - (performance.now() - t0)) / 1000).toFixed(1) + 's left'; if (performance.now() - t0 > LIMIT) { over = true; sfx('lose'); say.textContent = 'Out of time!'; return finish(false, LIMIT); } }
+    tf.style.height = v + '%'; tf.dataset.v = Math.round(v); raf = requestAnimationFrame(frame);
+  };
+  tap(box.querySelector('#pump'), () => {
+    if (over) return;
+    v = Math.min(100, v + 4); sfx('tick'); tf.style.height = v + '%'; tf.dataset.v = Math.round(v);
+    if (v >= 100) { over = true; cancelAnimationFrame(raf); say.textContent = 'Full!'; finish(true, performance.now() - t0); }
+  });
+  raf = requestAnimationFrame(frame);
+  box._stop = () => { over = true; cancelAnimationFrame(raf); };
+}
+
+/* ---------- Garden: pick only the ripe tomatoes ---------- */
+function harvest(box, finish) {
+  const ripe = 5 + rnd(2), cells = shuffle([...Array(ripe).fill(1), ...Array(12 - ripe).fill(0)]); let left = ripe, mistakes = 0; const t0 = performance.now();
+  box.innerHTML = `<p class="st-say" id="say">Ripe left: <b>${left}</b></p><div class="st-fruits">${cells.map((r, i) => `<button class="st-fruit" data-ripe="${r}">${r ? '🍅' : '🍏'}</button>`).join('')}</div><div class="st-dots"><i></i><i></i></div>`;
+  const say = box.querySelector('#say'), dots = [...box.querySelectorAll('.st-dots i')];
+  box.querySelectorAll('.st-fruit').forEach(b => tap(b, () => {
+    if (b.disabled) return; b.disabled = true;
+    if (b.dataset.ripe === '1') { b.classList.add('picked'); b.textContent = '🧺'; sfx('ding'); say.innerHTML = `Ripe left: <b>${--left}</b>`; if (!left) finish(true, performance.now() - t0); }
+    else { b.classList.add('bad'); sfx('buzz'); dots[mistakes]?.classList.add('bad'); if (++mistakes > 1) { box.querySelectorAll('.st-fruit').forEach(x => (x.disabled = true)); setTimeout(() => finish(false, performance.now() - t0), 500); } }
+  }));
+}
+
+/* ---------- Vault: match the gems ---------- */
+function pairs(box, finish, { later }) {
+  const GEMS = ['💎', '💍', '👑', '🏆', '🔮', '🪙'], deck = shuffle([...GEMS, ...GEMS]); let open = [], found = 0, wrong = 0, lock = false; const t0 = performance.now();
+  box.innerHTML = `<p class="st-say" id="say">Wrong tries: 0 / 6</p><div class="st-cards">${deck.map((g, i) => `<button class="st-gem" data-v="${g}" data-i="${i}"><span>?</span></button>`).join('')}</div>`;
+  const say = box.querySelector('#say'), cards = [...box.querySelectorAll('.st-gem')];
+  cards.forEach(c => tap(c, () => {
+    if (lock || c.classList.contains('up') || c.classList.contains('found')) return;
+    c.classList.add('up'); c.firstChild.textContent = c.dataset.v; sfx('flip'); open.push(c);
+    if (open.length < 2) return;
+    const [a, b] = open; open = [];
+    if (a.dataset.v === b.dataset.v) { a.classList.add('found'); b.classList.add('found'); sfx('ding'); if (++found === GEMS.length) later(() => finish(true, performance.now() - t0), 400); }
+    else { wrong++; say.textContent = `Wrong tries: ${wrong} / 6`; sfx('buzz'); lock = true; later(() => { [a, b].forEach(x => { x.classList.remove('up'); x.firstChild.textContent = '?'; }); lock = false; if (wrong >= 6) finish(false, performance.now() - t0); }, 650); }
+  }));
+}
+
+const GAMES = { reaction, catch: catchEggs, sequence, oddone, numbers, wires, sums, whack, timing, code, simmer, scramble, pump, harvest, pairs };
 
 /* ---------- the full-screen frame around a task: intro, the task itself, the result ---------- */
 
