@@ -195,7 +195,7 @@ export const bunutan = {
       } else if (!mineSeen) {
         mine = `<button class="bn-box" id="open"><span class="bn-box-gift"><i class="bn-lid"></i><i class="bn-body"></i><i class="bn-rib"></i></span><b>Tap to open your gift</b><small>You'll draw one name, and only you will see it.</small></button>`;
       } else {
-        const card = `<div class="bn-card"><div class="bn-card-lbl">🤫 Your bunutan is</div><div class="bn-card-name">${esc(me.toName)}</div>${details}<div class="bn-card-foot">Keep it a secret!</div></div>`;
+        const card = `<div class="bn-card"><div class="bn-card-lbl">🤫 Your draw is</div><div class="bn-card-name">${esc(me.toName)}</div>${details}<div class="bn-card-foot">Keep it a secret!</div></div>`;
         mine = el._show
           ? `${card}<div class="bn-actions"><button id="save">📥 Save as image</button><button class="ghost" id="hide">🙈 Hide my name</button></div>`
           : `<button class="bn-peek" id="peek">👁 Tap to see who you drew<small>Keep your screen private. It hides again after a few seconds.</small></button><div class="bn-actions"><button id="save">📥 Save as image</button></div>`;

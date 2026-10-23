@@ -38,7 +38,7 @@ function openKeep(k, onOpened) {
     m.className = 'bn-modal';
     let timer = 0;
     const draw = revealed => {
-      m.innerHTML = `<div class="bnm-box keepview"><div class="bn-card"><div class="bn-card-lbl">🤫 Your bunutan is</div>
+      m.innerHTML = `<div class="bnm-box keepview"><div class="bn-card"><div class="bn-card-lbl">🤫 Your draw is</div>
         ${revealed ? `<div class="bn-card-name">${esc(k.toName)}</div>` : '<div class="bn-card-name" style="font-size:1.4rem;color:var(--mute);-webkit-text-fill-color:currentColor">Hidden for privacy</div>'}
         <div class="bn-details" style="justify-content:center">${k.budget ? `<span class="bn-pill">💰 ${esc(k.budget)}</span>` : ''}${k.date ? `<span class="bn-pill">📅 ${esc(k.date)}</span>` : ''}</div>
         <div class="bn-card-foot">${esc(k.title || 'Bunutan')}</div></div>

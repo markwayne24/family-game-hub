@@ -127,7 +127,7 @@ export async function makeCardImage({ title, toName, fromName, budget, date, not
   g.save(); g.shadowColor = 'rgba(0,0,0,.45)'; g.shadowBlur = 50; g.shadowOffsetY = 24;
   g.fillStyle = '#fffaf0'; roundRect(g, 100, cy, W - 200, ch, 44); g.fill(); g.restore();
   g.strokeStyle = '#e8c15a'; g.lineWidth = 4; roundRect(g, 124, cy + 24, W - 248, ch - 48, 30); g.stroke();
-  g.fillStyle = '#a61e4d'; g.font = `700 40px ${F}`; g.fillText('🤫  MY BUNUTAN IS', W / 2, cy + 110);
+  g.fillStyle = '#a61e4d'; g.font = `700 40px ${F}`; g.fillText('🤫  MY DRAW IS', W / 2, cy + 110);
   g.fillStyle = '#d4a017'; g.font = `36px ${F}`; g.fillText('✦ ✦ ✦', W / 2, cy + 160);
   const name = String(toName || '?');
   const size = fitText(g, name, W - 340, 170, 56, `900 {s}px ${F}`);
@@ -160,14 +160,14 @@ export function saveImage(blob, filename, { onSaved } = {}) {
     const canShare = !!navigator.canShare?.({ files: [file] }); // phones: opens the share sheet (Messenger, Viber, Photos...)
     const m = document.createElement('div');
     m.className = 'bn-modal';
-    m.innerHTML = `<div class="bnm-box"><img alt="Your bunutan picture" src="${url}"><p class="muted">Tip: you can also press and hold the picture to save it.</p>
+    m.innerHTML = `<div class="bnm-box"><img alt="Your draw picture" src="${url}"><p class="muted">Tip: you can also press and hold the picture to save it.</p>
       <div class="bnm-btns ${canShare ? 'two' : ''}">${canShare ? '<button id="bnmShare">📤 Share</button>' : ''}<button id="bnmDl" class="${canShare ? 'ghost' : ''}">📥 Download</button></div>
       <button class="ghost bnm-close" id="bnmClose">Close</button></div>`;
     const close = () => { m.remove(); URL.revokeObjectURL(url); resolve(); };
     m.querySelector('#bnmClose').addEventListener('click', close);
     m.addEventListener('click', e => { if (e.target === m) close(); });
     m.querySelector('#bnmShare')?.addEventListener('click', async () => {
-      try { await navigator.share({ files: [file], title: 'My bunutan', text: 'Shh! My bunutan 🎁' }); onSaved?.('share'); } catch (e) { if (e?.name !== 'AbortError') console.warn(e); }
+      try { await navigator.share({ files: [file], title: 'My draw', text: 'Shh! This is who I drew 🎁' }); onSaved?.('share'); } catch (e) { if (e?.name !== 'AbortError') console.warn(e); }
     });
     m.querySelector('#bnmDl').addEventListener('click', () => {
       const a = document.createElement('a'); a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
