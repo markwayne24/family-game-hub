@@ -63,8 +63,9 @@ s = d.reduce(s,A('h','skip'),env()); s = d.reduce(s,A('h','skip'),env()); assert
 
 // ---- impostor
 let im = GAMES.impostor;
-assert.equal(im.init({players:P.slice(0,2),hostId:'h',now:0}).phase,'need');
-s = im.init(env());
+assert.equal(im.init({players:P.slice(0,2),hostId:'h',now:0}).phase,'lobby');
+assert.equal(im.reduce(im.init({players:P.slice(0,2),hostId:'h',now:0}),A('h','start'),{players:P.slice(0,2),hostId:'h',now:0}).phase,'lobby'); // too few players
+s = im.reduce(im.init(env()),A('h','start'),env());
 assert.equal(s.phase,'clues'); const pubS = im.view(s);
 assert.ok(!('impostor' in pubS) && !('word' in pubS));
 const privs = im.priv(s); assert.equal(Object.values(privs).filter(x=>x.role==='impostor').length,1);
@@ -81,7 +82,7 @@ w = im.reduce(s,A(imp,'guessword',{text:s.word}),env()); assert.equal(w.result.i
 assert.equal(im.reduce(s,A(crew[0],'guessword',{text:s.word}),env()).phase,'guess'); // only impostor may guess
 w = im.reduce(w,A('h','start'),env()); assert.equal(w.phase,'clues'); assert.equal(w.round,2);
 // wrong person voted out -> impostor wins
-s = im.init(env()); for (const id of s.order) s = im.reduce(s,A(s.order[s.clueIdx],'clue',{text:'x'}),env());
+s = im.reduce(im.init(env()),A('h','start'),env()); for (const id of s.order) s = im.reduce(s,A(s.order[s.clueIdx],'clue',{text:'x'}),env());
 const victim = s.order.find(x=>x!==s.impostor);
 for (const id of s.order) s = im.reduce(s,A(id,'vote',{target: id===victim ? s.impostor : victim}),env());
 assert.equal(s.phase,'result'); assert.equal(s.result.impostorWins,true);
@@ -791,8 +792,8 @@ import { lateMode, takePart, watchers, LATE_MODES } from '../games/participants.
   assert.equal(run('drawing', GAMES.drawing.init(env({ now: 0 }))), true); assert.equal(run('drawing', { ...GAMES.drawing.init(env({ now: 0 })), phase: 'end' }), false);
   assert.equal(run('charades', GAMES.charades.init(env({ now: 0 }), {})), true); assert.equal(run('charades', { ...GAMES.charades.init(env({ now: 0 }), {}), phase: 'end' }), false);
   // impostor: while clues / voting / the impostor's last guess; not in the waiting room or on the results screen
-  const imp = GAMES.impostor.init(env()); assert.equal(run('impostor', imp), true);
-  assert.equal(run('impostor', { ...imp, phase: 'result' }), false); assert.equal(run('impostor', { phase: 'need' }), false);
+  const imp = GAMES.impostor.reduce(GAMES.impostor.init(env()), A('h', 'start'), env()); assert.equal(run('impostor', imp), true);
+  assert.equal(run('impostor', { ...imp, phase: 'result' }), false); assert.equal(run('impostor', { phase: 'need' }), false); assert.equal(run('impostor', GAMES.impostor.init(env())), false);
   // rock paper scissors, hangman, word race: a round that has started
   let rp = GAMES.rps.init(env()); assert.equal(run('rps', rp), false);
   rp = GAMES.rps.reduce(rp, A('h', 'pick', { choice: 0 }), env()); assert.equal(run('rps', rp), true);
@@ -841,4 +842,36 @@ import { supported, makeKeys, seal, open as openSealed } from '../games/secure.j
 }
 import { HOWTO } from '../games/howto.js';
 for (const id of Object.keys(GAMES)) { const h = HOWTO[id]; assert.ok(h && h.goal && h.steps?.length >= 2, `${id} has instructions`); }
+// ---- impostor categories
+{
+  const G = GAMES.impostor, e = env();
+  let c = G.init(e);
+  assert.equal(c.phase, 'lobby'); assert.deepEqual(c.cats, []);
+  assert.deepEqual(G.reduce(c, A('a','config',{cat:'Food'}), e).cats, []); // only the host
+  c = G.reduce(c, A('h','config',{cat:'Food'}), e); assert.deepEqual(c.cats, ['Food']);
+  c = G.reduce(c, A('h','config',{cat:'Animals'}), e); assert.deepEqual(c.cats, ['Food','Animals']);
+  assert.deepEqual(G.reduce(c, A('h','config',{cat:'Nope'}), e).cats, ['Food','Animals']); // unknown category ignored
+  assert.deepEqual(G.reduce(c, A('h','config',{cat:'Food'}), e).cats, ['Animals']); // toggles off
+  assert.deepEqual(G.reduce(c, A('h','config',{all:true}), e).cats, []);
+  // words only come from the chosen categories, and don't repeat until the category is used up
+  const seen = new Set(); let g = G.reduce(G.init(e), A('h','config',{cat:'Fruits'}), e);
+  for (let i = 0; i < 8; i++) {
+    let r = G.reduce(g, A('h','start'), e); assert.equal(r.cat, 'Fruits'); assert.ok(!seen.has(r.word), 'no repeats within a cycle'); seen.add(r.word);
+    assert.ok(!('used' in G.view(r)), 'the used list would reveal the word');
+    g = { ...r, phase: 'result', result: { impostorWins: true } };
+  }
+  assert.equal(seen.size, 8); // all eight words of the category were used once
+  // everything: many different categories show up over many rounds
+  const cats = new Set(); for (let i = 0; i < 300; i++) cats.add(G.reduce(G.init(e), A('h','start'), e).cat);
+  assert.ok(cats.size >= 8);
+  // the choice survives a reset, a new round and a game switch
+  let k = G.reduce(G.init(e), A('h','config',{cat:'Sports'}), e);
+  assert.deepEqual(G.reduce(k, A('h','reset'), e).cats, ['Sports']);
+  assert.deepEqual(G.reduce({ ...G.reduce(k, A('h','start'), e), phase: 'result', result: { impostorWins: false } }, A('h','start'), e).cats, ['Sports']);
+  assert.deepEqual(G.init(e, { memory: G.remember(k) }).cats, ['Sports']);
+  // the host can change the category between rounds, but not mid-round
+  const between = { ...G.reduce(k, A('h','start'), e), phase: 'result', result: { impostorWins: false } };
+  assert.deepEqual(G.reduce(between, A('h','config',{cat:'Jobs'}), e).cats, ['Sports','Jobs']);
+  assert.deepEqual(G.reduce({ ...between, phase: 'clues' }, A('h','config',{cat:'Jobs'}), e).cats, ['Sports']);
+}
 console.log('all game tests passed');

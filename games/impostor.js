@@ -1,5 +1,5 @@
 import { fresh, memo, confetti, sfx } from './fx.js';
-import { revealCinematic, turnCinematic } from './impostor-fx.js';
+import { revealCinematic, turnCinematic, scoreBoardHtml } from './impostor-fx.js';
 
 const CATEGORIES = {
   Food: ['pizza', 'burger', 'sushi', 'pasta', 'taco', 'salad', 'pancake', 'ice cream'],
@@ -14,6 +14,11 @@ const CATEGORIES = {
   Nature: ['volcano', 'waterfall', 'rainbow', 'island', 'forest', 'river', 'cave', 'desert'],
   'Toys & games': ['puzzle', 'yoyo', 'chess', 'doll', 'kite', 'marbles', 'lego', 'cards'],
 };
+export const CAT_EMOJI = {
+  Food: '🍕', Animals: '🦁', Places: '🏖️', Jobs: '👩‍⚕️', Sports: '⚽', 'Things at home': '🛋️', Fruits: '🍍',
+  Transport: '🚌', 'Filipino food': '🍲', Nature: '🌋', 'Toys & games': '🧸',
+};
+export const CATEGORY_NAMES = Object.keys(CATEGORIES);
 const MIN_PLAYERS = 3;
 
 const pick = a => a[Math.floor(Math.random() * a.length)];
@@ -25,14 +30,21 @@ function shuffle(a) {
   return a;
 }
 
+// The host's chosen categories (none chosen = everything). Words only come from these.
+const chosen = cats => (cats ?? []).filter(c => CATEGORIES[c]);
+
 function begin(prev, env) {
-  if (env.players.length < MIN_PLAYERS) return { phase: 'need', scores: prev.scores ?? {}, round: prev.round ?? 0 };
+  const cats = chosen(prev.cats);
+  const base = { cats, scores: prev.scores ?? {}, round: prev.round ?? 0, used: prev.used ?? [] };
+  if (env.players.length < MIN_PLAYERS) return { phase: 'lobby', ...base };
   const order = shuffle(env.players.map(p => p.id));
-  const cat = pick(Object.keys(CATEGORIES));
+  const cat = pick(cats.length ? cats : CATEGORY_NAMES);
+  const fresh = CATEGORIES[cat].filter(w => !base.used.includes(w)); // don't repeat a word until the category runs out
+  const word = pick(fresh.length ? fresh : CATEGORIES[cat]);
   return {
-    phase: 'clues', order, impostor: pick(order), cat, word: pick(CATEGORIES[cat]),
+    phase: 'clues', order, impostor: pick(order), cat, word,
     clueIdx: 0, clues: [], votes: {}, ejected: null, result: null,
-    scores: prev.scores ?? {}, round: (prev.round ?? 0) + 1,
+    ...base, used: fresh.length ? [...base.used, word] : [word], round: base.round + 1,
   };
 }
 
@@ -61,12 +73,23 @@ export const impostor = {
   name: 'Impostor',
   emoji: '🕵️',
 
-  init(env) { return begin({}, env); },
+  // The game opens in a waiting room where the host picks what the secret words are about.
+  init(env, opts) { return { phase: 'lobby', cats: chosen(opts?.memory?.cats), scores: {}, round: 0, used: [] }; },
+  remember: s => ({ cats: s.cats ?? [] }),
 
   reduce(s, a, env) {
     const isHost = a.from === env.hostId;
-    if (a.type === 'reset' && isHost) return this.init(env);
-    if (a.type === 'start' && isHost && (s.phase === 'need' || s.phase === 'result')) return begin(s, env);
+    if (a.type === 'reset' && isHost) return { ...this.init(env), cats: chosen(s.cats) };
+    const waiting = s.phase === 'lobby' || s.phase === 'need' || s.phase === 'result';
+    if (a.type === 'start' && isHost && waiting) return begin(s, env);
+    // The host chooses the categories before a round (or between rounds): tap one to switch it on or off.
+    if (a.type === 'config' && isHost && waiting) {
+      if (a.data?.all) return { ...s, cats: [] };
+      const c = a.data?.cat;
+      if (!CATEGORIES[c]) return s;
+      const cur = chosen(s.cats);
+      return { ...s, cats: cur.includes(c) ? cur.filter(x => x !== c) : [...cur, c] };
+    }
 
     if (s.phase === 'clues') {
       const advance = (text) => {
@@ -101,8 +124,8 @@ export const impostor = {
 
   // Roles and the secret word are hidden until the round is over.
   view(s) {
-    if (s.phase === 'need') return s;
-    const { impostor: imp, word, ...pub } = s;
+    if (s.phase === 'need' || s.phase === 'lobby') return s;
+    const { impostor: imp, word, used, ...pub } = s; // `used` would give the word away
     const showAll = s.phase === 'result';
     return {
       ...pub,
@@ -122,8 +145,11 @@ export const impostor = {
     const name = id => ui.esc(ui.nameOf(id));
     const gains = {};
     if (s.phase === 'result' && s.result) for (const id of s.order) gains[id] = id === s.impostor ? (s.result.impostorWins ? 2 : 0) : s.result.impostorWins ? 0 : 1;
-    const board = Object.entries(s.scores).sort((a, b) => b[1] - a[1])
-      .map(([id, pts]) => `<tr><td>${name(id)}</td><td><b>${pts}</b>${gains[id] ? ` <span class="imp-plus">+${gains[id]}</span>` : ''}</td></tr>`).join('');
+    // everyone in the room, best score first
+    const ids = [...new Set([...Object.keys(s.scores), ...ui.players.map(p => p.id)])];
+    const rows = ids.map(id => { const after = s.scores[id] ?? 0, gain = gains[id] ?? 0; return { id, name: ui.nameOf(id), before: after - gain, after, gain, me: id === ui.me }; })
+      .sort((a, b) => b.after - a.after || a.name.localeCompare(b.name));
+    const card = `<div class="imp-scorecard"><h3>🏆 Scoreboard</h3>${scoreBoardHtml(rows).html}</div>`;
     const hostBtns = ui.isHost ? '<div class="row"><button class="ghost" id="reset">New game</button></div>' : '';
     const later = (ms, fn) => setTimeout(fn, ms);
     let body = '';
@@ -136,9 +162,20 @@ export const impostor = {
       else if (s.phase === 'guess') { sfx('gasp'); later(250, () => sfx('drumroll')); }
     }
 
-    if (s.phase === 'need') {
-      body = `<p>Need at least ${MIN_PLAYERS} players. ${ui.players.length} here now.</p>
-        ${ui.isHost ? '<button id="start">Start round</button>' : '<p class="muted">Waiting for the host to start…</p>'}`;
+    // the host's category picker (also offered between rounds)
+    const cats = (s.cats ?? []).filter(c => CATEGORIES[c]);
+    const catChips = disabled => `<div class="imp-cats">
+        <button class="chip pick ${cats.length ? '' : 'sel'}" data-cat="__all" ${disabled ? 'disabled' : ''}>🎲 Everything</button>
+        ${CATEGORY_NAMES.map(c => `<button class="chip pick ${cats.includes(c) ? 'sel' : ''}" data-cat="${ui.esc(c)}" ${disabled ? 'disabled' : ''}>${CAT_EMOJI[c] ?? '🎯'} ${ui.esc(c)}</button>`).join('')}</div>
+      <p class="muted">${cats.length ? `Secret words will only come from: <b>${cats.map(ui.esc).join(', ')}</b>.` : 'Secret words come from <b>every category</b>.'}</p>`;
+
+    if (s.phase === 'lobby' || s.phase === 'need') {
+      const enough = ui.players.length >= MIN_PLAYERS;
+      body = `<h3>🎯 What are the secret words about?</h3>
+        ${ui.isHost ? '<p class="muted">Pick one or more categories. The secret word is picked at random from them.</p>' : '<p class="muted">The host is choosing what the words are about.</p>'}
+        ${catChips(!ui.isHost)}
+        <p class="muted">👥 ${ui.players.length} player${ui.players.length === 1 ? '' : 's'} here · you need at least ${MIN_PLAYERS}</p>
+        ${ui.isHost ? `<div class="imp-bar">${enough ? '' : `<p class="muted">⚠️ Need at least ${MIN_PLAYERS} players (${ui.players.length} here)</p>`}<button id="start" ${enough ? '' : 'disabled'}>▶ Start the game</button></div>` : '<p class="muted">Waiting for the host to start…</p>'}`;
     } else if (s.phase === 'result') {
       /* ---- the big reveal, one beat at a time ---- */
       const r = s.result;
@@ -166,7 +203,7 @@ export const impostor = {
         <div class="step ${rd}" ${d(t3)}><p>The secret word was <b class="imp-word">${ui.esc(s.word)}</b></p>
           ${r.ejected ? `<p>Voted out: <b>${name(r.ejected)}</b>${r.guess ? ` · the impostor guessed “${ui.esc(r.guess)}”` : ''}</p>` : '<p>Nobody was voted out.</p>'}</div>
         <div class="step ${rd} imp-verdict ${r.impostorWins ? 'bad' : 'good'}" ${d(t4)}>${r.impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</div>
-        ${ui.isHost ? `<div class="step ${rd}" ${d(t4 + 0.3)}><button id="start">Next round</button></div>` : ''}`;
+        ${ui.isHost ? `<details class="imp-nextcat" ${el._catOpen ? 'open' : ''}><summary>🎯 Words for the next round: ${cats.length ? cats.map(ui.esc).join(', ') : 'everything'}</summary>${catChips(false)}</details><button id="start">▶ Next round</button>` : ''}`;
     } else {
       const me = ui.priv;
       const newRole = !!me && fresh(el, 'role', s.round);
@@ -230,8 +267,8 @@ export const impostor = {
       }
     }
 
-    el.innerHTML = `<div class="imp ${mood}"><h2><span class="imp-mag">🔎</span> Impostor</h2><p class="muted">Round ${s.round}. Everyone but one player knows the secret word.</p>${body}
-      <h3>Scores</h3><table class="table">${board || '<tr><td class="muted">No points yet</td></tr>'}</table>${hostBtns}</div>`;
+    el.innerHTML = `<div class="imp ${mood}"><h2><span class="imp-mag">🔎</span> Impostor</h2><p class="muted">${s.round ? `Round ${s.round}. ` : ''}Everyone but one player knows the secret word.</p>${body}
+      ${card}${hostBtns}</div>`;
 
     const input = el.querySelector('form input');
     if (input && typed) input.value = typed;
@@ -244,6 +281,8 @@ export const impostor = {
     send('#cf', 'clue');
     send('#gf', 'guessword');
     el.querySelectorAll('[data-v]').forEach(b => b.onclick = () => { sfx('vote'); el._mine = true; setTimeout(() => { el._mine = false; }, 1500); ui.act('vote', { target: b.dataset.v }); });
+    el.querySelectorAll('[data-cat]').forEach(b => b.addEventListener('click', () => { sfx('pop'); ui.act('config', b.dataset.cat === '__all' ? { all: true } : { cat: b.dataset.cat }); }));
+    el.querySelector('.imp-nextcat')?.addEventListener('toggle', e => { el._catOpen = e.target.open; });
     el.querySelector('#start')?.addEventListener('click', () => ui.act('start'));
     el.querySelector('#skipclue')?.addEventListener('click', () => ui.act('skipclue'));
     el.querySelector('#endvote')?.addEventListener('click', () => ui.act('endvote'));

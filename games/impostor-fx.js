@@ -2,6 +2,34 @@ import { sfx, confetti, reduceMotion } from './fx.js';
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+const hue = name => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+const avatar = name => `<span class="sb-av" style="--h:${hue(name)}">${esc(String(name).trim().charAt(0).toUpperCase() || '?')}</span>`;
+const MEDALS = ['🥇', '🥈', '🥉'];
+
+// The score card: a podium for the top three and a tidy list for everyone else.
+// rows: [{ name, before, after, gain, me }] already sorted by score. With `anim`, totals start at their old value
+// and everything is timed (seconds after the card appears) so the scene can count them up.
+export function scoreBoardHtml(rows, { anim = false } = {}) {
+  if (!rows.length) return { html: '', delays: [], end: 0 };
+  const max = Math.max(0, ...rows.map(r => r.after));
+  const podium = max > 0 ? rows.slice(0, 3) : [];
+  const rest = rows.slice(podium.length);
+  const delays = [];
+  podium.forEach((_, r) => { delays[r] = 0.3 + (podium.length - 1 - r) * 0.65; });
+  const restStart = 0.3 + podium.length * 0.65 + 0.2;
+  rest.forEach((_, i) => { delays[podium.length + i] = restStart + i * 0.3; });
+  const end = Math.max(0, ...delays) + 0.9;
+  const pts = (r, i) => `<b class="sb-pts" data-from="${anim ? r.before : r.after}" data-to="${r.after}" data-delay="${(delays[i] ?? 0).toFixed(2)}" data-gain="${r.gain || 0}">${anim ? r.before : r.after}</b>`;
+  const plus = (r, i) => (r.gain ? `<em class="sb-plus" style="--p:${((delays[i] ?? 0) + 0.9).toFixed(2)}s">+${r.gain}</em>` : '');
+  const col = (r, i) => `<div class="sb-col r${i} ${r.me ? 'me' : ''}" style="--d:${delays[i].toFixed(2)}s">
+      <div class="sb-top">${i === 0 ? '<span class="sb-crown">👑</span>' : ''}${avatar(r.name)}${plus(r, i)}<div class="sb-nm">${esc(r.name)}</div></div>
+      <div class="sb-ped"><span class="sb-medal">${MEDALS[i]}</span>${pts(r, i)}</div></div>`;
+  const order = podium.length === 3 ? [1, 0, 2] : podium.length === 2 ? [1, 0] : [0];
+  const list = rest.map((r, k) => { const i = podium.length + k; return `<div class="sb-row ${r.me ? 'me' : ''}" style="--d:${delays[i].toFixed(2)}s;--w:${max ? Math.round((r.after / max) * 100) : 0}%">
+      <span class="sb-rk">${i + 1}</span>${avatar(r.name)}<span class="sb-nm">${esc(r.name)}</span><span class="sb-bar"><i></i></span>${pts(r, i)}${plus(r, i)}</div>`; }).join('');
+  return { html: `<div class="sb ${anim ? 'anim' : ''}">${podium.length ? `<div class="sb-podium n${podium.length}">${order.map(i => col(podium[i], i)).join('')}</div>` : ''}${list ? `<div class="sb-list">${list}</div>` : ''}${max === 0 ? '<p class="sb-none">No points yet. Be the first!</p>' : ''}</div>`, delays, end };
+}
+
 // The end-of-round scene, played full screen on every phone (tap to skip):
 // a spotlight sweeps the dark, the detective arrives, a drum roll builds, the impostor's name slams in,
 // the secret word flips over, and the verdict lands.
@@ -16,12 +44,14 @@ export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor
     if (mine === false) sfx('lose'); else { confetti(); sfx('win'); }
     if (impostorWins && mine !== true) sfx('growl');
   });
-  const SC = 7200, ROW = 0.38;                       // when the scores start (ms) and the gap between rows (s)
-  if (scores.length) {
+  const SC = 7200;                                  // when the scores start (ms)
+  const board = scores.length ? scoreBoardHtml(scores, { anim: true }) : null;
+  if (board) {
     at(SC - 200, () => sfx('whoosh'));
     scores.forEach((r, i) => {
-      at(SC + 300 + i * ROW * 1000, () => sfx('vote'));
-      if (r.gain) at(SC + 900 + i * ROW * 1000, () => sfx('ding'));
+      const d = board.delays[i] ?? 0;
+      at(SC + (d + 0.2) * 1000, () => sfx(i === 0 && r.after > 0 ? 'drumroll' : 'vote'));
+      if (r.gain) at(SC + (d + 0.95) * 1000, () => sfx('ding'));
     });
   }
   if (reduceMotion()) return;
@@ -40,27 +70,22 @@ export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor
       <div class="ic-verdict">${impostorWins ? '🕵️ The impostor wins!' : '🎉 The crew wins!'}</div>
     </div>
     <div class="ic-flash"></div>
-    ${scores.length ? `<div class="ic-scores"><h3>🏆 Scores</h3>${(() => {
-      const max = Math.max(1, ...scores.map(r => r.after));
-      return scores.map((r, i) => `<div class="ic-row ${r.me ? 'me' : ''}" style="--d:${(0.3 + i * ROW).toFixed(2)}s;--w:${Math.round((r.after / max) * 100)}%">
-        <span class="rk">${i === 0 && r.after > 0 ? '👑' : i + 1}</span><span class="nm">${esc(r.name)}</span>
-        <span class="bar"><i></i></span><b class="pts" data-from="${r.before}" data-to="${r.after}">${r.before}</b>${r.gain ? `<em class="plus" style="--p:${(0.9 + i * ROW).toFixed(2)}s">+${r.gain}</em>` : '<em class="plus none"></em>'}</div>`).join('');
-    })()}</div>` : ''}
+    ${board ? `<div class="ic-scores"><h3>🏆 Scores</h3>${board.html}</div>` : ''}
     <small class="ic-skip">tap to skip</small>`;
   const done = () => { timers.forEach(clearTimeout); box.classList.add('out'); setTimeout(() => box.remove(), 500); };
   box.addEventListener('click', done);
   document.body.append(box);
-  if (scores.length) {
+  if (board) {
     // after the verdict, swap to the scores and count each total up
     at(SC, () => box.classList.add('scores'));
-    box.querySelectorAll('.pts').forEach((el, i) => at(SC + 900 + i * ROW * 1000, () => {
+    box.querySelectorAll('.sb-pts').forEach(el => at(SC + (+el.dataset.delay + 0.5) * 1000, () => {
       const from = +el.dataset.from, to = +el.dataset.to, t0 = performance.now();
       if (from === to) return;
-      const tick = now => { const k = Math.min(1, (now - t0) / 700); el.textContent = Math.round(from + (to - from) * k); if (k < 1 && el.isConnected) requestAnimationFrame(tick); };
+      const tick = now => { const k = Math.min(1, (now - t0) / 800); el.textContent = Math.round(from + (to - from) * k); if (k < 1 && el.isConnected) requestAnimationFrame(tick); };
       requestAnimationFrame(tick);
     }));
   }
-  timers.push(setTimeout(done, scores.length ? SC + 1500 + scores.length * ROW * 1000 + 3500 : 8200));
+  timers.push(setTimeout(done, board ? SC + (board.end + 3.2) * 1000 : 8200));
 }
 
 // A short full-screen "whose turn is it" banner for the clue round, so nobody misses their turn.
