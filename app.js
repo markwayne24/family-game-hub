@@ -11,6 +11,7 @@ import { lateMode, takePart, watchers, LATE_MODES } from './games/participants.j
 import { supported as cryptoSupported, makeKeys, seal, open as openSealed } from './games/secure.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const BRAND = 'Barkada Hub';
 const app = document.getElementById('app');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -49,16 +50,38 @@ async function resumeHost(user, code) {
   enterRoom(code, store.get('hubName') || 'Host', true);
 }
 
+// Signed-out visitors see the landing page: a few games as a teaser, the rest stay locked until they sign in.
+const TEASER = ['werewolf', 'bingo', 'impostor'];
+
 function loginScreen(msg = '') {
+  const all = Object.values(GAMES);
+  const teaser = TEASER.map(id => GAMES[id]).filter(Boolean);
+  const locked = all.length - teaser.length;
   app.innerHTML = `
-    <h1>🎲 Family Game Hub</h1>
-    <p class="muted">Host sign-in. Guests just open the link they were sent.</p>
+    <section class="hero">
+      <h1>🎲 ${BRAND}</h1>
+      <p class="tagline">Party games for the whole barkada. One phone hosts, everyone joins with a link. No app to install.</p>
+      <div class="row"><a class="btn" href="#signin">Sign in to play</a><span class="muted">${all.length} games inside</span></div>
+    </section>
+    <section class="card">
+      <h2>What's inside</h2>
+      <div class="catalog">${teaser.map(x => gameCardHtml(x)).join('')}${Array.from({ length: Math.min(locked, 3) }, () =>
+        '<div class="gtile locked" aria-hidden="true"><span class="gemoji">🔒</span><b>???</b><p class="muted">Sign in to unlock</p></div>').join('')}</div>
+      <p class="muted">+${locked} more games, from quick rounds to full Werewolf nights, once you sign in.</p>
+    </section>
+    <section class="card">
+      <h2>How it works</h2>
+      <ol class="steps"><li>Sign in and create a room.</li><li>Share the invite link. Friends join with just a name.</li><li>Pick a game and play together, in the same room or on a call.</li></ol>
+    </section>
     <form class="card" id="f">
+      <h2 id="signin">Sign in</h2>
       <input name="email" type="email" placeholder="Email" required autocomplete="email">
       <input name="password" type="password" placeholder="Password (min 6 characters)" required minlength="6" autocomplete="current-password">
       <p class="err">${esc(msg)}</p>
       <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
-    </form>`;
+    </form>
+    ${joinCodeHtml()}`;
+  bindJoinCode();
   const f = app.querySelector('#f');
   const creds = () => ({ email: f.email.value.trim(), password: f.password.value });
   f.onsubmit = async e => {
@@ -74,25 +97,52 @@ function loginScreen(msg = '') {
   };
 }
 
+const gameCardHtml = x => `<div class="gtile"><span class="gemoji">${x.emoji}</span><b>${esc(x.name)}</b><p class="muted">${esc(HOWTO[x.id]?.goal ?? '')}</p></div>`;
+
+// Guests with a room code don't need an account: joining a room signs them in anonymously.
+const joinCodeHtml = () => `<form class="card" id="jc">
+    <h2>Got a room code?</h2>
+    <div class="row"><input class="grow" name="code" placeholder="e.g. K7Q2M" maxlength="5" autocapitalize="characters" autocomplete="off" required><button type="submit">Join</button></div>
+  </form>`;
+function bindJoinCode() {
+  app.querySelector('#jc').onsubmit = e => {
+    e.preventDefault();
+    const code = e.target.code.value.trim().toUpperCase();
+    if (!code) return;
+    location.search = `?room=${encodeURIComponent(code)}`;
+  };
+}
+
+// Signed-in home: the full list of games, with how-to for each.
+const catalogHtml = () => `<section class="card">
+    <h2>All games</h2>
+    <div class="catalog">${Object.values(GAMES).map(gameCardHtml).join('')}</div>
+    <details class="howto"><summary>❓ How do the games work?</summary>${Object.values(GAMES).map(x => `<details><summary>${x.emoji} ${esc(x.name)}</summary>${howtoHtml(x)}</details>`).join('')}</details>
+  </section>`;
+
 async function hostHome(user, msg = '') {
   S.me = user.id;
   let { data: row } = await sb.from('hosts').select('user_id').maybeSingle();
   if (!row) {
     const { data: claimed } = await sb.rpc('claim_host');
     if (!claimed) {
-      app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">This account isn't allowed to host games.</p><button id="out">Sign out</button></div>`;
+      app.innerHTML = `<h1>🎲 ${BRAND}</h1>
+        <div class="card"><p>Welcome! Only the hub's host can create rooms. Ask them for an invite link or a room code.</p><button class="ghost" id="out">Sign out</button></div>
+        ${joinCodeHtml()}${catalogHtml()}`;
+      bindJoinCode();
       app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
       return;
     }
   }
   app.innerHTML = `
-    <h1>🎲 Family Game Hub</h1>
+    <h1>🎲 ${BRAND}</h1>
     <div class="card">
       <p>Your name in the room</p>
       <input id="name" value="${esc(store.get('hubName') || 'Host')}" maxlength="20">
       <p class="err">${esc(msg)}</p>
       <div class="row"><button id="create">Create a room</button><button class="ghost" id="out">Sign out</button></div>
-    </div>`;
+    </div>
+    ${catalogHtml()}`;
   app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
   app.querySelector('#create').onclick = async () => {
     const name = app.querySelector('#name').value.trim() || 'Host';
@@ -112,11 +162,11 @@ async function joinScreen(code, msg = '') {
   if (!session) await sb.auth.signInAnonymously();
   const { data: ok } = await sb.rpc('room_exists', { room_code: code });
   if (!ok) {
-    app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
+    app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
     return;
   }
   if ((JSON.parse(store.get('hubKicked') || '[]')).includes(code)) {
-    app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">You were removed from room ${esc(code)} by the host.</p></div>`;
+    app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p class="err">You were removed from room ${esc(code)} by the host.</p></div>`;
     return;
   }
   const last = JSON.parse(store.get('hubLast') || 'null');
@@ -367,7 +417,7 @@ function buildShell() {
   copy.onclick = async e => {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
     if (navigator.share) {
-      try { await navigator.share({ title: 'Family Game Hub', text: `Join my game room! Code: ${S.code}`, url: link }); return; }
+      try { await navigator.share({ title: BRAND, text: `Join my game room! Code: ${S.code}`, url: link }); return; }
       catch (err) { if (err?.name === 'AbortError') return; }
     }
     try { await navigator.clipboard.writeText(link); e.target.textContent = 'Copied!'; }
@@ -390,13 +440,13 @@ function removedScreen(message, kicked = false) {
   if (kicked) store.set('hubKicked', JSON.stringify([...new Set([...JSON.parse(store.get('hubKicked') || '[]'), S.code])]));
   store.set('hubLast', 'null');
   stopChannel();
-  app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p>${esc(message)}</p></div>`;
+  app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p>${esc(message)}</p></div>`;
 }
 
 function fullScreen(max) {
   const code = S.code;
   stopChannel();
-  app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><h2>🚪 This room is full</h2>
+  app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><h2>🚪 This room is full</h2>
     <p>The host set a limit of <b>${esc(max)}</b> players, and every seat is taken. Ask the host to make room, then try again.</p>
     <button id="retry">Try again</button></div>`;
   app.querySelector('#retry').onclick = () => joinScreen(code);

@@ -1,4 +1,4 @@
-# Family Game Hub
+# Barkada Hub
 
 Multiplayer party games for family and friends. The host creates a room and shares a link; guests join with a name.
 Games: Tic-Tac-Toe, Connect 4, Trivia (4 question packs + your own), Bingo, Rock Paper Scissors, Memory Match, Draw & Guess, Impostor, Hangman, Word Race, Charades.
@@ -25,6 +25,8 @@ Host tools: pick a game and its options (question pack, word difficulty, prompt 
 - **Add a game:** create `games/<name>.js` exporting `{ id, name, emoji, init(env, opts), reduce(state, action, env), render(el, state, ui) }` and list it in `games/index.js`.
   Optional hooks: `view(state)` (public copy that hides secrets), `priv(state)` (per-player secrets, e.g. roles), `deadline(state)` (timestamp; the host fires a `timeout` action then).
 - **How it works:** the host's browser runs the game rules and broadcasts state over a Supabase Realtime channel. Guests send actions; the host applies them. Moves are trusted from each browser, which is fine for family play but not for competitive use.
+
+Landing page: signed-out visitors see a landing page with three games as a teaser (the rest are locked), how it works, the sign-in form and a "Got a room code?" box. After signing in, the home screen lists every game with its goal and how to play. Guests with an invite link or room code still join without an account.
 
 Run locally: `npx serve .`
 
