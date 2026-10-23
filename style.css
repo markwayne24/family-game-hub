@@ -811,3 +811,5 @@ button.google{display:flex;align-items:center;justify-content:center;gap:10px;wi
 .imp-peek{display:block;width:100%;margin:12px 0;padding:18px 14px;border-radius:18px;background:var(--card);color:var(--accent);border:2px dashed var(--accent);font-size:1.1rem;font-weight:700;line-height:1.35}
 .imp-peek small{display:block;margin-top:4px;font-weight:500;color:var(--mute)}
 .imp-hidebtn{display:block;width:100%;min-height:46px;margin:0 0 12px}
+.account{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;font-size:.9rem;margin-bottom:4px}
+.account b{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
