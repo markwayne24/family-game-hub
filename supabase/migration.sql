@@ -1,4 +1,4 @@
--- Barkada Hub schema. Only "hosts" (verified, non-guest accounts) can create rooms.
+-- Game Corner schema. Only "hosts" (verified, non-guest accounts) can create rooms.
 create table public.hosts (
   user_id uuid primary key references auth.users on delete cascade
 );

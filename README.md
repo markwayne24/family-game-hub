@@ -1,4 +1,4 @@
-# Barkada Hub
+# Game Corner
 
 Multiplayer party games for family and friends. The host creates a room and shares a link; guests join with a name.
 Games: Tic-Tac-Toe, Connect 4, Trivia (4 question packs + your own), Bingo, Rock Paper Scissors, Memory Match, Draw & Guess, Impostor, Hangman, Word Race, Charades.
@@ -32,7 +32,7 @@ Accounts: anyone can sign up and host rooms, with **Continue with Google** or wi
 
 Supabase setup for sign-in:
 1. **Authentication → Sign In / Providers → Email:** turn on "Confirm email". Keep "Allow anonymous sign-ins" on for guests.
-2. **Authentication → Emails → Confirm signup:** put the code in the email, e.g. `<p>Your Barkada Hub code is <b>{{ .Token }}</b></p><p>Or <a href="{{ .ConfirmationURL }}">confirm your email</a>.</p>`. Set up custom SMTP for real traffic, as Supabase's built-in mailer only sends a few emails an hour.
+2. **Authentication → Emails → Confirm signup:** put the code in the email, e.g. `<p>Your Game Corner code is <b>{{ .Token }}</b></p><p>Or <a href="{{ .ConfirmationURL }}">confirm your email</a>.</p>`. Set up custom SMTP for real traffic, as Supabase's built-in mailer only sends a few emails an hour.
 3. **Authentication → Sign In / Providers → Google:** turn on and paste the Client ID and secret from a Google Cloud OAuth client (type "Web application") whose authorized redirect URI is `https://<project>.supabase.co/auth/v1/callback`.
 4. **Authentication → URL Configuration:** Site URL `https://gamecorner.io`, and add it (plus `http://localhost:3000` for local testing) to the redirect URLs.
 5. Existing database: run `supabase/002_open_hosting.sql` once in the SQL editor so every verified account can host (before, only the first account could).

@@ -11,7 +11,7 @@ import { lateMode, takePart, watchers, LATE_MODES } from './games/participants.j
 import { supported as cryptoSupported, makeKeys, seal, open as openSealed } from './games/secure.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
-const BRAND = 'Barkada Hub';
+const BRAND = 'Game Corner';
 const app = document.getElementById('app');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
