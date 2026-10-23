@@ -1,5 +1,5 @@
 import { sfx, reduceMotion } from './fx.js';
-import { roomOf } from './secret-data.js';
+import { roomOf, TASKS } from './secret-data.js';
 import { taskPoints } from './secret-clues.js';
 
 // The mini-games played inside the mansion's rooms. Each one runs entirely on the player's own phone and reports
@@ -125,14 +125,112 @@ function timing(box, finish) {
   });
 }
 
-const GAMES = { reaction, sequence, numbers, sums, timing };
+
+/* ---------- Kitchen: catch the falling eggs ---------- */
+function catchEggs(box, finish, { later }) {
+  const TOTAL = 10; let caught = 0, resolved = 0, t0 = performance.now();
+  box.innerHTML = '<div class="st-field" id="fld"></div><p class="st-say" id="say">Tap the eggs!</p><div class="st-dots" id="dots"></div>';
+  const fld = box.querySelector('#fld'), say = box.querySelector('#say'), dots = box.querySelector('#dots');
+  const paint = () => { say.textContent = `${caught} caught`; dots.innerHTML = Array.from({ length: TOTAL }, (_, i) => `<i class="${i < caught ? 'on' : ''}"></i>`).join(''); };
+  const resolve = () => { if (++resolved >= TOTAL) later(() => finish(caught >= 7, performance.now() - t0), 350); };
+  paint();
+  for (let i = 0; i < TOTAL; i++) later(() => {
+    const e = document.createElement('button'); e.className = 'st-egg'; e.textContent = '🥚'; e.style.left = 6 + rnd(78) + '%'; e.style.animationDuration = 1.9 + Math.random() * 0.8 + 's';
+    let hit = false;
+    tap(e, () => { if (hit) return; hit = true; caught++; sfx('pop'); e.classList.add('caught'); e.textContent = '🍳'; paint(); setTimeout(() => e.remove(), 250); resolve(); });
+    e.addEventListener('animationend', () => { if (hit) return; hit = true; sfx('tick'); e.remove(); resolve(); });
+    fld.append(e);
+  }, 400 + i * 750 + rnd(250));
+}
+
+/* ---------- Library: spot the odd one out ---------- */
+const PAIRS = [['🙂', '🙃'], ['🐶', '🐕'], ['🍎', '🍅'], ['🕐', '🕑'], ['🌕', '🌖'], ['⭐', '🌟'], ['🔵', '🟦'], ['🐱', '🐈'], ['🍋', '🟡'], ['🌲', '🌳']];
+function oddone(box, finish) {
+  const sizes = [3, 4, 5]; let r = 0, mistakes = 0; const t0 = performance.now();
+  const show = () => {
+    const n = sizes[r], [a, b] = shuffle(PAIRS[rnd(PAIRS.length)]), odd = rnd(n * n);
+    box.innerHTML = `<p class="st-say">Find the odd one out <b>${r + 1}/3</b></p><div class="st-odd" style="--n:${n}">${Array.from({ length: n * n }, (_, i) => `<button class="st-cell" data-odd="${i === odd ? 1 : 0}">${i === odd ? b : a}</button>`).join('')}</div><div class="st-dots">${[0, 1].map(i => `<i class="${i < mistakes ? 'bad' : ''}"></i>`).join('')}</div>`;
+    box.querySelectorAll('.st-cell').forEach(c => tap(c, () => {
+      if (c.dataset.odd === '1') { sfx('ding'); if (++r >= sizes.length) return finish(mistakes <= 1, performance.now() - t0); show(); }
+      else { sfx('buzz'); c.classList.add('bad'); c.disabled = true; if (++mistakes > 1) { box.querySelectorAll('.st-cell').forEach(x => (x.disabled = true)); setTimeout(() => finish(false, performance.now() - t0), 500); } else box.querySelector('.st-dots').innerHTML = '<i class="bad"></i><i></i>'; }
+    }));
+  };
+  show();
+}
+
+/* ---------- Garage: match the wires ---------- */
+function wires(box, finish) {
+  const COLS = ['#e03131', '#2f9e44', '#1971c2', '#f08c00'], left = [0, 1, 2, 3], right = shuffle(left);
+  let sel = null, done = 0, mistakes = 0, t0 = 0;
+  box.innerHTML = `<p class="st-say" id="say">Tap a wire, then its twin.</p><div class="st-wires" id="w"><svg id="svg"></svg><div class="st-wcol">${left.map(i => `<button class="st-wire" data-s="l" data-c="${i}" style="--c:${COLS[i]}"></button>`).join('')}</div><div class="st-wcol">${right.map(i => `<button class="st-wire" data-s="r" data-c="${i}" style="--c:${COLS[i]}"></button>`).join('')}</div></div>`;
+  const w = box.querySelector('#w'), svg = box.querySelector('#svg'), say = box.querySelector('#say');
+  const center = el => { const a = el.getBoundingClientRect(), b = w.getBoundingClientRect(); return [a.left - b.left + a.width / 2, a.top - b.top + a.height / 2]; };
+  const btn = (s, c) => box.querySelector(`.st-wire[data-s="${s}"][data-c="${c}"]`);
+  box.querySelectorAll('.st-wire').forEach(b => tap(b, () => {
+    if (!t0) t0 = performance.now();
+    if (b.disabled) return;
+    if (b.dataset.s === 'l') { box.querySelectorAll('.st-wire[data-s=l]').forEach(x => x.classList.remove('sel')); sel = b.dataset.c; b.classList.add('sel'); sfx('flip'); return; }
+    if (sel == null) { say.textContent = 'Pick a wire on the left first.'; return; }
+    if (b.dataset.c === sel) {
+      const l = btn('l', sel), [x1, y1] = center(l), [x2, y2] = center(b);
+      svg.insertAdjacentHTML('beforeend', `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="${COLS[sel]}" stroke-width="8" stroke-linecap="round"/>`);
+      l.disabled = b.disabled = true; l.classList.remove('sel'); sel = null; sfx('ding');
+      if (++done === 4) { const ms = performance.now() - t0; setTimeout(() => finish(mistakes <= 2 && ms <= 25000, ms), 350); }
+    } else { mistakes++; sfx('buzz'); say.textContent = mistakes > 2 ? 'Too many wrong tries…' : 'Wrong wire!'; }
+  }));
+}
+
+/* ---------- Garden: squash the bugs, spare the bees ---------- */
+function whack(box, finish, { later }) {
+  const POPS = 12; let score = 0, i = 0, hit = false; const t0 = performance.now();
+  box.innerHTML = `<p class="st-say" id="say">Score: 0</p><div class="st-holes">${Array.from({ length: 9 }, (_, k) => `<button class="st-hole" data-k="${k}"></button>`).join('')}</div><div class="st-dots" id="dots"></div>`;
+  const say = box.querySelector('#say'), holes = [...box.querySelectorAll('.st-hole')], dots = box.querySelector('#dots');
+  const paint = () => { say.textContent = `Score: ${score}`; dots.innerHTML = Array.from({ length: POPS }, (_, k) => `<i class="${k < i ? 'on' : ''}"></i>`).join(''); };
+  holes.forEach(h => tap(h, () => {
+    if (!h.dataset.kind || hit) return;
+    hit = true;
+    if (h.dataset.kind === 'bug') { score++; sfx('ding'); h.textContent = '💥'; } else { score--; sfx('buzz'); h.textContent = '💢'; }
+    h.dataset.kind = ''; paint();
+  }));
+  const pop = () => {
+    if (i >= POPS) return later(() => finish(score >= 7, performance.now() - t0), 600);
+    const h = holes[rnd(9)], bee = Math.random() < 0.2;
+    h.dataset.kind = bee ? 'bee' : 'bug'; h.textContent = bee ? '🐝' : '🐛'; hit = false; i++; paint();
+    later(() => { h.dataset.kind = ''; h.textContent = ''; later(pop, 250 + rnd(250)); }, 950);
+  };
+  paint(); later(pop, 700);
+}
+
+/* ---------- Vault: crack the 3-digit code ---------- */
+function code(box, finish) {
+  const secret = [rnd(10), rnd(10), rnd(10)], guess = [5, 5, 5], hist = []; const t0 = performance.now(); let over = false;
+  const draw = () => {
+    box.innerHTML = `<div class="st-digits">${guess.map((d, i) => `<div class="st-dcol"><button class="st-up" data-i="${i}" aria-label="Up">▲</button><div class="st-dig" data-i="${i}">${d}</div><button class="st-dn" data-i="${i}" aria-label="Down">▼</button></div>`).join('')}</div>
+      <button class="st-go" id="try">🔓 Try this code</button><div class="st-hist">${hist.map(h => `<div>${h.g.join('')} ${h.hints.map(x => (x === 0 ? '✅' : x > 0 ? '⬆️' : '⬇️')).join(' ')}</div>`).join('')}</div><p class="st-say">${6 - hist.length} tries left</p>`;
+    box.querySelectorAll('.st-up,.st-dn').forEach(b => tap(b, () => { if (over) return; const i = +b.dataset.i; guess[i] = (guess[i] + (b.classList.contains('st-up') ? 1 : 9)) % 10; sfx('tick'); box.querySelector(`.st-dig[data-i="${i}"]`).textContent = guess[i]; }));
+    tap(box.querySelector('#try'), () => {
+      if (over) return;
+      const hints = guess.map((d, i) => Math.sign(secret[i] - d));
+      hist.push({ g: [...guess], hints });
+      if (hints.every(h => h === 0)) { over = true; sfx('ding'); return finish(true, performance.now() - t0); }
+      sfx('buzz');
+      if (hist.length >= 6) { over = true; return finish(false, performance.now() - t0); }
+      draw();
+    });
+  };
+  draw();
+}
+
+const GAMES = { reaction, catch: catchEggs, sequence, oddone, numbers, wires, sums, whack, timing, code };
 
 /* ---------- the full-screen frame around a task: intro, the task itself, the result ---------- */
 
 // anchor: the game screen; the overlay disappears with it. onFinish(ok, ms) is called once, when the player taps Continue.
 // onQuit() is called if they walk out before finishing.
-export function openTask(roomId, { anchor, onFinish, onQuit }) {
+export function openTask(roomId, { anchor, onFinish, onQuit, kind }) {
   const room = roomOf(roomId);
+  kind = kind ?? globalThis.__forceTask?.[roomId] ?? room.tasks[rnd(room.tasks.length)];   // (the hook is for browser tests)
+  const info = TASKS[kind];
   const o = document.createElement('div');
   o.className = 'st-overlay';
   const timers = [];
@@ -140,15 +238,15 @@ export function openTask(roomId, { anchor, onFinish, onQuit }) {
   const close = () => { timers.forEach(clearTimeout); o.querySelector('.st-body')?._stop?.(); clearInterval(watch); o.remove(); };
   const watch = setInterval(() => { if (!anchor.isConnected) close(); }, 700);
   let done = false;
-  o.innerHTML = `<div class="st-card"><div class="st-head"><span class="st-room">${room.emoji}</span><div><b>${room.name}</b><small>${room.title}</small></div><button class="st-x" aria-label="Leave the room">✕</button></div>
-    <div class="st-body"><p class="st-how">${room.how}</p><button class="st-go" id="stGo">▶ Start</button></div></div>`;
+  o.innerHTML = `<div class="st-card"><div class="st-head"><span class="st-room">${room.emoji}</span><div><b>${room.name}</b><small>${info.title}</small></div><button class="st-x" aria-label="Leave the room">✕</button></div>
+    <div class="st-body"><p class="st-how">${info.how}</p><button class="st-go" id="stGo">▶ Start</button></div></div>`;
   document.body.append(o);
   sfx('pop');
   o.querySelector('.st-x').addEventListener('click', () => { if (done) return; close(); onQuit?.(); });
   const body = o.querySelector('.st-body');
   o.querySelector('#stGo').addEventListener('click', () => {
     sfx('flip');
-    GAMES[room.task](body, (ok, ms) => {
+    GAMES[kind](body, (ok, ms) => {
       if (done) return; done = true; body._stop?.();
       const pts = taskPoints(ok, ms);
       sfx(ok ? 'win' : 'lose');

@@ -2,7 +2,8 @@
 // character moves. Pure functions, so it can be tested without a screen.
 
 export const W = 600, H = 800, R = 14;           // world size and the character's radius
-export const SPEED = 150;                         // units per second
+export const SPEED = 160;                         // units per second at normal speed (the host can make it slower or faster)
+export const SPEEDS = { slow: 0.75, normal: 1, fast: 1.4 };
 
 // Walkable areas [x0, y0, x1, y1]. Anything outside them is wall. Rooms touch the hall only through their doors.
 export const AREAS = {
@@ -32,11 +33,11 @@ export function nearStation(x, y) {
   return best;
 }
 
-// Walk (dx, dy) (each -1..1) for dt seconds, sliding along walls. Returns the new { x, y }.
-export function step({ x, y }, dx, dy, dt) {
+// Walk (dx, dy) (each -1..1) for dt seconds (speed: a multiplier from SPEEDS), sliding along walls. Returns the new { x, y }.
+export function step({ x, y }, dx, dy, dt, speed = 1) {
   const len = Math.hypot(dx, dy);
   if (!len || !(dt > 0)) return { x, y };
-  const k = Math.min(1, len) / len, d = SPEED * Math.min(dt, 0.1);
+  const k = Math.min(1, len) / len, d = SPEED * speed * Math.min(dt, 0.1);
   const mx = dx * k * d, my = dy * k * d;
   let nx = x, ny = y;
   if (canStand(x + mx, y)) nx = x + mx;

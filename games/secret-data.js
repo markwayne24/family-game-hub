@@ -1,12 +1,25 @@
 // Shared facts for Secret Millionaire: the mansion's rooms, the two teams and the Millionaire's secret agendas.
 
+// Each room has a few different tasks; one is picked at random every time someone walks in.
 export const ROOMS = [
-  { id: 'kitchen', name: 'Kitchen', emoji: '🍳', task: 'reaction', title: 'Flip the pancakes', how: 'Tap the moment each pancake turns golden.' },
-  { id: 'library', name: 'Library', emoji: '📚', task: 'sequence', title: 'Book order', how: 'Watch the glowing books, then tap them in the same order.' },
-  { id: 'garage', name: 'Garage', emoji: '🔧', task: 'numbers', title: 'Rewire the engine', how: 'Tap the numbers from 1 to 9 as fast as you can.' },
-  { id: 'garden', name: 'Garden', emoji: '🌿', task: 'sums', title: 'Count the flowers', how: 'Answer four quick sums. Get three right.' },
-  { id: 'vault', name: 'Vault', emoji: '🔐', task: 'timing', title: 'Crack the vault', how: 'Stop the dial inside the gold zone, three times.' },
+  { id: 'kitchen', name: 'Kitchen', emoji: '🍳', title: 'Kitchen duty', tasks: ['reaction', 'catch'] },
+  { id: 'library', name: 'Library', emoji: '📚', title: 'Study time', tasks: ['sequence', 'oddone'] },
+  { id: 'garage', name: 'Garage', emoji: '🔧', title: 'Fix it up', tasks: ['numbers', 'wires'] },
+  { id: 'garden', name: 'Garden', emoji: '🌿', title: 'Garden work', tasks: ['sums', 'whack'] },
+  { id: 'vault', name: 'Vault', emoji: '🔐', title: 'Crack the vault', tasks: ['timing', 'code'] },
 ];
+export const TASKS = {
+  reaction: { title: 'Flip the pancakes', how: 'Tap the moment each pancake turns golden. Not before!' },
+  catch: { title: 'Catch the eggs', how: 'Tap the falling eggs before they hit the floor. Catch at least 7 of 10.' },
+  sequence: { title: 'Book order', how: 'Watch the glowing books, then tap them in the same order.' },
+  oddone: { title: 'Spot the odd one out', how: 'One picture in each grid is slightly different. Tap it. Three grids, one slip allowed.' },
+  numbers: { title: 'Rewire the engine', how: 'Tap the numbers from 1 to 9 as fast as you can.' },
+  wires: { title: 'Match the wires', how: 'Tap a wire on the left, then the wire of the same colour on the right.' },
+  sums: { title: 'Count the flowers', how: 'Answer four quick sums. Get three right.' },
+  whack: { title: 'Squash the bugs', how: 'Tap the bugs 🐛 as they pop up. Do NOT tap the bees 🐝. Get at least 7 points.' },
+  timing: { title: 'Crack the vault', how: 'Stop the dial inside the gold zone, three times.' },
+  code: { title: 'Crack the code', how: 'Guess the 3-digit code. After each try, arrows show if the real digit is higher or lower. You have 6 tries.' },
+};
 export const roomOf = id => ROOMS.find(r => r.id === id);
 
 export const TEAMS = [

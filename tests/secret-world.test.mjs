@@ -1,4 +1,4 @@
-import { AREAS, ROOM_IDS, STATIONS, canStand, roomAt, nearStation, step, spawn, W, H, SPEED } from '../games/secret-world.js';
+import { SPEEDS, AREAS, ROOM_IDS, STATIONS, canStand, roomAt, nearStation, step, spawn, W, H, SPEED } from '../games/secret-world.js';
 import assert from 'node:assert';
 
 // every task pad and every spawn point is somewhere a character can stand
@@ -15,6 +15,8 @@ p = { x: 100, y: 300 }; for (let i = 0; i < 40; i++) p = step(p, 1, -1, 0.05); a
 // the speed is what we say
 const q = step({ x: 100, y: 300 }, 1, 0, 0.1); assert.ok(Math.abs(q.x - 100 - SPEED * 0.1) < 1e-6);
 assert.ok(Math.abs(step({ x: 100, y: 300 }, 1, 1, 0.1).x - 100 - SPEED * 0.1 * Math.SQRT1_2) < 1e-6, 'diagonals are not faster');
+assert.ok(Math.abs(step({ x: 100, y: 300 }, 1, 0, 0.1, SPEEDS.fast).x - 100 - SPEED * 1.4 * 0.1) < 1e-6, 'fast is faster');
+assert.ok(SPEEDS.slow < 1 && 1 < SPEEDS.fast);
 assert.deepEqual(step({ x: 100, y: 300 }, 0, 0, 0.1), { x: 100, y: 300 });
 assert.deepEqual(step({ x: 100, y: 300 }, 1, 0, 5).x - 100 <= SPEED * 0.1 + 1e-6, true, 'a long pause cannot teleport you through a wall');
 

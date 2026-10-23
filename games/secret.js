@@ -28,7 +28,7 @@ export const secret = {
   init(env, opts) {
     if (opts?.memory?.saved) return opts.memory.saved;
     return {
-      phase: 'lobby', gm: env.hostId, rounds: 4, secs: 120, mode: 'map', pickMode: 'random', pick: null,
+      phase: 'lobby', gm: env.hostId, rounds: 4, secs: 120, mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
       players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, voteEnd: 0,
       loc: {}, visited: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
       millionaire: null, agenda: null, nextAgenda: null, agendaRes: [], bonus: 0,
@@ -43,7 +43,7 @@ export const secret = {
     const live = () => s.players.filter(id => !s.jailedNow?.includes(id));
     if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.filter(p => p.id !== env.hostId).map(p => [p.id, p.name])) };
 
-    if (a.type === 'reset' && isHost) return { ...this.init(env), rounds: s.rounds, secs: s.secs, mode: s.mode, pickMode: s.pickMode, pick: s.pick };
+    if (a.type === 'reset' && isHost) return { ...this.init(env), rounds: s.rounds, secs: s.secs, mode: s.mode, speed: s.speed, pickMode: s.pickMode, pick: s.pick };
 
     /* ---------- the waiting room ---------- */
     if (s.phase === 'lobby') {
@@ -53,6 +53,7 @@ export const secret = {
         if (Number.isInteger(p.rounds) && p.rounds >= 3 && p.rounds <= 6) n.rounds = p.rounds;
         if ([60, 90, 120, 180, 240].includes(p.secs)) n.secs = p.secs;
         if (p.mode === 'map' || p.mode === 'rooms') n.mode = p.mode;
+        if (['slow', 'normal', 'fast'].includes(p.speed)) n.speed = p.speed;
         if (p.pickMode === 'random' || p.pickMode === 'host') n.pickMode = p.pickMode;
         if ('pick' in p) n.pick = s.names[p.pick] != null ? p.pick : null;
         if ('agenda' in p) n.nextAgenda = agendaOf(p.agenda) ? p.agenda : null;

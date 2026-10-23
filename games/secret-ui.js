@@ -40,7 +40,7 @@ export function renderSecret(el, s, ui, game) {
     });
   };
   if (mapOn) {
-    const lmOpts = { live: ui.live, me: ui.me, players: s.players, nameOf: nm, team: s.team, canMove: playing && !sits, watching: !playing, doneRooms: p?.doneRooms ?? [], onVisit: room => ui.act('visit', { room }), onUse: launch };
+    const lmOpts = { live: ui.live, me: ui.me, players: s.players, nameOf: nm, team: s.team, speed: s.speed, canMove: playing && !sits, watching: !playing, doneRooms: p?.doneRooms ?? [], onVisit: room => ui.act('visit', { room }), onUse: launch };
     if (!el._lm) { el._lm = createLiveMap(lmOpts); el._lmKey = s.round; el.querySelector('.sm-livemap')?.remove(); }
     el._lm.update(lmOpts);
     window.__smap = el._lm;   // handy for testing
@@ -100,6 +100,7 @@ export function renderSecret(el, s, ui, game) {
           <label>Rounds<select data-cfg="rounds">${[3, 4, 5, 6].map(n => opt(n, s.rounds, `${n} rounds`)).join('')}</select></label>
           <label>Time per round<select data-cfg="secs">${[60, 90, 120, 180, 240].map(n => opt(n, s.secs, `${n % 60 === 0 ? n / 60 + ' min' : n + ' sec'}`)).join('')}</select></label>
           <label>How players move<select id="modeSel"><option value="map" ${s.mode === 'map' ? 'selected' : ''}>🗺 Walk around the mansion (live)</option><option value="rooms" ${s.mode === 'rooms' ? 'selected' : ''}>📋 Pick a room from a list (uses less data)</option></select></label>
+          <label>Walking speed (live map)<select id="speedSel">${[['slow', '🐢 Slow'], ['normal', '🚶 Normal'], ['fast', '🏃 Fast']].map(([v, l]) => opt(v, s.speed, l)).join('')}</select></label>
           <label>Who is the Millionaire?<select id="pickMode"><option value="random" ${s.pickMode === 'random' ? 'selected' : ''}>🎲 Pick at random</option>${here.map(x => opt('p:' + x.id, s.pickMode === 'host' ? 'p:' + (ui.raw ?? s).pick : '', `Choose ${esc(x.name)}`)).join('')}</select></label>
           <label>First round's secret agenda<select id="agenda0"><option value="">🎲 Random</option>${AGENDAS.map(a => opt(a.key, s.nextAgenda ?? '', esc(a.text))).join('')}</select></label>
         </div>`)}
@@ -227,6 +228,7 @@ export function renderSecret(el, s, ui, game) {
   const on = (sel, fn) => el.querySelectorAll(sel).forEach(b => b.addEventListener('click', () => fn(b)));
   el.querySelectorAll('select[data-cfg]').forEach(x => x.addEventListener('change', () => { sfx('pop'); ui.act('config', { [x.dataset.cfg]: +x.value }); }));
   el.querySelector('#pickMode')?.addEventListener('change', e => { sfx('pop'); const v = e.target.value; ui.act('config', v === 'random' ? { pickMode: 'random', pick: null } : { pickMode: 'host', pick: v.slice(2) }); });
+  el.querySelector('#speedSel')?.addEventListener('change', e => { sfx('pop'); ui.act('config', { speed: e.target.value }); });
   el.querySelector('#modeSel')?.addEventListener('change', e => { sfx('pop'); ui.act('config', { mode: e.target.value }); });
   el.querySelector('#agenda0')?.addEventListener('change', e => ui.act('config', { agenda: e.target.value }));
   el.querySelector('#agendaNow')?.addEventListener('change', e => ui.act('agenda', { key: e.target.value }));

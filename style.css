@@ -1140,3 +1140,26 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 .sm-hint{margin:0;text-align:center;color:var(--mute);font-size:.9rem}
 .sm-usebtn{width:100%;min-height:54px;font-size:1.05rem;background:linear-gradient(135deg,#a06a00,#6c4cf5)}
 .sm-usebtn[hidden]{display:none}
+
+/* more tasks */
+.st-field{position:relative;width:100%;height:260px;border-radius:16px;background:linear-gradient(180deg,#ffe8cc,#ffd8a8);overflow:hidden;border:3px solid var(--line)}
+.st-egg{position:absolute;top:-50px;width:54px;height:54px;padding:0;font-size:2.2rem;background:none;border:0;animation:stFall 2.2s linear forwards;touch-action:manipulation}
+.st-egg.caught{animation:none;transform:scale(1.4);opacity:0;transition:all .25s}
+@keyframes stFall{from{top:-50px}to{top:270px}}
+.st-odd{display:grid;grid-template-columns:repeat(var(--n),1fr);gap:6px;width:100%}
+.st-cell{aspect-ratio:1;font-size:clamp(1.3rem,calc(11vw / var(--n) * 2.4),2.4rem);padding:0;background:var(--bg);color:var(--ink);border:1px solid var(--line)}
+.st-cell.bad{background:var(--bad);opacity:.6}
+.st-dots i.bad{background:var(--bad)}
+.st-wires{position:relative;display:flex;justify-content:space-between;width:100%;padding:0 22px;min-height:230px}
+.st-wires svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;overflow:visible}
+.st-wcol{display:flex;flex-direction:column;justify-content:space-around;gap:12px;z-index:1}
+.st-wire{width:54px;height:54px;border-radius:50%;background:var(--c);padding:0;border:4px solid #0003}
+.st-wire.sel{outline:4px solid var(--ink);transform:scale(1.12)}
+.st-wire:disabled{opacity:1}
+.st-holes{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%}
+.st-hole{aspect-ratio:1;font-size:2.4rem;border-radius:50%;background:radial-gradient(circle at 50% 60%,#3b2a1a,#7a5230);border:4px solid #4a3320;padding:0;color:#fff}
+.st-digits{display:flex;gap:14px;justify-content:center}
+.st-dcol{display:flex;flex-direction:column;align-items:center;gap:6px}
+.st-dig{font-size:2.6rem;font-weight:800;width:64px;text-align:center;background:var(--bg);border-radius:12px;padding:4px 0;font-variant-numeric:tabular-nums}
+.st-up,.st-dn{width:64px;min-height:44px;background:var(--line);color:var(--ink)}
+.st-hist{display:grid;gap:2px;font-variant-numeric:tabular-nums;font-size:1.05rem;max-height:120px;overflow:auto;width:100%}

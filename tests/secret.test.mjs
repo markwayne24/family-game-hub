@@ -166,6 +166,15 @@ for (let k = 0; k < 400; k++) {
   for (let k = 0; k < 30; k++) assert.equal(makeClue({ log, team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used }).kind, 'length');
 }
 assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
+// ---- walking speed setting
+{
+  const e = env(6); let s = G.init(e);
+  assert.equal(s.speed, 'normal');
+  assert.equal(step(s, e, 'h', 'config', { speed: 'fast' }).speed, 'fast');
+  assert.equal(step(s, e, 'h', 'config', { speed: 'warp' }).speed, 'normal');
+  assert.equal(step(s, e, 'p1', 'config', { speed: 'fast' }).speed, 'normal', 'only the host');
+  assert.equal(step(step(s, e, 'h', 'config', { speed: 'slow' }), e, 'h', 'reset').speed, 'slow', 'kept for the next game');
+}
 // ---- walking into rooms on the live map
 {
   let { e, s } = start(6, { mode: 'rooms', agenda: 'visit:vault' }, 1000);

@@ -1,4 +1,4 @@
-import { W, H, R, AREAS, STATIONS, STATION_RADIUS, step, spawn, roomAt, nearStation, canStand } from './secret-world.js';
+import { W, H, R, SPEEDS, AREAS, STATIONS, STATION_RADIUS, step, spawn, roomAt, nearStation, canStand } from './secret-world.js';
 import { ROOMS, roomOf, TEAMS } from './secret-data.js';
 import { reduceMotion } from './fx.js';
 
@@ -87,7 +87,7 @@ export function createLiveMap(o) {
   function tick(dt) {
     if (opt.canMove && !st.busy) {
       const [dx, dy] = steer();
-      if (dx || dy) { const n = step(st.me, dx, dy, dt); if (n.x !== st.me.x || n.y !== st.me.y) { st.me = n; st.dirty = true; } if (Math.abs(dx) > 0.2) st.face = dx > 0 ? 1 : -1; }
+      if (dx || dy) { const n = step(st.me, dx, dy, dt, SPEEDS[opt.speed] ?? 1); if (n.x !== st.me.x || n.y !== st.me.y) { st.me = n; st.dirty = true; } if (Math.abs(dx) > 0.2) st.face = dx > 0 ? 1 : -1; }
     }
     const near = nearStation(st.me.x, st.me.y);
     if (near !== st.near) { st.near = near; paintUse(); }
