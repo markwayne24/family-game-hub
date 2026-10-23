@@ -62,8 +62,8 @@ export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor
   box.innerHTML = `
     <div class="ic-beam"></div>
     <i class="ic-q q1">?</i><i class="ic-q q2">?</i><i class="ic-q q3">?</i><i class="ic-q q4">?</i><i class="ic-q q5">?</i>
-    <div class="ic-det"><span class="ic-man">🕵️</span><span class="ic-mag">🔎</span></div>
     <div class="ic-lines">
+      <div class="ic-det"><span class="ic-man">🕵️</span><span class="ic-mag">🔎</span></div>
       <p class="ic-was">The impostor was…</p>
       <div class="ic-name ${len > 9 ? 'long' : ''}">${esc(impostor)}</div>
       <div class="ic-word"><small>and the secret word was</small><b>${esc(word)}</b>${ejected ? `<em>Voted out: ${esc(ejected)}${guess ? ` · guessed “${esc(guess)}”` : ''}</em>` : '<em>Nobody was voted out</em>'}</div>

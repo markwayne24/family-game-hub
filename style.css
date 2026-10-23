@@ -637,12 +637,14 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 .ic-q{position:absolute;font-style:normal;font-weight:800;color:#ffffff22;font-size:4rem;animation:qFloat 6s ease-in-out infinite}
 .ic-q.q1{left:8%;top:14%}.ic-q.q2{right:10%;top:22%;animation-delay:-1.5s;font-size:6rem}.ic-q.q3{left:14%;bottom:18%;animation-delay:-3s;font-size:5rem}.ic-q.q4{right:16%;bottom:12%;animation-delay:-4s}.ic-q.q5{left:46%;top:6%;animation-delay:-2s;font-size:3rem}
 @keyframes qFloat{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-22px) rotate(10deg)}}
-.ic-det{position:absolute;top:14%;left:50%;margin-left:-3.2rem;font-size:5.5rem;white-space:nowrap;animation:detIn 1.1s .2s cubic-bezier(.2,.8,.3,1) both,detOut .5s 2.5s ease forwards}
-.ic-mag{display:inline-block;margin-left:-.4em;animation:magScan 1.4s ease-in-out infinite}
+.ic-det{display:flex;justify-content:center;align-items:center;font-size:5.5rem;line-height:1;white-space:nowrap;max-height:7rem;overflow:hidden;animation:detIn 1.1s .2s cubic-bezier(.2,.8,.3,1) both,detOut .6s 2.5s ease forwards}
+.ic-man{display:inline-block;animation:detBob 1.2s ease-in-out infinite}
+.ic-mag{display:inline-block;margin-left:-.35em;font-size:.8em;animation:magScan 1.4s ease-in-out infinite}
+@keyframes detBob{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
 @keyframes detIn{from{transform:translateX(-120vw) rotate(-10deg)}to{transform:none}}
-@keyframes detOut{to{opacity:0;transform:translateY(-30px) scale(.7)}}
+@keyframes detOut{to{opacity:0;max-height:0;transform:scale(.6)}}
 .ic-lines{position:relative;text-align:center;padding:0 18px;width:100%;max-width:560px}
-.ic-was{margin:0;font-size:1.5rem;opacity:0;animation:fadeUp .6s .8s ease forwards}
+.ic-was{margin:.2em 0 0;font-size:1.8rem;font-weight:700;opacity:0;animation:fadeUp .6s .8s ease forwards}
 .ic-name{font-size:clamp(2.6rem,15vw,5.5rem);font-weight:900;line-height:1.05;margin:.15em 0;opacity:0;text-shadow:0 0 30px #ff3b3b,0 0 60px #ff3b3b88;animation:nameSlam .7s 2.6s cubic-bezier(.2,1.6,.4,1) forwards}
 .ic-name.long{font-size:clamp(1.8rem,10vw,3.4rem)}
 @keyframes nameSlam{0%{opacity:0;transform:scale(3)}60%{opacity:1;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
@@ -783,3 +785,7 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 .iv-skip{margin:8px 0 0}
 .imp-nextcat summary{cursor:pointer;font-weight:600;min-height:40px;display:flex;align-items:center}
 @media (prefers-color-scheme:dark){.imp-word2{background:#4a3b0a;color:#ffd43b}.iv-tag{background:#4a1515;color:#ffc9c9}}
+
+/* Nothing may widen the page: on phones a transient overflow (a scaling animation) widens the layout viewport and pushes full-screen scenes off-centre */
+#app{overflow-x:clip}
+.imp-hero{animation:fadeUp .5s ease both}
