@@ -628,3 +628,32 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
   .imp-verdict.good{background:#12381f;color:#b2f2bb}.imp-verdict.bad{background:#4a1515;color:#ffc9c9}
 }
 @media (prefers-reduced-motion:reduce){.imp *{animation:none!important}.imp .step.rd{opacity:1}}
+
+/* Impostor: the whole-screen reveal */
+.imp-cine{position:fixed;inset:0;z-index:60;background:radial-gradient(circle at 50% 40%,#1b1f3b,#05060f 70%);color:#fff;display:grid;place-items:center;overflow:hidden;cursor:pointer;animation:bbIn .35s ease both,camShake .5s 2.6s}
+.imp-cine.out{animation:bbOut .5s ease both}
+.ic-beam{position:absolute;top:-10%;left:50%;width:70vmax;height:130vmax;margin-left:-35vmax;background:conic-gradient(from 168deg at 50% 0,transparent 0 6deg,#fff4 6deg 12deg,transparent 12deg);transform-origin:50% 0;opacity:.7;animation:beamSweep 5s ease-in-out infinite}
+@keyframes beamSweep{0%,100%{transform:rotate(-18deg)}50%{transform:rotate(18deg)}}
+.ic-q{position:absolute;font-style:normal;font-weight:800;color:#ffffff22;font-size:4rem;animation:qFloat 6s ease-in-out infinite}
+.ic-q.q1{left:8%;top:14%}.ic-q.q2{right:10%;top:22%;animation-delay:-1.5s;font-size:6rem}.ic-q.q3{left:14%;bottom:18%;animation-delay:-3s;font-size:5rem}.ic-q.q4{right:16%;bottom:12%;animation-delay:-4s}.ic-q.q5{left:46%;top:6%;animation-delay:-2s;font-size:3rem}
+@keyframes qFloat{0%,100%{transform:translateY(0) rotate(-8deg)}50%{transform:translateY(-22px) rotate(10deg)}}
+.ic-det{position:absolute;top:14%;left:50%;margin-left:-3.2rem;font-size:5.5rem;white-space:nowrap;animation:detIn 1.1s .2s cubic-bezier(.2,.8,.3,1) both,detOut .5s 2.5s ease forwards}
+.ic-mag{display:inline-block;margin-left:-.4em;animation:magScan 1.4s ease-in-out infinite}
+@keyframes detIn{from{transform:translateX(-120vw) rotate(-10deg)}to{transform:none}}
+@keyframes detOut{to{opacity:0;transform:translateY(-30px) scale(.7)}}
+.ic-lines{position:relative;text-align:center;padding:0 18px;width:100%;max-width:560px}
+.ic-was{margin:0;font-size:1.5rem;opacity:0;animation:fadeUp .6s .8s ease forwards}
+.ic-name{font-size:clamp(2.6rem,15vw,5.5rem);font-weight:900;line-height:1.05;margin:.15em 0;opacity:0;text-shadow:0 0 30px #ff3b3b,0 0 60px #ff3b3b88;animation:nameSlam .7s 2.6s cubic-bezier(.2,1.6,.4,1) forwards}
+.ic-name.long{font-size:clamp(1.8rem,10vw,3.4rem)}
+@keyframes nameSlam{0%{opacity:0;transform:scale(3)}60%{opacity:1;transform:scale(.92)}100%{opacity:1;transform:scale(1)}}
+.ic-word{margin:.6em auto 0;opacity:0;padding:12px 18px;border-radius:16px;background:#ffffff14;border:1px solid #ffffff33;animation:wordFlip .7s 4.2s ease forwards;max-width:90%}
+.ic-word small{display:block;opacity:.8}
+.ic-word b{display:block;font-size:2.4rem;letter-spacing:.03em;color:#ffd43b}
+.ic-word em{display:block;font-style:normal;font-size:.9rem;opacity:.75;margin-top:4px}
+@keyframes wordFlip{from{opacity:0;transform:perspective(500px) rotateX(90deg)}to{opacity:1;transform:none}}
+.ic-verdict{margin:.9em auto 0;font-size:1.6rem;font-weight:900;padding:12px 18px;border-radius:16px;opacity:0;animation:stamp .7s 5.4s ease forwards}
+.imp-cine.bad .ic-verdict{background:#e03131;box-shadow:0 0 40px #e0313188}
+.imp-cine.good .ic-verdict{background:#2f9e44;box-shadow:0 0 40px #2f9e4488}
+.ic-flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;animation:icFlash .5s 2.6s ease-out}
+@keyframes icFlash{0%{opacity:.8}100%{opacity:0}}
+.ic-skip{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#fff6;font-size:.8rem}

@@ -1,4 +1,5 @@
 import { fresh, memo, confetti, sfx } from './fx.js';
+import { revealCinematic } from './impostor-fx.js';
 
 const CATEGORIES = {
   Food: ['pizza', 'burger', 'sushi', 'pasta', 'taco', 'salad', 'pancake', 'ice cream'],
@@ -148,15 +149,10 @@ export const impostor = {
       const t4 = t3 + 0.9;                      // who won
       const inGame = s.order.includes(ui.me);
       const mine = inGame ? (ui.me === s.impostor ? r.impostorWins : !r.impostorWins) : null;
-      if (anim) {
-        entries.forEach((_, i) => later(i * step * 1000, () => sfx('vote')));
-        later(t1 * 1000, () => sfx('drumroll'));
-        later(t2 * 1000, () => sfx(ui.me === s.impostor ? 'gasp' : 'thud'));
-        later(t3 * 1000, () => sfx('ding'));
-        later(t4 * 1000, () => { if (mine === false) sfx('lose'); else { confetti(); sfx('win'); } if (r.impostorWins && mine !== true) sfx('growl'); });
-      }
-      const d = sec => (anim ? `style="--d:${sec.toFixed(2)}s"` : '');
-      const rd = anim ? 'rd' : '';
+      // The whole-screen scene plays the sounds itself; the page underneath just shows the final result.
+      if (anim) revealCinematic({ impostor: ui.nameOf(s.impostor), word: s.word, impostorWins: r.impostorWins, mine, isImpostor: ui.me === s.impostor, ejected: r.ejected ? ui.nameOf(r.ejected) : null, guess: r.guess });
+      const d = () => '';
+      const rd = '';
       mood = 'imp-reveal';
       body = `<h3>🗳️ The votes</h3>
         <div class="imp-votes">${entries.map(([from, tgt], i) => `<div class="step ${rd}" ${d(i * step)}>${name(from)} → <b>${tgt === 'skip' ? 'skip' : name(tgt)}</b></div>`).join('') || '<p class="muted">Nobody voted.</p>'}</div>
