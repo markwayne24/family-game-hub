@@ -1,5 +1,5 @@
 import { fresh, memo, confetti, sfx } from './fx.js';
-import { revealCinematic } from './impostor-fx.js';
+import { revealCinematic, turnCinematic } from './impostor-fx.js';
 
 const CATEGORIES = {
   Food: ['pizza', 'burger', 'sushi', 'pasta', 'taco', 'salad', 'pancake', 'ice cream'],
@@ -182,7 +182,15 @@ export const impostor = {
       if (s.phase === 'clues') {
         const turn = s.order[s.clueIdx];
         const myTurn = turn === ui.me;
-        if (fresh(el, 'turn', `${s.round}-${s.clueIdx}`) && myTurn) { sfx('blip'); later(180, () => sfx('blip')); try { navigator.vibrate?.(150); } catch { /* not supported */ } }
+        const key = `${s.round}-${s.clueIdx}`;
+        el._curTurn = key;
+        if (fresh(el, 'turn', key)) {
+          // The first turn waits a moment so people can see their role card first. Later turns show straight away.
+          later(s.clueIdx === 0 ? 2600 : 0, () => {
+            if (!el.isConnected || el._curTurn !== key) return; // the game has moved on
+            turnCinematic({ name: ui.nameOf(turn), mine: myTurn, n: s.clueIdx + 1, total: s.order.length, onDone: () => { if (myTurn) el.querySelector('#cf input')?.focus(); } });
+          });
+        }
         const order = s.order.map((id, i) => `<span class="chip ${i < s.clueIdx ? 'done' : ''} ${i === s.clueIdx ? 'cur' : ''} ${id === ui.me ? 'me' : ''}">${i < s.clueIdx ? '✓' : i === s.clueIdx ? '🎤' : i + 1} ${name(id)}</span>`).join('');
         mood = myTurn ? 'imp-myturn' : '';
         body = `${card}<h3>Give a one-word clue</h3>
@@ -193,6 +201,7 @@ export const impostor = {
             : `<p class="imp-wait">✍️ <b>${name(turn)}</b> is thinking<span class="dots"><i>.</i><i>.</i><i>.</i></span></p>`}
           ${ui.isHost ? '<button class="ghost" id="skipclue">Skip this player</button>' : ''}`;
       } else if (s.phase === 'vote') {
+        el._curTurn = null;
         const voted = s.votes[ui.me] !== undefined;
         const nVoted = Object.keys(s.votes).length;
         const prev = memo(el, 'voted', nVoted);

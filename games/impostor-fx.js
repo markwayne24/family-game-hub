@@ -38,3 +38,22 @@ export function revealCinematic({ impostor, word, impostorWins, mine, isImpostor
   document.body.append(box);
   timers.push(setTimeout(done, 8200));
 }
+
+// A short full-screen "whose turn is it" banner for the clue round, so nobody misses their turn.
+export function turnCinematic({ name, mine, n, total, onDone }) {
+  const timers = [];
+  const at = (ms, fn) => timers.push(setTimeout(fn, ms));
+  if (mine) { sfx('whoosh'); at(150, () => sfx('blip')); at(330, () => sfx('blip')); at(520, () => sfx('ding')); } else sfx('pop');
+  try { if (mine) navigator.vibrate?.([120, 60, 120]); } catch { /* not supported */ }
+  if (reduceMotion()) { if (onDone) at(0, onDone); return; }
+  const box = document.createElement('div');
+  box.className = `imp-turnfx ${mine ? 'mine' : ''}`;
+  box.innerHTML = `<div class="tf-ring"></div><div class="tf-mic">🎤</div>
+    <div class="tf-title">${mine ? 'YOUR TURN!' : `${esc(name)}’s turn`}</div>
+    <div class="tf-sub">${mine ? 'Give a one-word clue' : 'Listen to their clue'}</div>
+    <div class="tf-count">Clue ${n} of ${total}</div>`;
+  const done = () => { timers.forEach(clearTimeout); box.classList.add('out'); setTimeout(() => box.remove(), 350); if (onDone) onDone(); };
+  box.addEventListener('click', done);
+  document.body.append(box);
+  timers.push(setTimeout(done, mine ? 2000 : 1500));
+}
