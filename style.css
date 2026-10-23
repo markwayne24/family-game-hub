@@ -813,3 +813,31 @@ button.google{display:flex;align-items:center;justify-content:center;gap:10px;wi
 .imp-hidebtn{display:block;width:100%;min-height:46px;margin:0 0 12px}
 .account{display:flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px 8px;font-size:.9rem;margin-bottom:4px}
 .account b{max-width:60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* ---------- signed-in home: start card and game cards ---------- */
+.start h2{margin-top:0}
+.field{display:block;font-weight:600;margin-top:8px}
+.field input{font-weight:400}
+.start .or{margin:14px 0 4px;text-align:center}
+.start #create{width:100%;min-height:48px;font-size:1.05rem}
+.filters{display:grid;gap:8px;margin:10px 0 14px}
+.filters .chips{align-items:center}
+.flabel{font-size:.85rem;font-weight:700;color:var(--mute);margin-right:2px}
+.filters .chip{border:0;background:var(--line);color:var(--ink);font-weight:600;cursor:pointer;min-height:36px}
+.filters .chip[aria-pressed="true"]{background:var(--accent);color:#fff}
+.catalog .gtile{gap:6px;padding:14px}
+.ghead{display:flex;align-items:center;gap:10px}
+.ghead b{font-size:1.05rem}
+.gtile .ghead .gemoji{font-size:1.8rem}
+.gtile p.gpitch{font-size:.9rem;color:var(--ink);margin:0}
+.gfacts{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:.85rem;font-weight:600;color:var(--mute)}
+.gtags{display:flex;flex-wrap:wrap;gap:6px}
+.gtag{font-size:.75rem;font-weight:600;padding:2px 8px;border-radius:99px;background:var(--card);border:1px solid var(--line)}
+.gtag.kids{background:#d3f9d8;color:#0b5d1e;border-color:transparent}
+.ghow{margin-top:2px}
+.ghow summary{cursor:pointer;font-weight:600;color:var(--accent);min-height:32px;display:flex;align-items:center}
+.ghow .howbody{font-size:.9rem}
+.ghow ol{padding-left:1.2em;margin:6px 0}
+@media (min-width:560px){#glist{grid-template-columns:repeat(2,1fr)}}
+@media (prefers-color-scheme:dark){.gtag.kids{background:#123d1d;color:#b2f2bb}}
+.catalog .gtile:has(.ghow[open]){grid-column:1/-1}

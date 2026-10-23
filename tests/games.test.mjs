@@ -1,12 +1,22 @@
 import { GAMES } from '../games/index.js';
 import { parseCustom } from '../games/trivia.js';
 import assert from 'node:assert';
+import { META, TYPES, fitsGroup } from '../games/meta.js';
 const P = [{id:'h',name:'Host'},{id:'a',name:'Ann'},{id:'b',name:'Bo'}];
 const env = (extra={}) => ({ players: P, hostId: 'h', now: 1000, ...extra });
 const A = (from,type,data)=>({from,type,data});
 
 // every game exposes the contract
 for (const g of Object.values(GAMES)) for (const k of ['id','name','emoji','init','reduce','render']) assert.ok(g[k], `${g.id}.${k}`);
+
+// every game has home-screen details (pitch, players, time, type)
+for (const g of Object.values(GAMES)) {
+  const m = META[g.id];
+  assert.ok(m, `games/meta.js is missing ${g.id}`);
+  assert.ok(m.pitch && m.minutes && TYPES[m.type] && m.min >= 1 && (m.max == null || m.max >= m.min), `meta for ${g.id}`);
+}
+assert.ok(fitsGroup(META.tictactoe, 2) && !fitsGroup(META.tictactoe, 5)); // 2-player games aren't listed for big groups
+assert.ok(fitsGroup(META.werewolf, 8) && !fitsGroup(META.werewolf, 4));
 
 // ---- custom trivia
 const pool = parseCustom('Capital of PH? | Manila | Cebu | Davao\nbad line\nQ2 | yes | no | maybe | never');
