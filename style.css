@@ -966,3 +966,5 @@ button.google{display:flex;align-items:center;justify-content:center;gap:10px;wi
 .bnm-btns{display:grid;gap:8px;margin-top:10px}
 .bnm-btns button{min-height:48px}
 @media (prefers-reduced-motion:reduce){.bn-head *,.bn-gift,.bn-box-gift,.bn-who,.bn-panel{animation:none!important}}
+.bnm-btns.two{grid-template-columns:1fr 1fr}
+.bnm-close{width:100%;margin-top:8px;min-height:46px}

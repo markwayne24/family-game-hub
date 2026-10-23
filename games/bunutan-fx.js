@@ -156,18 +156,20 @@ export async function makeCardImage({ title, toName, fromName, budget, date, not
 export function saveImage(blob, filename) {
   return new Promise(resolve => {
     const url = URL.createObjectURL(blob);
+    const file = new File([blob], filename, { type: 'image/png' });
+    const canShare = !!navigator.canShare?.({ files: [file] }); // phones: opens the share sheet (Messenger, Viber, Photos...)
     const m = document.createElement('div');
     m.className = 'bn-modal';
-    m.innerHTML = `<div class="bnm-box"><img alt="Your bunutan picture" src="${url}"><p class="muted">Tip: press and hold the picture to save it to your photos.</p>
-      <div class="bnm-btns"><button id="bnmSave">📥 Download / Share</button><button class="ghost" id="bnmClose">Close</button></div></div>`;
+    m.innerHTML = `<div class="bnm-box"><img alt="Your bunutan picture" src="${url}"><p class="muted">Tip: you can also press and hold the picture to save it.</p>
+      <div class="bnm-btns ${canShare ? 'two' : ''}">${canShare ? '<button id="bnmShare">📤 Share</button>' : ''}<button id="bnmDl" class="${canShare ? 'ghost' : ''}">📥 Download</button></div>
+      <button class="ghost bnm-close" id="bnmClose">Close</button></div>`;
     const close = () => { m.remove(); URL.revokeObjectURL(url); resolve(); };
     m.querySelector('#bnmClose').addEventListener('click', close);
     m.addEventListener('click', e => { if (e.target === m) close(); });
-    m.querySelector('#bnmSave').addEventListener('click', async () => {
-      const file = new File([blob], filename, { type: 'image/png' });
-      if (navigator.canShare?.({ files: [file] })) {
-        try { await navigator.share({ files: [file], title: 'My bunutan' }); return; } catch (e) { if (e?.name === 'AbortError') return; }
-      }
+    m.querySelector('#bnmShare')?.addEventListener('click', async () => {
+      try { await navigator.share({ files: [file], title: 'My bunutan', text: 'Shh! My bunutan 🎁' }); } catch (e) { if (e?.name !== 'AbortError') console.warn(e); }
+    });
+    m.querySelector('#bnmDl').addEventListener('click', () => {
       const a = document.createElement('a'); a.href = url; a.download = filename; document.body.append(a); a.click(); a.remove();
       sfx('ding');
     });
