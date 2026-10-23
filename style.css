@@ -841,3 +841,16 @@ button.google{display:flex;align-items:center;justify-content:center;gap:10px;wi
 @media (min-width:560px){#glist{grid-template-columns:repeat(2,1fr)}}
 @media (prefers-color-scheme:dark){.gtag.kids{background:#123d1d;color:#b2f2bb}}
 .catalog .gtile:has(.ghow[open]){grid-column:1/-1}
+
+/* ---------- footer and the privacy / terms pages ---------- */
+.site-foot,.legal-foot{text-align:center;font-size:.85rem;color:var(--mute);margin:24px 0 8px}
+.site-foot a,.legal-foot a,.fine a{color:inherit}
+.fine{font-size:.8rem;margin:4px 0 8px}
+.legal{line-height:1.55}
+.legal h1{animation:none;margin-top:8px}
+.legal h2{margin-top:1.4em;font-size:1.25rem}
+.legal h3{margin:1em 0 .3em;font-size:1.02rem}
+.legal ul{padding-left:1.2em}
+.legal li{margin:6px 0}
+.legal a{color:var(--accent)}
+.legal code{font-size:.85em;background:var(--line);padding:1px 5px;border-radius:6px}
