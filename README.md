@@ -1,4 +1,4 @@
-# Family Game Hub
+# Game Corner
 
 Multiplayer party games for family and friends. The host creates a room and shares a link; guests join with a name.
 Games: Tic-Tac-Toe, Connect 4, Trivia (4 question packs + your own), Bingo, Rock Paper Scissors, Memory Match, Draw & Guess, Impostor, Hangman, Word Race, Charades.
@@ -25,6 +25,17 @@ Host tools: pick a game and its options (question pack, word difficulty, prompt 
 - **Add a game:** create `games/<name>.js` exporting `{ id, name, emoji, init(env, opts), reduce(state, action, env), render(el, state, ui) }` and list it in `games/index.js`.
   Optional hooks: `view(state)` (public copy that hides secrets), `priv(state)` (per-player secrets, e.g. roles), `deadline(state)` (timestamp; the host fires a `timeout` action then).
 - **How it works:** the host's browser runs the game rules and broadcasts state over a Supabase Realtime channel. Guests send actions; the host applies them. Moves are trusted from each browser, which is fine for family play but not for competitive use.
+
+Landing page: signed-out visitors see a landing page with three games as a teaser (the rest are locked), how it works, the sign-in form and a "Got a room code?" box. After signing in, the home screen lists every game with its goal and how to play. Guests with an invite link or room code still join without an account.
+
+Accounts: anyone can sign up and host rooms, with **Continue with Google** or with an email and a password (8+ characters). A new email account gets a 6-digit code by email and must enter it (or tap the link in the email) before it can sign in, so only real addresses get in. Guests joining a room still don't need an account.
+
+Supabase setup for sign-in:
+1. **Authentication → Sign In / Providers → Email:** turn on "Confirm email". Keep "Allow anonymous sign-ins" on for guests.
+2. **Authentication → Emails → Confirm signup:** put the code in the email, e.g. `<p>Your Game Corner code is <b>{{ .Token }}</b></p><p>Or <a href="{{ .ConfirmationURL }}">confirm your email</a>.</p>`. Set up custom SMTP for real traffic, as Supabase's built-in mailer only sends a few emails an hour.
+3. **Authentication → Sign In / Providers → Google:** turn on and paste the Client ID and secret from a Google Cloud OAuth client (type "Web application") whose authorized redirect URI is `https://<project>.supabase.co/auth/v1/callback`.
+4. **Authentication → URL Configuration:** Site URL `https://gamecorner.io`, and add it (plus `http://localhost:3000` for local testing) to the redirect URLs.
+5. Existing database: run `supabase/002_open_hosting.sql` once in the SQL editor so every verified account can host (before, only the first account could).
 
 Run locally: `npx serve .`
 

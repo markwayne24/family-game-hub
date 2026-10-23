@@ -11,6 +11,7 @@ import { lateMode, takePart, watchers, LATE_MODES } from './games/participants.j
 import { supported as cryptoSupported, makeKeys, seal, open as openSealed } from './games/secure.js';
 
 const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
+const BRAND = 'Game Corner';
 const app = document.getElementById('app');
 
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -49,30 +50,123 @@ async function resumeHost(user, code) {
   enterRoom(code, store.get('hubName') || 'Host', true);
 }
 
+// Signed-out visitors see the landing page: a few games as a teaser, the rest stay locked until they sign in.
+const TEASER = ['werewolf', 'bingo', 'impostor'];
+
 function loginScreen(msg = '') {
+  const all = Object.values(GAMES);
+  const teaser = TEASER.map(id => GAMES[id]).filter(Boolean);
+  const locked = all.length - teaser.length;
   app.innerHTML = `
-    <h1>🎲 Family Game Hub</h1>
-    <p class="muted">Host sign-in. Guests just open the link they were sent.</p>
-    <form class="card" id="f">
-      <input name="email" type="email" placeholder="Email" required autocomplete="email">
-      <input name="password" type="password" placeholder="Password (min 6 characters)" required minlength="6" autocomplete="current-password">
-      <p class="err">${esc(msg)}</p>
-      <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
-    </form>`;
+    <section class="hero">
+      <h1>🎲 ${BRAND}</h1>
+      <p class="tagline">Party games for the whole barkada. One phone hosts, everyone joins with a link. No app to install.</p>
+      <div class="row"><a class="btn" href="#signin">Sign in to play</a><span class="muted">${all.length} games inside</span></div>
+    </section>
+    <section class="card">
+      <h2>What's inside</h2>
+      <div class="catalog">${teaser.map(x => gameCardHtml(x)).join('')}${Array.from({ length: Math.min(locked, 3) }, () =>
+        '<div class="gtile locked" aria-hidden="true"><span class="gemoji">🔒</span><b>???</b><p class="muted">Sign in to unlock</p></div>').join('')}</div>
+      <p class="muted">+${locked} more games, from quick rounds to full Werewolf nights, once you sign in.</p>
+    </section>
+    <section class="card">
+      <h2>How it works</h2>
+      <ol class="steps"><li>Sign in with Google or email and create a room.</li><li>Share the invite link. Friends join with just a name.</li><li>Pick a game and play together, in the same room or on a call.</li></ol>
+    </section>
+    <div class="card auth">
+      <h2 id="signin">Sign in or create an account</h2>
+      <button type="button" class="google" id="google">${GOOGLE_ICON}<span>Continue with Google</span></button>
+      <p class="divider"><span>or use email</span></p>
+      <form id="f">
+        <input name="email" type="email" placeholder="Email" required autocomplete="email">
+        <input name="password" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password">
+        <p class="err" id="ferr">${esc(msg)}</p>
+        <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
+      </form>
+    </div>
+    ${joinCodeHtml()}`;
+  bindJoinCode();
   const f = app.querySelector('#f');
+  const ferr = app.querySelector('#ferr');
+  const busy = on => f.querySelectorAll('button').forEach(b => { b.disabled = on; });
   const creds = () => ({ email: f.email.value.trim(), password: f.password.value });
+  app.querySelector('#google').onclick = async () => {
+    const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: SITE_URL() } });
+    if (error) ferr.textContent = error.message; // on success the browser goes to Google and comes back signed in
+  };
   f.onsubmit = async e => {
     e.preventDefault();
+    busy(true);
     const { data, error } = await sb.auth.signInWithPassword(creds());
-    error ? loginScreen(error.message) : hostHome(data.user);
+    busy(false);
+    if (error?.code === 'email_not_confirmed') return verifyScreen(creds().email, 'Your email isn\'t verified yet. Enter the code we sent you.');
+    error ? (ferr.textContent = error.message) : hostHome(data.user);
   };
   app.querySelector('#signup').onclick = async () => {
     if (!f.reportValidity()) return;
-    const { data, error } = await sb.auth.signUp(creds());
-    if (error) return loginScreen(error.message);
-    data.session ? hostHome(data.user) : loginScreen('Check your email to confirm, then sign in.');
+    busy(true);
+    const { data, error } = await sb.auth.signUp({ ...creds(), options: { emailRedirectTo: SITE_URL() } });
+    busy(false);
+    if (error) return (ferr.textContent = error.message);
+    data.session ? hostHome(data.user) : verifyScreen(creds().email);
   };
 }
+
+// The address Supabase sends people back to after Google sign-in or the email link.
+const SITE_URL = () => location.origin + location.pathname;
+const GOOGLE_ICON = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+
+// New email accounts must prove the address is real: Supabase emails a 6-digit code (and a link that does the same).
+function verifyScreen(email, msg = '') {
+  app.innerHTML = `
+    <h1>🎲 ${BRAND}</h1>
+    <form class="card" id="v">
+      <h2>Check your email</h2>
+      <p>We sent a 6-digit code to <b>${esc(email)}</b>. Enter it below, or tap the link in that email.</p>
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+      <p class="err" id="verr">${esc(msg)}</p>
+      <div class="row"><button type="submit">Verify</button><button type="button" class="ghost" id="resend">Resend code</button><button type="button" class="ghost" id="back">Back</button></div>
+      <p class="muted">Can't find it? Check your spam folder.</p>
+    </form>`;
+  const v = app.querySelector('#v');
+  const verr = app.querySelector('#verr');
+  v.onsubmit = async e => {
+    e.preventDefault();
+    const { data, error } = await sb.auth.verifyOtp({ email, token: v.code.value.trim(), type: 'email' });
+    error ? (verr.textContent = error.message) : hostHome(data.user);
+  };
+  const resend = app.querySelector('#resend');
+  resend.onclick = async () => {
+    resend.disabled = true;
+    const { error } = await sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: SITE_URL() } });
+    verr.textContent = error ? error.message : 'A new code is on its way.';
+    setTimeout(() => { resend.disabled = false; }, 60000); // Supabase only allows one email a minute
+  };
+  app.querySelector('#back').onclick = () => loginScreen();
+}
+
+const gameCardHtml = x => `<div class="gtile"><span class="gemoji">${x.emoji}</span><b>${esc(x.name)}</b><p class="muted">${esc(HOWTO[x.id]?.goal ?? '')}</p></div>`;
+
+// Guests with a room code don't need an account: joining a room signs them in anonymously.
+const joinCodeHtml = () => `<form class="card" id="jc">
+    <h2>Got a room code?</h2>
+    <div class="row"><input class="grow" name="code" placeholder="e.g. K7Q2M" maxlength="5" autocapitalize="characters" autocomplete="off" required><button type="submit">Join</button></div>
+  </form>`;
+function bindJoinCode() {
+  app.querySelector('#jc').onsubmit = e => {
+    e.preventDefault();
+    const code = e.target.code.value.trim().toUpperCase();
+    if (!code) return;
+    location.search = `?room=${encodeURIComponent(code)}`;
+  };
+}
+
+// Signed-in home: the full list of games, with how-to for each.
+const catalogHtml = () => `<section class="card">
+    <h2>All games</h2>
+    <div class="catalog">${Object.values(GAMES).map(gameCardHtml).join('')}</div>
+    <details class="howto"><summary>❓ How do the games work?</summary>${Object.values(GAMES).map(x => `<details><summary>${x.emoji} ${esc(x.name)}</summary>${howtoHtml(x)}</details>`).join('')}</details>
+  </section>`;
 
 async function hostHome(user, msg = '') {
   S.me = user.id;
@@ -80,19 +174,23 @@ async function hostHome(user, msg = '') {
   if (!row) {
     const { data: claimed } = await sb.rpc('claim_host');
     if (!claimed) {
-      app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">This account isn't allowed to host games.</p><button id="out">Sign out</button></div>`;
+      app.innerHTML = `<h1>🎲 ${BRAND}</h1>
+        <div class="card"><p class="err">Could not set up hosting for this account. Try signing out and in again.</p><button class="ghost" id="out">Sign out</button></div>
+        ${joinCodeHtml()}${catalogHtml()}`;
+      bindJoinCode();
       app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
       return;
     }
   }
   app.innerHTML = `
-    <h1>🎲 Family Game Hub</h1>
+    <h1>🎲 ${BRAND}</h1>
     <div class="card">
       <p>Your name in the room</p>
       <input id="name" value="${esc(store.get('hubName') || 'Host')}" maxlength="20">
       <p class="err">${esc(msg)}</p>
       <div class="row"><button id="create">Create a room</button><button class="ghost" id="out">Sign out</button></div>
-    </div>`;
+    </div>
+    ${catalogHtml()}`;
   app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };
   app.querySelector('#create').onclick = async () => {
     const name = app.querySelector('#name').value.trim() || 'Host';
@@ -112,11 +210,11 @@ async function joinScreen(code, msg = '') {
   if (!session) await sb.auth.signInAnonymously();
   const { data: ok } = await sb.rpc('room_exists', { room_code: code });
   if (!ok) {
-    app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
+    app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p class="err">Room ${esc(code)} was not found.</p></div>`;
     return;
   }
   if ((JSON.parse(store.get('hubKicked') || '[]')).includes(code)) {
-    app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p class="err">You were removed from room ${esc(code)} by the host.</p></div>`;
+    app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p class="err">You were removed from room ${esc(code)} by the host.</p></div>`;
     return;
   }
   const last = JSON.parse(store.get('hubLast') || 'null');
@@ -367,7 +465,7 @@ function buildShell() {
   copy.onclick = async e => {
     const link = `${location.origin}${location.pathname}?room=${S.code}`;
     if (navigator.share) {
-      try { await navigator.share({ title: 'Family Game Hub', text: `Join my game room! Code: ${S.code}`, url: link }); return; }
+      try { await navigator.share({ title: BRAND, text: `Join my game room! Code: ${S.code}`, url: link }); return; }
       catch (err) { if (err?.name === 'AbortError') return; }
     }
     try { await navigator.clipboard.writeText(link); e.target.textContent = 'Copied!'; }
@@ -390,13 +488,13 @@ function removedScreen(message, kicked = false) {
   if (kicked) store.set('hubKicked', JSON.stringify([...new Set([...JSON.parse(store.get('hubKicked') || '[]'), S.code])]));
   store.set('hubLast', 'null');
   stopChannel();
-  app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><p>${esc(message)}</p></div>`;
+  app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><p>${esc(message)}</p></div>`;
 }
 
 function fullScreen(max) {
   const code = S.code;
   stopChannel();
-  app.innerHTML = `<h1>🎲 Family Game Hub</h1><div class="card"><h2>🚪 This room is full</h2>
+  app.innerHTML = `<h1>🎲 ${BRAND}</h1><div class="card"><h2>🚪 This room is full</h2>
     <p>The host set a limit of <b>${esc(max)}</b> players, and every seat is taken. Ask the host to make room, then try again.</p>
     <button id="retry">Try again</button></div>`;
   app.querySelector('#retry').onclick = () => joinScreen(code);

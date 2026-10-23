@@ -660,6 +660,23 @@ button.wide{display:block;width:100%;margin:8px 0;min-height:46px}
 @keyframes icFlash{0%{opacity:.8}100%{opacity:0}}
 .ic-skip{position:absolute;bottom:14px;left:0;right:0;text-align:center;color:#fff6;font-size:.8rem}
 
+/* ---------- landing page and game catalog ---------- */
+.hero{padding:24px 0 8px}
+.hero h1{font-size:2.4rem}
+.tagline{font-size:1.15rem;margin:8px 0 16px}
+a.btn{display:inline-block;background:var(--accent);color:#fff;font-weight:600;text-decoration:none;border-radius:12px;padding:12px 18px}
+.catalog{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:10px;margin:8px 0}
+.gtile{background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:4px}
+.gtile .gemoji{font-size:2rem;line-height:1}
+.gtile p{margin:0;font-size:.85rem}
+.gtile.locked{opacity:.55;border-style:dashed}
+.steps{padding-left:1.2em;margin:6px 0}
+.steps li{margin:6px 0}
+#signin{scroll-margin-top:16px}
+button.google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
+.divider{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:.9rem;margin:14px 0 6px}
+.divider::before,.divider::after{content:"";flex:1;border-top:1px solid var(--line)}
+
 /* Impostor: whose turn is it */
 .imp-turnfx{position:fixed;inset:0;z-index:58;display:grid;place-content:center;justify-items:center;gap:6px;text-align:center;color:#fff;background:#0b0d22d9;backdrop-filter:blur(2px);cursor:pointer;animation:bbIn .2s ease both}
 .imp-turnfx.out{animation:bbOut .35s ease both}

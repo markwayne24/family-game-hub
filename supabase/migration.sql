@@ -1,4 +1,4 @@
--- Family Game Hub schema. Only allow-listed "hosts" can create rooms.
+-- Game Corner schema. Only "hosts" (verified, non-guest accounts) can create rooms.
 create table public.hosts (
   user_id uuid primary key references auth.users on delete cascade
 );
@@ -17,16 +17,16 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from public.hosts where user_id = (select auth.uid()))
 $$;
 
--- The first non-anonymous account to call this becomes the (only) host.
+-- Any signed-in account with a verified email (or Google) can host. Guests are anonymous and can't.
 create function public.claim_host() returns boolean
 language plpgsql security definer set search_path = public as $$
 begin
   if auth.uid() is null
      or coalesce((auth.jwt() ->> 'is_anonymous')::boolean, false)
-     or exists (select 1 from public.hosts) then
+     or not exists (select 1 from auth.users where id = auth.uid() and email_confirmed_at is not null) then
     return false;
   end if;
-  insert into public.hosts (user_id) values (auth.uid());
+  insert into public.hosts (user_id) values (auth.uid()) on conflict do nothing;
   return true;
 end $$;
 
