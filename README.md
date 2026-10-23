@@ -26,6 +26,8 @@ Host tools: pick a game and its options (question pack, word difficulty, prompt 
   Optional hooks: `view(state)` (public copy that hides secrets), `priv(state)` (per-player secrets, e.g. roles), `deadline(state)` (timestamp; the host fires a `timeout` action then).
 - **How it works:** the host's browser runs the game rules and broadcasts state over a Supabase Realtime channel. Guests send actions; the host applies them. Moves are trusted from each browser, which is fine for family play but not for competitive use.
 
+Home screen: after signing in you get a "Start a game night" card (create a room, or join a friend's with a code) and every game as a card: a one-line pitch, players (e.g. 5+), typical length, type (Party, Classic, Words & quiz, Draw & act), a Kid-friendly badge, and How to play. Filter by how many are playing and by type. The details live in `games/meta.js`; a new game must be added there too (the tests check it).
+
 Landing page: signed-out visitors see a landing page with three games as a teaser (the rest are locked), how it works, the sign-in form and a "Got a room code?" box. After signing in, the home screen lists every game with its goal and how to play. Guests with an invite link or room code still join without an account.
 
 Accounts: anyone can sign up and host rooms, with **Continue with Google** or with an email and a password (8+ characters). A new email account gets a 6-digit code by email and must enter it (or tap the link in the email) before it can sign in, so only real addresses get in. Guests joining a room still don't need an account.

@@ -1,6 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { SUPABASE_URL, SUPABASE_KEY } from './config.js';
 import { HOWTO } from './games/howto.js';
+import { META, TYPES, playersLabel, fitsGroup } from './games/meta.js';
 import { GAMES } from './games/index.js';
 import { parseCustom } from './games/trivia.js';
 import { sfx, isMuted, setMuted, unlockAudio } from './games/fx.js';
@@ -145,7 +146,18 @@ function verifyScreen(email, msg = '') {
   app.querySelector('#back').onclick = () => loginScreen();
 }
 
-const gameCardHtml = x => `<div class="gtile"><span class="gemoji">${x.emoji}</span><b>${esc(x.name)}</b><p class="muted">${esc(HOWTO[x.id]?.goal ?? '')}</p></div>`;
+// Games in the order the home screen lists them (best known first), then any game without details yet.
+const orderedGames = () => [...Object.keys(META).map(id => GAMES[id]).filter(Boolean), ...Object.values(GAMES).filter(g => !META[g.id])];
+
+// One game: what it is, who it's for and how long it takes. `how` adds the rules, folded away.
+const gameCardHtml = (x, how = false) => {
+  const m = META[x.id];
+  const facts = m ? `<div class="gfacts"><span>👥 ${playersLabel(m)}</span><span>⏱ ${m.minutes} min</span></div>
+      <div class="gtags"><span class="gtag">${TYPES[m.type]}</span>${m.kids ? '<span class="gtag kids">👧 Kid-friendly</span>' : ''}</div>` : '';
+  return `<article class="gtile"><div class="ghead"><span class="gemoji">${x.emoji}</span><b>${esc(x.name)}</b></div>
+      <p class="gpitch">${esc(m?.pitch ?? HOWTO[x.id]?.goal ?? '')}</p>${facts}
+      ${how && HOWTO[x.id] ? `<details class="ghow"><summary>How to play</summary>${howtoHtml(x)}</details>` : ''}</article>`;
+};
 
 // Guests with a room code don't need an account: joining a room signs them in anonymously.
 const joinCodeHtml = () => `<form class="card" id="jc">
@@ -161,12 +173,34 @@ function bindJoinCode() {
   };
 }
 
-// Signed-in home: the full list of games, with how-to for each.
-const catalogHtml = () => `<section class="card">
-    <h2>All games</h2>
-    <div class="catalog">${Object.values(GAMES).map(gameCardHtml).join('')}</div>
-    <details class="howto"><summary>❓ How do the games work?</summary>${Object.values(GAMES).map(x => `<details><summary>${x.emoji} ${esc(x.name)}</summary>${howtoHtml(x)}</details>`).join('')}</details>
+// Signed-in home: every game with its details, filtered by group size and type.
+const GROUPS = [['any', 'Any size'], ['1', 'Just me'], ['2', '2'], ['3', '3–4'], ['5', '5+']];
+const catalogHtml = () => `<section class="card" id="catalog">
+    <h2>Pick a game</h2>
+    <p class="muted">${Object.keys(GAMES).length} games. Choose one after you create a room. Tap "How to play" for the rules.</p>
+    <div class="filters">
+      <div class="chips" role="group" aria-label="How many are playing?"><span class="flabel">👥 Playing</span>${GROUPS.map(([v, l]) => `<button class="chip pick" data-group="${v}">${l}</button>`).join('')}</div>
+      <div class="chips" role="group" aria-label="Type of game"><span class="flabel">🎲 Type</span><button class="chip pick" data-type="any">All</button>${Object.entries(TYPES).map(([v, l]) => `<button class="chip pick" data-type="${v}">${l}</button>`).join('')}</div>
+    </div>
+    <div class="catalog" id="glist"></div>
   </section>`;
+function bindCatalog() {
+  const f = { group: store.get('hubGroup') || 'any', type: store.get('hubType') || 'any' };
+  const draw = () => {
+    const list = orderedGames().filter(x => {
+      const m = META[x.id];
+      if (!m) return f.group === 'any' && f.type === 'any';
+      return (f.group === 'any' || fitsGroup(m, +f.group)) && (f.type === 'any' || m.type === f.type);
+    });
+    app.querySelector('#glist').innerHTML = list.map(x => gameCardHtml(x, true)).join('')
+      || '<p class="muted">No game matches. Try another group size or type.</p>';
+    app.querySelectorAll('[data-group]').forEach(b => b.setAttribute('aria-pressed', b.dataset.group === f.group));
+    app.querySelectorAll('[data-type]').forEach(b => b.setAttribute('aria-pressed', b.dataset.type === f.type));
+  };
+  app.querySelectorAll('[data-group]').forEach(b => b.onclick = () => { f.group = b.dataset.group; store.set('hubGroup', f.group); draw(); });
+  app.querySelectorAll('[data-type]').forEach(b => b.onclick = () => { f.type = b.dataset.type; store.set('hubType', f.type); draw(); });
+  draw();
+}
 
 // Top of the signed-in home: who you are and a clear way out.
 const accountBarHtml = user => `<div class="account"><span class="muted">Signed in as</span> <b>${esc(user.email || 'your account')}</b><button class="ghost small" id="out">Sign out</button></div>`;
@@ -186,6 +220,7 @@ async function hostHome(user, msg = '') {
         <div class="card"><p class="err">Could not set up hosting for this account. Try signing out and in again.</p></div>
         ${joinCodeHtml()}${catalogHtml()}`;
       bindJoinCode();
+      bindCatalog();
       app.querySelector('#out').onclick = signOut;
       return;
     }
@@ -193,13 +228,18 @@ async function hostHome(user, msg = '') {
   app.innerHTML = `
     ${accountBarHtml(user)}
     <h1>🎲 ${BRAND}</h1>
-    <div class="card">
-      <p>Your name in the room</p>
-      <input id="name" value="${esc(store.get('hubName') || 'Host')}" maxlength="20">
+    <section class="card start">
+      <h2>Start a game night</h2>
+      <ol class="steps"><li>Create a room.</li><li>Share the invite link. Friends join with just a name, no account needed.</li><li>Pick a game from the room.</li></ol>
+      <label class="field">Your name in the room<input id="name" value="${esc(store.get('hubName') || 'Host')}" maxlength="20"></label>
       <p class="err">${esc(msg)}</p>
-      <div class="row"><button id="create">Create a room</button></div>
-    </div>
+      <button id="create" class="wide">Create a room</button>
+      <p class="muted or">Joining a friend's game instead?</p>
+      <form id="jc" class="row"><input class="grow" name="code" placeholder="Room code, e.g. K7Q2M" maxlength="5" autocapitalize="characters" autocomplete="off" required aria-label="Room code"><button type="submit" class="ghost">Join</button></form>
+    </section>
     ${catalogHtml()}`;
+  bindJoinCode();
+  bindCatalog();
   app.querySelector('#out').onclick = signOut;
   app.querySelector('#create').onclick = async () => {
     const name = app.querySelector('#name').value.trim() || 'Host';
