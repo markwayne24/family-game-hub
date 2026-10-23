@@ -787,7 +787,7 @@ function render() {
     stage.innerHTML = '';
     stage._d = null;
     stage._fx = null;
-    stage.classList.remove('enter', 'wwstage', 'impstage');
+    stage.classList.remove('enter', 'wwstage', 'impstage', 'bnstage');
     void stage.offsetWidth;
     stage.classList.add('enter');
     if (view === 'picker') {
