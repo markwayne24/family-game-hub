@@ -71,30 +71,78 @@ function loginScreen(msg = '') {
     </section>
     <section class="card">
       <h2>How it works</h2>
-      <ol class="steps"><li>Sign in and create a room.</li><li>Share the invite link. Friends join with just a name.</li><li>Pick a game and play together, in the same room or on a call.</li></ol>
+      <ol class="steps"><li>Sign in with Google or email and create a room.</li><li>Share the invite link. Friends join with just a name.</li><li>Pick a game and play together, in the same room or on a call.</li></ol>
     </section>
-    <form class="card" id="f">
-      <h2 id="signin">Sign in</h2>
-      <input name="email" type="email" placeholder="Email" required autocomplete="email">
-      <input name="password" type="password" placeholder="Password (min 6 characters)" required minlength="6" autocomplete="current-password">
-      <p class="err">${esc(msg)}</p>
-      <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
-    </form>
+    <div class="card auth">
+      <h2 id="signin">Sign in or create an account</h2>
+      <button type="button" class="google" id="google">${GOOGLE_ICON}<span>Continue with Google</span></button>
+      <p class="divider"><span>or use email</span></p>
+      <form id="f">
+        <input name="email" type="email" placeholder="Email" required autocomplete="email">
+        <input name="password" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password">
+        <p class="err" id="ferr">${esc(msg)}</p>
+        <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
+      </form>
+    </div>
     ${joinCodeHtml()}`;
   bindJoinCode();
   const f = app.querySelector('#f');
+  const ferr = app.querySelector('#ferr');
+  const busy = on => f.querySelectorAll('button').forEach(b => { b.disabled = on; });
   const creds = () => ({ email: f.email.value.trim(), password: f.password.value });
+  app.querySelector('#google').onclick = async () => {
+    const { error } = await sb.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: SITE_URL() } });
+    if (error) ferr.textContent = error.message; // on success the browser goes to Google and comes back signed in
+  };
   f.onsubmit = async e => {
     e.preventDefault();
+    busy(true);
     const { data, error } = await sb.auth.signInWithPassword(creds());
-    error ? loginScreen(error.message) : hostHome(data.user);
+    busy(false);
+    if (error?.code === 'email_not_confirmed') return verifyScreen(creds().email, 'Your email isn\'t verified yet. Enter the code we sent you.');
+    error ? (ferr.textContent = error.message) : hostHome(data.user);
   };
   app.querySelector('#signup').onclick = async () => {
     if (!f.reportValidity()) return;
-    const { data, error } = await sb.auth.signUp(creds());
-    if (error) return loginScreen(error.message);
-    data.session ? hostHome(data.user) : loginScreen('Check your email to confirm, then sign in.');
+    busy(true);
+    const { data, error } = await sb.auth.signUp({ ...creds(), options: { emailRedirectTo: SITE_URL() } });
+    busy(false);
+    if (error) return (ferr.textContent = error.message);
+    data.session ? hostHome(data.user) : verifyScreen(creds().email);
   };
+}
+
+// The address Supabase sends people back to after Google sign-in or the email link.
+const SITE_URL = () => location.origin + location.pathname;
+const GOOGLE_ICON = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>';
+
+// New email accounts must prove the address is real: Supabase emails a 6-digit code (and a link that does the same).
+function verifyScreen(email, msg = '') {
+  app.innerHTML = `
+    <h1>🎲 ${BRAND}</h1>
+    <form class="card" id="v">
+      <h2>Check your email</h2>
+      <p>We sent a 6-digit code to <b>${esc(email)}</b>. Enter it below, or tap the link in that email.</p>
+      <input name="code" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="123456" required>
+      <p class="err" id="verr">${esc(msg)}</p>
+      <div class="row"><button type="submit">Verify</button><button type="button" class="ghost" id="resend">Resend code</button><button type="button" class="ghost" id="back">Back</button></div>
+      <p class="muted">Can't find it? Check your spam folder.</p>
+    </form>`;
+  const v = app.querySelector('#v');
+  const verr = app.querySelector('#verr');
+  v.onsubmit = async e => {
+    e.preventDefault();
+    const { data, error } = await sb.auth.verifyOtp({ email, token: v.code.value.trim(), type: 'email' });
+    error ? (verr.textContent = error.message) : hostHome(data.user);
+  };
+  const resend = app.querySelector('#resend');
+  resend.onclick = async () => {
+    resend.disabled = true;
+    const { error } = await sb.auth.resend({ type: 'signup', email, options: { emailRedirectTo: SITE_URL() } });
+    verr.textContent = error ? error.message : 'A new code is on its way.';
+    setTimeout(() => { resend.disabled = false; }, 60000); // Supabase only allows one email a minute
+  };
+  app.querySelector('#back').onclick = () => loginScreen();
 }
 
 const gameCardHtml = x => `<div class="gtile"><span class="gemoji">${x.emoji}</span><b>${esc(x.name)}</b><p class="muted">${esc(HOWTO[x.id]?.goal ?? '')}</p></div>`;
@@ -127,7 +175,7 @@ async function hostHome(user, msg = '') {
     const { data: claimed } = await sb.rpc('claim_host');
     if (!claimed) {
       app.innerHTML = `<h1>🎲 ${BRAND}</h1>
-        <div class="card"><p>Welcome! Only the hub's host can create rooms. Ask them for an invite link or a room code.</p><button class="ghost" id="out">Sign out</button></div>
+        <div class="card"><p class="err">Could not set up hosting for this account. Try signing out and in again.</p><button class="ghost" id="out">Sign out</button></div>
         ${joinCodeHtml()}${catalogHtml()}`;
       bindJoinCode();
       app.querySelector('#out').onclick = async () => { await sb.auth.signOut(); loginScreen(); };

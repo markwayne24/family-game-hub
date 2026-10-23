@@ -28,6 +28,15 @@ Host tools: pick a game and its options (question pack, word difficulty, prompt 
 
 Landing page: signed-out visitors see a landing page with three games as a teaser (the rest are locked), how it works, the sign-in form and a "Got a room code?" box. After signing in, the home screen lists every game with its goal and how to play. Guests with an invite link or room code still join without an account.
 
+Accounts: anyone can sign up and host rooms, with **Continue with Google** or with an email and a password (8+ characters). A new email account gets a 6-digit code by email and must enter it (or tap the link in the email) before it can sign in, so only real addresses get in. Guests joining a room still don't need an account.
+
+Supabase setup for sign-in:
+1. **Authentication → Sign In / Providers → Email:** turn on "Confirm email". Keep "Allow anonymous sign-ins" on for guests.
+2. **Authentication → Emails → Confirm signup:** put the code in the email, e.g. `<p>Your Barkada Hub code is <b>{{ .Token }}</b></p><p>Or <a href="{{ .ConfirmationURL }}">confirm your email</a>.</p>`. Set up custom SMTP for real traffic, as Supabase's built-in mailer only sends a few emails an hour.
+3. **Authentication → Sign In / Providers → Google:** turn on and paste the Client ID and secret from a Google Cloud OAuth client (type "Web application") whose authorized redirect URI is `https://<project>.supabase.co/auth/v1/callback`.
+4. **Authentication → URL Configuration:** Site URL `https://www.barkadahub.com`, and add it (plus `http://localhost:3000` for local testing) to the redirect URLs.
+5. Existing database: run `supabase/002_open_hosting.sql` once in the SQL editor so every verified account can host (before, only the first account could).
+
 Run locally: `npx serve .`
 
 ## Tests

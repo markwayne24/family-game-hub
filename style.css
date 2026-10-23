@@ -671,3 +671,6 @@ a.btn{display:inline-block;background:var(--accent);color:#fff;font-weight:600;t
 .steps{padding-left:1.2em;margin:6px 0}
 .steps li{margin:6px 0}
 #signin{scroll-margin-top:16px}
+button.google{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;background:#fff;color:#1f1f1f;border:1px solid #dadce0}
+.divider{display:flex;align-items:center;gap:10px;color:var(--mute);font-size:.9rem;margin:14px 0 6px}
+.divider::before,.divider::after{content:"";flex:1;border-top:1px solid var(--line)}
