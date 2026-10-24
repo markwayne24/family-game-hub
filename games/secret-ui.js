@@ -2,7 +2,7 @@ import { sfx, fresh, memo, confetti, isMuted, setMuted } from './fx.js';
 import { ROOMS, TEAMS, TASKS, BATTLES, BATTLE_FREQ, BATTLE_BONUSES, BATTLE_ORDER, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
 import { openTask } from './secret-tasks.js';
 import { createLiveMap } from './secret-map.js';
-import { revealScene, roleScene, roundIntro, splash, scoreTicker } from './secret-fx.js';
+import { revealScene, roleScene, roundIntro, splash, scoreTicker, clueScene } from './secret-fx.js';
 import { avatar, scoreBoardHtml } from './impostor-fx.js';
 import { openBattle, battleResult } from './secret-battle.js';
 
@@ -89,8 +89,22 @@ export function renderSecret(el, s, ui, game) {
   // ...and when it is over, the result and the new totals on every phone
   const prevPhase = memo(el, 'phaseSeen', s.phase);
   if (prevPhase === 'battle' && s.phase !== 'battle' && last?.battle) {
-    battleResult({ res: last.battle, teams: TEAMS, from: last.teamPts.map((v, i) => (i === last.battle.winner ? v - last.battle.bonus : v)), to: last.teamPts, myTeam, anchor: el, onClose: () => { if (el._s?.phase === 'vote') splash({ emoji: '🗳', title: 'The final vote', sub: 'Who is the Secret Millionaire?', sound: 'drumroll', ms: 2000 }); } });
+    battleResult({ res: last.battle, teams: TEAMS, from: last.teamPts.map((v, i) => (i === last.battle.winner ? v - last.battle.bonus : v)), to: last.teamPts, myTeam, anchor: el, onClose: () => { el._clueHold = false; if (el._s?.phase === 'break') setTimeout(() => showClueScene(), 400); if (el._s?.phase === 'vote') splash({ emoji: '🗳', title: 'The final vote', sub: 'Who is the Secret Millionaire?', sound: 'drumroll', ms: 2000 }); } });
   }
+  // a clue for my team: a full-screen envelope as soon as the round's results are in (after the battle result, if there was one)
+  const myClue = playing && s.phase === 'break' && last ? (p?.clues ?? []).find(c => c.round === last.round) : null;   // (the moderator sees every clue elsewhere; this is only for people on the winning team)
+  if (s.phase === 'break' && last && fresh(el, 'clueDue', last.round)) { el._clueHold = !!last.battle; el._clueDone = false; }
+  const showClueScene = () => {
+    if (el._clueDone || !myClue || el._clueBusy || !el.isConnected || el._s.phase !== 'break') return;
+    el._clueBusy = true; el._clueDone = true;
+    clueScene({ text: myClue.text, team: TEAMS[myTeam], round: myClue.round, anchor: el, onOpen: () => { m.opened.add(myClue.round); redraw(); }, onShare: () => ui.act('share', { round: myClue.round }), onClose: () => { el._clueBusy = false; redraw(); } });
+  };
+  if (myClue && !el._clueHold && !el._clueDone && !m.opened.has(myClue.round)) setTimeout(showClueScene, 700);
+  // everyone else is told which team found one
+  if (s.phase === 'break' && last && s.hasClue.includes(last.round) && !myClue && fresh(el, 'clueOther', last.round) && !last.battle && last.winners.length) splash({ emoji: '🔎', title: `${last.winners.map(x => TEAMS[x].emoji).join(' ')} found a clue!`, sub: 'They may share it with everyone… or keep it.', sound: 'mystic', ms: 2200 });
+  // and whenever somebody shares one, it appears on every phone
+  const sharedBefore = memo(el, 'sharedN', s.shared.length);
+  if (sharedBefore !== undefined && s.shared.length > sharedBefore) { const c = s.shared[s.shared.length - 1]; splash({ emoji: '📢', title: `${nm(c.by)} shared a clue!`, sub: `“${c.text}”`, sound: 'sparkle', ms: 4200 }); }
   if (s.phase === 'round' && s.round === 1 && playing && p && fresh(el, 'roleScene', s.startAt)) {
     roleScene({ isM: !!p.millionaire, team: TEAMS[myTeam], agenda: agendaOf(p.agenda?.key)?.text, bonus: money(BONUS), anchor: el, onClose: () => { if (el._introPending) startIntro(); } });
   }
@@ -294,7 +308,8 @@ export function renderSecret(el, s, ui, game) {
         : `<p class="muted" style="margin-top:0">The secrets are hidden so nobody can read them over your shoulder.</p><button id="gmShowBtn">👁 Show the secrets</button>${handoverBlock()}`);
     }
     if (ctl) bar = `<div class="bn-bar"><button id="next">▶ ${gm || s.mod === 'host' ? '' : 'Host: '}Start round ${s.round + 1}</button></div>`;
-    body = `${myTag}${roleCard()}${result}${clue}${agendaRes}${sharedPanel()}${intelPanel()}${accuse}${board}${gmPanel}${hostPanel()}${ctl ? '' : panel('', `<p class="muted" style="text-align:center;margin:0">${s.breakEnd ? 'The next round starts when the timer ends.' : `Waiting for ${waitFor} to start the next round…`}</p>`)}`;
+    const clueBanner = myClue && !m.opened.has(myClue.round) ? '<button class="sm-clue-banner" id="openClue2"><span>✉️</span><b>Your team found a clue!</b><small>Tap to open it</small></button>' : '';
+    body = `${myTag}${clueBanner}${roleCard()}${clue}${result}${agendaRes}${sharedPanel()}${intelPanel()}${accuse}${board}${gmPanel}${hostPanel()}${ctl ? '' : panel('', `<p class="muted" style="text-align:center;margin:0">${s.breakEnd ? 'The next round starts when the timer ends.' : `Waiting for ${waitFor} to start the next round…`}</p>`)}`;
   }
 
   /* ================================ the final vote ================================ */
@@ -365,6 +380,7 @@ export function renderSecret(el, s, ui, game) {
   on('#gmShowBtn', () => { sfx('flip'); m.gmShow = true; clearTimeout(m.gt); m.gt = setTimeout(() => { m.gmShow = false; redraw(); }, 20000); redraw(); });
   on('#gmHide', () => { sfx('flip'); m.gmShow = false; clearTimeout(m.gt); redraw(); });
   on('#openClue', () => { sfx('sparkle'); m.opened.add(last.round); redraw(); });
+  on('#openClue2', () => { sfx('sparkle'); el._clueDone = false; el._clueHold = false; showClueScene(); });
   on('[data-share]', b => { sfx('sparkle'); m.kept.delete(+b.dataset.share); ui.act('share', { round: +b.dataset.share }); });
   on('[data-keep]', b => { sfx('flip'); m.kept.add(+b.dataset.keep); redraw(); });
   on('[data-sus]', b => { sfx('pop'); const id = b.dataset.sus; m.notes.has(id) ? m.notes.delete(id) : m.notes.add(id); redraw(); });

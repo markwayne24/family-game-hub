@@ -131,3 +131,29 @@ export function scoreTicker({ from, to, myTeam, teams, anchor }) {
   clearTimeout(tickerTimer);
   tickerTimer = setTimeout(() => { el.classList.add('out'); setTimeout(() => { if (ticker === el) ticker = null; el.remove(); }, 400); }, 2600);
 }
+
+// Your team won the round's clue: a full-screen envelope on every teammate's phone, so nobody has to scroll to find it.
+// Tap to open, read it, then share it with everyone or keep it secret. Nothing here changes the clue.
+export function clueScene({ text, team, round, anchor, onOpen, onShare, onClose }) {
+  const o = document.createElement('div');
+  o.className = 'sm-clue-scene';
+  let closed = false, timer = 0;
+  const close = () => { if (closed) return; closed = true; clearTimeout(timer); o.classList.add('out'); setTimeout(() => o.remove(), 300); onClose?.(); };
+  o.innerHTML = `<div class="scs-card"><div class="scs-team">${team ? `${team.emoji} Team ${esc(team.name)}` : ''}</div><h2>Your team found a clue!</h2>
+    <button class="scs-env" id="scsOpen"><span class="scs-flap">✉️</span><b>Tap to open</b></button>
+    <button class="ghost scs-later" id="scsLater">Later</button></div>`;
+  document.body.append(o);
+  sfx('sparkle');
+  o.querySelector('#scsLater').addEventListener('click', close);
+  o.querySelector('#scsOpen').addEventListener('click', () => {
+    onOpen?.(); sfx('mystic');
+    o.querySelector('.scs-card').innerHTML = `<div class="scs-team">${team ? `${team.emoji} Team ${esc(team.name)}` : ''} · Round ${round}</div><h2>🔎 The clue</h2>
+      <div class="scs-clue">“${esc(text)}”</div>
+      <p class="scs-note">Your teammates have it too. Share it with <b>everyone</b>, or keep it secret.</p>
+      <button id="scsShare">📢 Share with everyone</button><button class="ghost" id="scsKeep">🤫 Keep it secret</button>`;
+    o.querySelector('#scsShare').addEventListener('click', () => { onShare?.(); sfx('sparkle'); o.querySelector('.scs-card').innerHTML = '<div class="scs-big">📢</div><h2>Shared with everyone!</h2>'; timer = setTimeout(close, 1100); });
+    o.querySelector('#scsKeep').addEventListener('click', close);
+  });
+  const watch = setInterval(() => { if (!anchor.isConnected) { clearInterval(watch); closed = true; o.remove(); } }, 800);
+  return close;
+}
