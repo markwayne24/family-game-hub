@@ -1,4 +1,4 @@
-import { ROOMS, TEAMS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
+import { ROOMS, TEAMS, TASKS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
 import { makeClue, taskPoints } from './secret-clues.js';
 import { renderSecret } from './secret-ui.js';
 
@@ -114,7 +114,7 @@ export const secret = {
         const ok = d.ok === true, ms = Math.max(0, Math.min(60000, Math.round(+d.ms || 0)));
         const gain = taskPoints(ok, ms), t = s.team[a.from];
         const n = {
-          ...s, log: [...s.log, { r: s.round, id: a.from, room, ok, ms }], done: { ...s.done, [a.from]: { ...s.done[a.from], [room]: true } },
+          ...s, log: [...s.log, { r: s.round, id: a.from, room, ok, ms, kind: ROOMS.find(x => x.id === room).tasks.includes(d.kind) ? d.kind : null, lv: s.level }], done: { ...s.done, [a.from]: { ...s.done[a.from], [room]: true } },
           pts: { ...s.pts, [a.from]: (s.pts[a.from] ?? 0) + gain }, teamPts: s.teamPts.map((v, i) => (i === t ? v + gain : v)),
         };
         // everyone who can play has done everything: no need to wait for the clock
@@ -168,7 +168,7 @@ export const secret = {
   view(s) {
     const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, visited, ...pub } = s;
     const out = { ...pub, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))], voted: Object.keys(votes) };
-    if (s.phase === 'end') Object.assign(out, { millionaire, agendaRes, clues: clues.map(({ round, text }) => ({ round, text })) });
+    if (s.phase === 'end') Object.assign(out, { stats: taskStats(log), millionaire, agendaRes, clues: clues.map(({ round, text }) => ({ round, text })) });
     return out;
   },
 
@@ -223,6 +223,16 @@ function finishRound(s, now) {
 }
 
 // A clue holder tells everyone the clue (it can't be changed, only shared or kept). Once is enough for the whole team.
+// How the tasks went in this game: for each task, how many tries, the share that passed, and the typical time.
+export function taskStats(log) {
+  const by = {};
+  for (const e of log) if (e.kind) (by[e.kind] ??= []).push(e);
+  return Object.entries(by).map(([kind, es]) => {
+    const ms = es.map(e => e.ms).sort((a, b) => a - b);
+    return { kind, n: es.length, pass: es.filter(e => e.ok).length, ms: ms[Math.floor(ms.length / 2)], byLevel: [0, 1, 2].map(l => { const x = es.filter(e => e.lv === l); return { n: x.length, pass: x.filter(e => e.ok).length }; }) };
+  }).sort((a, b) => b.n - a.n);
+}
+
 function shareClue(s, from, round) {
   const c = s.clues.find(x => x.round === round);
   if (!c || !c.to.includes(from) || s.shared.some(x => x.round === round)) return s;

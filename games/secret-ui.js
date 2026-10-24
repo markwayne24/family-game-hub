@@ -1,5 +1,5 @@
 import { sfx, fresh, memo, confetti } from './fx.js';
-import { ROOMS, TEAMS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
+import { ROOMS, TEAMS, TASKS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
 import { openTask } from './secret-tasks.js';
 import { createLiveMap } from './secret-map.js';
 import { revealScene, roleScene } from './secret-fx.js';
@@ -47,7 +47,7 @@ export function renderSecret(el, s, ui, game) {
     el._lm?.setBusy(room);
     el._closeTask = openTask(room, {
       anchor: el, level: s.level,
-      onFinish: (ok, ms) => { el._closeTask = null; el._lm?.setBusy(null); ui.act('done', { room, ok, ms }); },
+      onFinish: (ok, ms, kind) => { el._closeTask = null; el._lm?.setBusy(null); ui.act('done', { room, ok, ms, kind }); },
       onQuit: () => { el._closeTask = null; el._lm?.setBusy(null); ui.act('leave'); },
     });
   };
@@ -254,9 +254,10 @@ export function renderSecret(el, s, ui, game) {
     const ar = s.agendaRes.length ? panel('🤫 The Millionaire\'s secret agendas', `<ul class="sm-cl">${s.agendaRes.map(r => `<li><b>R${r.round}</b> ${esc(agendaOf(r.key)?.text ?? '')} ${r.ok ? '✅' : '❌'}</li>`).join('')}</ul>`) : '';
     const cl = s.clues.length ? panel('🔎 Every clue that was found', `<ul class="sm-cl">${s.clues.map(c => `<li><b>R${c.round}</b> ${esc(c.text)}${s.shared.some(x => x.round === c.round) ? ' <small class="muted">📢 shared</small>' : ''}</li>`).join('')}</ul>`) : '';
     const rows = s.players.map(id => ({ id, name: nm(id), after: s.total[id] ?? 0, gain: 0, before: s.total[id] ?? 0, me: id === me })).sort((a, b) => b.after - a.after);
+    const stats = s.stats?.length ? panel('📊 How the tasks went', `<p class="muted" style="margin-top:0">Share of tries that passed, so the host can see which tasks were too easy or too hard for this group.</p><table class="sm-stats"><tr><th>Task</th><th>Tries</th><th>Passed</th><th>Typical time</th></tr>${s.stats.map(x => `<tr><td>${esc(TASKS[x.kind]?.title ?? x.kind)}</td><td>${x.n}</td><td><b>${Math.round((x.pass / x.n) * 100)}%</b></td><td>${(x.ms / 1000).toFixed(1)}s</td></tr>`).join('')}</table>`) : '';
     body = `<section class="bn-panel sm-end ${iWin ? 'won' : ''}"><div class="sm-big">${o.winner === 'detectives' ? '🕵️' : '💰'}</div><h2>${headline}</h2>
       <div class="sm-who">${avatar(nm(s.millionaire))}<b>${esc(nm(s.millionaire))}</b><small>was the Secret Millionaire</small></div><p>${detail}</p>${iWin ? '<p class="sm-youwin">🎉 You won!</p>' : ''}</section>
-      ${ar}${cl}${panel('🏆 Task points', scoreBoardHtml(rows, { anim: false }).html)}
+      ${ar}${cl}${panel('🏆 Task points', scoreBoardHtml(rows, { anim: false }).html)}${stats}
       ${s.accusations.length ? panel('🕵️ Accusations', s.accusations.map(a => `<div>🕵️ <b>${esc(nm(a.by))}</b> → <b>${esc(nm(a.target))}</b> (round ${a.r}) ${a.ok ? '✅' : '❌'}</div>`).join('')) : ''}
       ${ui.isHost ? '<div class="bn-foot"><button id="again">🔄 Play again</button></div>' : ''}`;
   }

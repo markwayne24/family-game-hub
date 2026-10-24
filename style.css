@@ -1222,3 +1222,5 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 .srs-card p{opacity:.9}
 .srs-agenda{background:#ffffff22;border:2px solid #ffd766;border-radius:14px;padding:12px;margin:14px 0;font-weight:700}
 .srs-card button{width:100%;min-height:54px;font-size:1.1rem;margin-top:12px;background:linear-gradient(135deg,#a06a00,#6c4cf5)}
+
+.sm-stats{width:100%;border-collapse:collapse;font-size:.9rem}.sm-stats th{text-align:left;color:var(--mute);font-weight:600;padding:4px 6px}.sm-stats td{padding:6px;border-top:1px solid var(--line)}

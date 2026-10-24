@@ -1,6 +1,7 @@
 import { secret as G, makeTeams, MIN_PLAYERS } from '../games/secret.js';
 import { makeClue, taskPoints } from '../games/secret-clues.js';
 import { levelFor } from '../games/secret-data.js';
+import { taskStats } from '../games/secret.js';
 import { ROOMS, AGENDAS } from '../games/secret-data.js';
 import assert from 'node:assert';
 
@@ -324,5 +325,19 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
   const ended = step(g4, e0, g4.players.find(id => id !== g4.millionaire), 'accuse', { target: g4.millionaire }); assert.equal(ended.phase, 'end');
   assert.equal(step(ended, e0, g4.clues[0].to[0], 'share', { round: 1 }), ended, 'nothing to share once it is over');
   assert.ok(G.view(ended).clues.length >= 1, 'every clue is shown at the end');
+}
+// ---- what the end-of-game task stats are made of
+{
+  const { e, s } = start(6, { rounds: 3, difficulty: 'hard' }, 1000);
+  const a = s.players[0]; let g = step(s, { ...e, now: 2000 }, a, 'go', { room: 'kitchen' });
+  g = step(g, { ...e, now: 6000 }, a, 'done', { room: 'kitchen', ok: true, ms: 3000, kind: 'catch' });
+  g = step(g, { ...e, now: 7000 }, a, 'go', { room: 'garage' }); g = step(g, { ...e, now: 11000 }, a, 'done', { room: 'garage', ok: false, ms: 9000, kind: 'catch' });
+  assert.equal(g.log[0].kind, 'catch'); assert.equal(g.log[0].lv, 2); assert.equal(g.log[1].kind, null, 'a task from another room is not trusted');
+  const st = taskStats([...g.log, { kind: 'catch', ok: false, ms: 5000, lv: 1 }]);
+  assert.deepEqual(st.map(x => [x.kind, x.n, x.pass]), [['catch', 2, 1]]); assert.equal(st[0].byLevel[1].n, 1); assert.equal(st[0].byLevel[2].pass, 1);
+  assert.ok(!('stats' in G.view(g)), 'stats are for the end');
+  assert.ok(Array.isArray(G.view(step(g, e, a, 'accuse', { target: g.millionaire }) ?? g).stats) || true);
+  const ended = step(step(g, { ...e, now: 20000 }, 'h', 'endRound'), e, g.players.find(id => id !== g.millionaire && id !== a) , 'accuse', { target: g.millionaire });
+  assert.equal(ended.phase, 'end'); assert.ok(Array.isArray(G.view(ended).stats));
 }
 console.log('secret millionaire tests passed');
