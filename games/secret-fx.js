@@ -100,3 +100,34 @@ export function splash({ emoji, title, sub = '', sound = 'whoosh', ms = 1600 }) 
   setTimeout(() => o.classList.add('out'), ms - 350);
   setTimeout(() => o.remove(), ms);
 }
+
+// The team scoreboard that flashes up on EVERY phone each time a task is finished: both totals, the one that just
+// scored counts up with a "+N" pop, and a bar shows who is ahead. It stays a couple of seconds and merges quick successions.
+let ticker = null, tickerTimer = 0, shown = [0, 0];
+export function scoreTicker({ from, to, myTeam, teams, anchor }) {
+  const gain = [to[0] - from[0], to[1] - from[1]];
+  if (!(gain[0] > 0 || gain[1] > 0)) return;
+  if (!ticker || !ticker.isConnected) {
+    shown = from.slice();
+    ticker = document.createElement('div'); ticker.className = 'sm-ticker';
+    ticker.innerHTML = `<div class="smt-card">${teams.map((tm, i) => `<div class="smt-side t${i}" data-i="${i}"><span class="smt-name">${tm.emoji} ${esc(tm.name)}</span><b class="smt-n">${from[i]}</b><em class="smt-plus"></em></div>`).join('<span class="smt-vs">VS</span>')}<div class="smt-bar"><i class="t0"></i><i class="t1"></i></div></div>`;
+    document.body.append(ticker);
+  }
+  const el = ticker;
+  const bar = () => { const a = shown[0], b = shown[1], tot = a + b || 1; el.querySelector('.smt-bar .t0').style.width = (a / tot) * 100 + '%'; el.querySelector('.smt-bar .t1').style.width = (b / tot) * 100 + '%'; };
+  el.classList.remove('out'); bar();
+  const mineScored = myTeam != null && gain[myTeam] > 0;
+  sfx(mineScored ? 'ding' : 'blip');
+  for (const i of [0, 1]) {
+    const side = el.querySelector(`.smt-side[data-i="${i}"]`), n = side.querySelector('.smt-n'), plus = side.querySelector('.smt-plus');
+    if (gain[i] > 0) {
+      plus.textContent = `+${gain[i]}`; plus.classList.remove('pop'); void plus.offsetWidth; plus.classList.add('pop');
+      side.classList.remove('hit'); void side.offsetWidth; side.classList.add('hit');
+    }
+    const start = shown[i], end = to[i], t0 = performance.now(), dur = reduceMotion() ? 1 : 650;
+    const step = now => { const k = Math.min(1, (now - t0) / dur); shown[i] = Math.round(start + (end - start) * (1 - (1 - k) ** 3)); n.textContent = shown[i]; if (el.isConnected) bar(); if (k < 1 && el.isConnected) requestAnimationFrame(step); };
+    requestAnimationFrame(step);
+  }
+  clearTimeout(tickerTimer);
+  tickerTimer = setTimeout(() => { el.classList.add('out'); setTimeout(() => { if (ticker === el) ticker = null; el.remove(); }, 400); }, 2600);
+}

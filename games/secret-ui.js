@@ -2,7 +2,7 @@ import { sfx, fresh, memo, confetti, isMuted, setMuted } from './fx.js';
 import { ROOMS, TEAMS, TASKS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
 import { openTask } from './secret-tasks.js';
 import { createLiveMap } from './secret-map.js';
-import { revealScene, roleScene, roundIntro, splash } from './secret-fx.js';
+import { revealScene, roleScene, roundIntro, splash, scoreTicker } from './secret-fx.js';
 import { avatar, scoreBoardHtml } from './impostor-fx.js';
 
 const MODS = {
@@ -64,6 +64,11 @@ export function renderSecret(el, s, ui, game) {
 
   // leaving a room's task when the round is over
   if (s.phase !== 'round' && el._closeTask) { el._closeTask(); el._closeTask = null; }
+  // every time a task is finished the team totals flash up for everybody, with a count-up for the team that scored
+  if (s.phase === 'round') {
+    const prev = memo(el, 'teamPts', { round: s.round, pts: s.teamPts.slice() });
+    if (prev && prev.round === s.round && !el._firstRender) scoreTicker({ from: prev.pts, to: s.teamPts, myTeam, teams: TEAMS, anchor: el });
+  } else memo(el, 'teamPts', null);
   // before every round: "Round 2, medium tasks, 3, 2, 1, GO". The map is frozen until GO so it is fair. In round 1 it waits for the role reveal.
   const startIntro = () => { el._introPending = false; roundIntro({ round: s.round, rounds: s.rounds, level: s.level, team: TEAMS[myTeam], anchor: el, onDone: () => el._lm?.setFrozen(false) }); };
   if (fresh(el, 'round', `${s.round}:${s.phase}`)) {
