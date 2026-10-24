@@ -210,7 +210,7 @@ function finishRound(s, now) {
   const clue = to.length ? makeClue({ log: roundLog, visited: Object.keys(s.visited[s.millionaire] ?? {}), team: s.team, players: s.players, names: s.names, millionaire: s.millionaire, used }) : null;
   const visited = new Set([...Object.keys(s.visited[s.millionaire] ?? {}), ...roundLog.filter(e => e.id === s.millionaire).map(e => e.room)]);
   const mine = roundLog.filter(e => e.id === s.millionaire);
-  const res = agendaOf(s.agenda?.key)?.check({ visited, done: mine.length, ok: mine.filter(e => e.ok).length, won: winners.includes(s.team[s.millionaire]) }) ?? false;
+  const res = agendaOf(s.agenda?.key)?.check({ visited, done: mine.length, ok: mine.filter(e => e.ok).length, fails: mine.filter(e => !e.ok).length, fastest: Math.min(Infinity, ...mine.filter(e => e.ok).map(e => e.ms)), tags: (s.tags ?? []).filter(x => x.r === s.round && x.by === s.millionaire).length, won: winners.includes(s.team[s.millionaire]) }) ?? false;
   const n = {
     ...s, phase: s.round < s.rounds ? 'break' : 'vote', endAt: 0, breakEnd: s.round < s.rounds && s.breakSecs ? now + s.breakSecs * 1000 : 0, voteEnd: s.round >= s.rounds && s.voteSecs ? now + s.voteSecs * 1000 : 0,
     total: Object.fromEntries(s.players.map(id => [id, (s.total[id] ?? 0) + per[id]])),

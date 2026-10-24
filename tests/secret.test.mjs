@@ -104,6 +104,16 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   r = step(r, e, 'h', 'agenda', { key: 'busy' }); assert.equal(step(r, e, 'h', 'next').agenda.key, 'busy');
   assert.equal(step(r, e, 'p1', 'agenda', { key: 'lazy' }).nextAgenda, 'busy', 'only the host');
 }
+// ---- the new agendas are checked from what happened
+{
+  const agendaDone = (key, plan) => { let { e, s } = start(6, { agenda: key }, 1000); s = play(s, e, { [s.millionaire]: plan }); return step(s, { ...e, now: s.endAt + 1 }, 'h', 'timeout').agendaRes[0].ok; };
+  assert.equal(agendaDone('fast', [['kitchen', true, 3000]]), true); assert.equal(agendaDone('fast', [['kitchen', true, 9000]]), false); assert.equal(agendaDone('fast', [['kitchen', false, 2000]]), false, 'a failed task is not a fast one');
+  assert.equal(agendaDone('fail', [['kitchen', false, 5000]]), true); assert.equal(agendaDone('fail', [['kitchen', true, 5000]]), false);
+  assert.equal(agendaDone('rooms4', [['kitchen', true, 3000], ['library', true, 3000], ['garage', true, 3000], ['garden', true, 3000]]), true); assert.equal(agendaDone('rooms4', [['kitchen', true, 3000]]), false);
+  assert.equal(agendaDone('rooms2', [['kitchen', true, 3000], ['library', true, 3000]]), true); assert.equal(agendaDone('rooms2', [['kitchen', true, 3000], ['library', true, 3000], ['garage', true, 3000]]), false);
+  assert.equal(agendaDone('both:kitchen:garage', [['kitchen', true, 3000], ['garage', true, 3000]]), true); assert.equal(agendaDone('both:kitchen:garage', [['kitchen', true, 3000]]), false);
+  assert.ok(AGENDAS.length >= 20); assert.equal(new Set(AGENDAS.map(a => a.key)).size, AGENDAS.length, 'agenda keys are unique');
+}
 // ---- accusations
 {
   let { e, s } = start(6, { rounds: 3 }, 1000);
@@ -144,7 +154,7 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   const again = step(v, e, 'h', 'reset'); assert.equal(again.phase, 'lobby'); assert.equal(again.rounds, 3); assert.equal(again.history.length, 0);
 }
 // ---- clues are always true
-for (let k = 0; k < 400; k++) {
+for (let k = 0; k < 1500; k++) {
   const players = ['a', 'b', 'c', 'd', 'e'], m = players[k % 5];
   const log = []; for (const id of players) for (const r of ROOMS) if (Math.random() < 0.5) log.push({ id, room: r.id, ok: Math.random() < 0.7, ms: 1500 + Math.floor(Math.random() * 20000) });
   const names = { a: 'Anna', b: 'Zed', c: 'Marcellus', d: 'Bo', e: 'Nina' };
@@ -160,11 +170,16 @@ for (let k = 0; k < 400; k++) {
   if (c.kind === 'team') assert.ok(c.text.includes(team[m] === 0 ? 'Red' : 'Blue'));
   if (c.kind === 'initial') assert.equal(/A to M/.test(c.text), names[m][0].toUpperCase() <= 'M');
   if (c.kind === 'length') assert.equal(/more than 5/.test(c.text), names[m].length > 5);
+  if (c.kind === 'mate') { const who = Object.keys(names).find(id => c.text.includes(names[id]) && id !== m); assert.equal(team[who], team[m]); }
+  if (c.kind === 'notmate') { const who = Object.keys(names).find(id => c.text.includes(names[id]) && id !== m); assert.notEqual(team[who], team[m]); }
+  if (c.kind === 'rooms') assert.equal(+c.text.match(/exactly (\d+)/)[1], vis.size);
+  if (c.kind === 'vowel') assert.equal(/a vowel/.test(c.text), /[aeiou]$/i.test(names[m]));
+  if (c.kind === 'speedrank') { const best = id => Math.min(Infinity, ...log.filter(e => e.id === id && e.ok).map(e => e.ms)); const q = players.filter(id => best(id) < best(m)).length, sl = players.filter(id => best(id) > best(m)).length; assert.ok(/quicker/.test(c.text) ? q < players.length / 2 : sl < players.length / 2); }
 }
 // kinds are not repeated while there are fresh ones
 {
   const log = ROOMS.map(r => ({ id: 'a', room: r.id, ok: true, ms: 3000 }));
-  const used = ['visit', 'skip', 'fail', 'count', 'speed', 'rank', 'team', 'initial'];
+  const used = ['visit', 'skip', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'rooms', 'vowel', 'mate', 'notmate', 'speedrank'];
   for (let k = 0; k < 30; k++) assert.equal(makeClue({ log, team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used }).kind, 'length');
 }
 assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
@@ -191,9 +206,9 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
   assert.equal(f.agendaRes[0].ok, true, 'walking in is enough for a visit agenda');
   assert.deepEqual(step(f, e, 'h', 'next').visited, {}, 'a new round starts empty');
   // a clue can say where the Millionaire walked, even without doing a task there
-  const c = makeClue({ log: [], visited: ['vault'], team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used: ['skip', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'length'] });
+  const c = makeClue({ log: [], visited: ['vault'], team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used: ['skip', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'length', 'rooms', 'vowel'] });
   assert.equal(c.kind, 'visit'); assert.ok(c.text.includes('Vault'));
-  const c2 = makeClue({ log: [], visited: ['vault'], team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used: ['visit', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'length'] });
+  const c2 = makeClue({ log: [], visited: ['vault'], team: { a: 0 }, players: ['a', 'b', 'c', 'd'], names: { a: 'Ann' }, millionaire: 'a', used: ['visit', 'fail', 'count', 'speed', 'rank', 'team', 'initial', 'length', 'rooms', 'vowel'] });
   assert.ok(c2.kind === 'skip' && !c2.text.includes('Vault'), 'never says they skipped a room they walked into');
 }
 // ---- who moderates: the host, another player, or nobody

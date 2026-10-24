@@ -33,6 +33,18 @@ export function makeClue({ log, visited: walked, team, players, names, millionai
     if (/[A-Z]/.test(ch)) c.push({ kind: 'initial', text: `The Millionaire's name starts with a letter ${ch <= 'M' ? 'from A to M' : 'from N to Z'}.` });
     c.push({ kind: 'length', text: `The Millionaire's name has ${name.length > 5 ? 'more than 5' : '5 or fewer'} letters.` });
   }
+  // who they were teamed with (or against) this round
+  const mates = players.filter(id => id !== m && team[id] === team[m]), foes = players.filter(id => team[id] != null && team[id] !== team[m]);
+  if (mates.length) c.push({ kind: 'mate', text: `This round the Millionaire was on the same team as ${names[pick(mates)]}.` });
+  if (foes.length) c.push({ kind: 'notmate', text: `This round the Millionaire was NOT on the same team as ${names[pick(foes)]}.` });
+  c.push({ kind: 'rooms', text: `The Millionaire visited exactly ${visited.length} room${visited.length === 1 ? '' : 's'} this round.` });
+  if (name && /[A-Za-z]$/.test(name)) c.push({ kind: 'vowel', text: `The Millionaire's name ends with ${/[aeiou]$/i.test(name) ? 'a vowel' : 'a consonant'}.` });
+  if (players.length >= 4 && fast.length) {
+    const best = id => Math.min(Infinity, ...log.filter(e => e.id === id && e.ok).map(e => e.ms)), mine2 = best(m);
+    const quicker = players.filter(id => best(id) < mine2).length, slower = players.filter(id => best(id) > mine2).length;
+    if (quicker < players.length / 2) c.push({ kind: 'speedrank', text: 'The Millionaire was in the quicker half this round.' });
+    else if (slower < players.length / 2) c.push({ kind: 'speedrank', text: 'The Millionaire was in the slower half this round.' });
+  }
   const fresh = c.filter(x => !used.includes(x.kind));
   return pick(fresh.length ? fresh : c);
 }

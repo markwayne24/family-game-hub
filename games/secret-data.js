@@ -54,5 +54,10 @@ export const AGENDAS = [
   { key: 'win', text: 'Help your team win this round, so nobody suspects you.', check: i => i.won },
   { key: 'busy', text: 'Complete at least 3 tasks this round.', check: i => i.ok >= 3 },
   { key: 'lazy', text: 'Complete no more than 1 task this round.', check: i => i.ok <= 1 },
+  { key: 'fast', text: 'Finish one task in under 6 seconds.', check: i => i.fastest < 6000 },
+  { key: 'fail', text: 'Fail at least one task, without looking suspicious.', check: i => i.fails >= 1 },
+  { key: 'rooms4', text: 'Visit at least 4 different rooms this round.', check: i => i.visited.size >= 4 },
+  { key: 'rooms2', text: 'Visit no more than 2 rooms this round.', check: i => i.visited.size <= 2 },
+  ...[['kitchen', 'garage'], ['library', 'garden'], ['vault', 'garden']].map(([a, b]) => { const A = ROOMS.find(r => r.id === a), B = ROOMS.find(r => r.id === b); return { key: `both:${a}:${b}`, text: `Visit both the ${A.name} ${A.emoji} and the ${B.name} ${B.emoji} this round.`, check: i => i.visited.has(a) && i.visited.has(b) }; }),
 ];
 export const agendaOf = key => AGENDAS.find(a => a.key === key);
