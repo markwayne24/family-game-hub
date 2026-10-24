@@ -1,4 +1,4 @@
-import { ROOMS, TEAMS, TASKS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
+import { ROOMS, TEAMS, TASKS, BATTLES, BATTLE_ORDER, BATTLE_BONUS, BATTLE_INTRO_MS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
 import { makeClue, taskPoints } from './secret-clues.js';
 import { renderSecret } from './secret-ui.js';
 
@@ -6,6 +6,7 @@ export { MIN_PLAYERS };
 const shuffle = a => { a = a.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 const pickOne = a => a[Math.floor(Math.random() * a.length)];
 const MIN_TASK_MS = 1200;   // a task can't be finished faster than this (stops fake results)
+const BATTLE_GRACE = 2500;   // a moment after the battle ends for the last scores to arrive
 export const MODERATORS = {
   host: { name: 'The host moderates', emoji: '🎬', blurb: 'The host runs the game and does not play. They know who the Millionaire is and can steer the secret agenda.' },
   player: { name: 'Another player moderates', emoji: '🎙️', blurb: 'The host plays. One chosen player runs the game and does not play.' },
@@ -35,7 +36,7 @@ export const secret = {
   init(env, opts) {
     if (opts?.memory?.saved) return opts.memory.saved;
     return {
-      phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
+      phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, battles: 'every', battle: null, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
       mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
       players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, breakEnd: 0, voteEnd: 0, shared: [],
       loc: {}, visited: {}, tags: [], away: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
@@ -45,7 +46,7 @@ export const secret = {
   },
   remember: s => ({ saved: s }),
   watchPresence: true,
-  deadline: s => (s.phase === 'round' ? s.endAt : s.phase === 'break' ? s.breakEnd : s.phase === 'vote' ? s.voteEnd : 0) || 0,
+  deadline: s => (s.phase === 'round' ? s.endAt : s.phase === 'battle' ? (s.battle?.endAt ?? 0) + BATTLE_GRACE : s.phase === 'break' ? s.breakEnd : s.phase === 'vote' ? s.voteEnd : 0) || 0,
 
   reduce(s, a, env) {
     const isHost = a.from === env.hostId;
@@ -56,7 +57,7 @@ export const secret = {
     if (a.type === 'presence') return a.from === env.hostId ? presence(s, env) : s;
     if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.map(p => [p.id, p.name])) };
 
-    if (a.type === 'reset' && isHost) { const k = this.init(env); const keep = ['mod', 'moderator', 'rounds', 'secs', 'breakSecs', 'voteSecs', 'difficulty', 'mode', 'speed', 'pickMode', 'pick']; for (const f of keep) k[f] = s[f]; return k; }
+    if (a.type === 'reset' && isHost) { const k = this.init(env); const keep = ['mod', 'moderator', 'battles', 'rounds', 'secs', 'breakSecs', 'voteSecs', 'difficulty', 'mode', 'speed', 'pickMode', 'pick']; for (const f of keep) k[f] = s[f]; return k; }
 
     /* ---------- the waiting room ---------- */
     if (s.phase === 'lobby') {
@@ -71,6 +72,7 @@ export const secret = {
           if (BREAK_SECS.includes(p.breakSecs)) n.breakSecs = p.breakSecs;
           if (VOTE_SECS.includes(p.voteSecs)) n.voteSecs = p.voteSecs;
           if (p.difficulty in DIFFICULTIES) n.difficulty = p.difficulty;
+          if (['every', 'last', 'off'].includes(p.battles)) n.battles = p.battles;
           if (p.mode === 'map' || p.mode === 'rooms') n.mode = p.mode;
           if (['slow', 'normal', 'fast'].includes(p.speed)) n.speed = p.speed;
           if (p.mod in MODERATORS) { n.mod = p.mod; if (p.mod !== 'player') n.moderator = null; if (p.mod !== 'host') { n.pickMode = 'random'; n.pick = null; n.nextAgenda = null; } }
@@ -144,6 +146,22 @@ export const secret = {
       return s;
     }
 
+    /* ---------- a team battle: both teams play the same quick game at once ---------- */
+    if (s.phase === 'battle') {
+      const b = s.battle;
+      if (a.type === 'battleScore' && s.players.includes(a.from) && b && !(a.from in b.scores) && env.now >= b.playFrom - 600) {
+        const v = Number(a.data?.score), k = BATTLES[b.kind], max = { tug: Math.ceil((k.dur / 1000) * 14) + 10, trivia: b.qs.length, reflex: 3000 }[b.kind], min = b.kind === 'reflex' ? 90 : 0;
+        if (!Number.isFinite(v) || v < min || v > max) return s;
+        const n = { ...s, battle: { ...b, scores: { ...b.scores, [a.from]: Math.round(v) } } };
+        return needed(n, false).every(id => id in n.battle.scores) ? endBattle(n, env.now) : n;
+      }
+      if (a.type === 'skipBattle' && ctl) return completeRound({ ...s, battle: null }, env.now);
+      if (a.type === 'timeout' && b && env.now >= b.endAt + BATTLE_GRACE - 200) return endBattle(s, env.now);
+      if (a.type === 'handover' && ctl) return handover(s, a.data?.to, a.from, env);
+      if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
+      return s;
+    }
+
     /* ---------- between rounds: results, clues, accusations ---------- */
     if (s.phase === 'break') {
       if (a.type === 'agenda' && secretsOk) return { ...s, nextAgenda: agendaOf(a.data?.key) ? a.data.key : null };
@@ -176,8 +194,8 @@ export const secret = {
 
   // What everyone may see. Who the Millionaire is, the agenda, the clues and the task log stay out of it until the end.
   view(s) {
-    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, visited, tags, ...pub } = s;
-    const out = { ...pub, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))], voted: Object.keys(votes) };
+    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, visited, tags, lastBattle, battle, ...pub } = s;
+    const out = { ...pub, battle: battle ? { ...battle, scores: undefined, done: Object.keys(battle.scores) } : null, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))], voted: Object.keys(votes) };
     if (s.phase === 'end') Object.assign(out, { stats: taskStats(log), millionaire, agendaRes, clues: clues.map(({ round, text }) => ({ round, text })) });
     return out;
   },
@@ -210,7 +228,30 @@ function beginRound(s, now) {
   };
 }
 
+// A round's tasks are over. With team battles on, the teams settle the round with a head-to-head game first.
 function finishRound(s, now) {
+  const both = [0, 1].every(k => s.players.some(id => s.team[id] === k));
+  if (s.battles && s.battles !== 'off' && both && (s.battles === 'every' || s.round === s.rounds)) return startBattle(s, now);
+  return completeRound(s, now);
+}
+
+function startBattle(s, now) {
+  const kind = BATTLE_ORDER[(s.round - 1) % BATTLE_ORDER.length], seed = Math.floor(Math.random() * 1e9);
+  const qs = kind === 'trivia' ? Array.from({ length: 5 }, (_, i) => i) : [];
+  return { ...s, phase: 'battle', loc: {}, battle: { kind, round: s.round, startAt: now, playFrom: now + BATTLE_INTRO_MS, endAt: now + BATTLE_INTRO_MS + BATTLES[kind].dur, seed, qs, scores: {} } };
+}
+
+// Who won: the average per player (so a bigger team has no edge). Missing players count as a miss. A tie gives nobody the bonus.
+function endBattle(s, now) {
+  const b = s.battle, k = BATTLES[b.kind], miss = b.kind === 'reflex' ? 1500 : 0;
+  const avg = [0, 1].map(t => { const ids = s.players.filter(id => s.team[id] === t); return ids.length ? ids.reduce((a, id) => a + (b.scores[id] ?? miss), 0) / ids.length : miss; }).map(x => Math.round(x * 10) / 10);
+  const better = k.lower ? avg[0] < avg[1] : avg[0] > avg[1], tie = avg[0] === avg[1];
+  const winner = tie ? null : better ? 0 : 1;
+  const teamPts = s.teamPts.map((v, i) => (i === winner ? v + BATTLE_BONUS : v));
+  return completeRound({ ...s, teamPts, battle: null, lastBattle: { kind: b.kind, avg, winner, bonus: winner == null ? 0 : BATTLE_BONUS, scores: b.scores } }, now);
+}
+
+function completeRound(s, now) {
   const roundLog = s.log.filter(e => e.r === s.round);
   const per = Object.fromEntries(s.players.map(id => [id, s.pts[id] ?? 0]));
   const top = Math.max(...s.teamPts);
@@ -224,7 +265,7 @@ function finishRound(s, now) {
   const n = {
     ...s, phase: s.round < s.rounds ? 'break' : 'vote', endAt: 0, breakEnd: s.round < s.rounds && s.breakSecs ? now + s.breakSecs * 1000 : 0, voteEnd: s.round >= s.rounds && s.voteSecs ? now + s.voteSecs * 1000 : 0,
     total: Object.fromEntries(s.players.map(id => [id, (s.total[id] ?? 0) + per[id]])),
-    history: [...s.history, { round: s.round, teamPts: s.teamPts, winners, per, team: s.team, sat: s.jailedNow ?? [] }],
+    history: [...s.history, { round: s.round, teamPts: s.teamPts, winners, per, team: s.team, sat: s.jailedNow ?? [], battle: s.lastBattle ?? null }], lastBattle: null,
     clues: clue ? [...s.clues, { round: s.round, kind: clue.kind, text: clue.text, to }] : s.clues,
     agendaRes: [...s.agendaRes, { round: s.round, key: s.agenda?.key, ok: res }], bonus: s.bonus + (res ? BONUS : 0),
     loc: {},
@@ -245,6 +286,7 @@ function presence(s, env) {
   if (same(away, s.away ?? {})) return s;
   const n = { ...s, away };
   if (n.phase === 'round' && needed(n).length && needed(n).every(id => ROOMS.every(r => n.done[id]?.[r.id])) && n.log.some(e => e.r === n.round)) return finishRound(n, env.now);
+  if (n.phase === 'battle' && n.battle && needed(n, false).length && needed(n, false).every(id => id in n.battle.scores)) return endBattle(n, env.now);
   if (n.phase === 'vote' && needed(n, false).length && Object.keys(n.votes).length && needed(n, false).every(id => n.votes[id])) return resolveVote(n);
   return n;
 }

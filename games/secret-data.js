@@ -38,6 +38,15 @@ export const TEAMS = [
 ];
 
 export const MIN_PLAYERS = 4;
+// Team battles: everybody on both teams plays the same quick game at once; the team with the better average wins the bonus.
+export const BATTLE_BONUS = 25;
+export const BATTLES = {
+  tug: { name: 'Tug of War', emoji: '🪢', dur: 12000, how: 'Tap PULL as fast as you can! The team with the most taps per player wins.', unit: 'taps' },
+  trivia: { name: 'Trivia Showdown', emoji: '🧠', dur: 40000, how: 'Five questions, eight seconds each. The team with the most right answers per player wins.', unit: 'right' },
+  reflex: { name: 'Reflex Race', emoji: '⚡', dur: 22000, how: 'Tap the moment the light turns green, three times. Your best time counts. The quicker team wins.', unit: 'ms', lower: true },
+};
+export const BATTLE_ORDER = ['tug', 'trivia', 'reflex'];
+export const BATTLE_INTRO_MS = 5000;
 export const DIFFICULTIES = { easy: 'Easy', normal: 'Normal', hard: 'Hard', rising: 'Rising: gets harder every round' };
 // How hard the tasks are in a given round: 0 (easiest) to 2 (hardest).
 export const levelFor = (difficulty, round, rounds) => difficulty === 'easy' ? 0 : difficulty === 'hard' ? 2 : difficulty === 'rising' ? Math.round(((Math.max(1, round) - 1) / Math.max(1, rounds - 1)) * 2) : 1;

@@ -80,6 +80,7 @@ export const HOWTO = {
       'Before the game, the host chooses who moderates: the host, another player, or nobody (the app runs it on timers). A moderator does not play, but knows who the Millionaire is.',
       'Everyone else is split into two teams, mixed again every round. When the game starts, tap to see your secret role. It is hidden again when you tap Hide, so nobody can peek.',
       'Each round starts with a countdown on every phone. Then walk around the full-screen mansion: drag on the map (or use the arrow keys) and stand on a glowing pad in a room and its task opens in a pop-up window. Tasks get harder as the rounds go on, unless the host chose otherwise.',
+      'After the tasks, Red and Blue play a quick team battle together on every phone (tug of war, trivia or a reflex race). The winners get 25 bonus points.',
       'The team with the most points gets a secret clue about the Millionaire. The holders choose: share it with everyone, or keep it secret.',
       'Each round you get one 🔍 check: stand next to a player to learn which rooms they have visited. They only learn that somebody checked them.',
       'The Millionaire gets a secret agenda each round, like "visit the Library" or "make your team lose". Watch for suspicious behaviour!',

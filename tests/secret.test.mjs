@@ -5,18 +5,20 @@ import { taskStats } from '../games/secret.js';
 import { ROOMS, AGENDAS } from '../games/secret-data.js';
 import assert from 'node:assert';
 
+// (the tests that are not about team battles play without them, so a round goes straight to its results)
+const ginit = (e, o) => ({ ...G.init(e, o), battles: 'off' });
 const ids = n => Array.from({ length: n }, (_, i) => (i ? 'p' + i : 'h'));          // 'h' is the host / game master
 const env = (n, now = 1000) => ({ players: ids(n).map(id => ({ id, name: id === 'h' ? 'Host' : 'Pl' + id.slice(1) })), hostId: 'h', now });
 const step = (s, e, from, type, data) => G.reduce(s, { from, type, data }, e);
 const start = (n = 6, cfg = {}, now = 1000) => {
-  const e = env(n, now); let s = G.init(e);
+  const e = env(n, now); let s = ginit(e);
   if (Object.keys(cfg).length) s = step(s, e, 'h', 'config', cfg);
   return { e, s: step(s, e, 'h', 'start') };
 };
 
 // ---- starting
 {
-  const e = env(MIN_PLAYERS); const s = step(G.init(e), e, 'h', 'start');
+  const e = env(MIN_PLAYERS); const s = step(ginit(e), e, 'h', 'start');
   assert.equal(s.phase, 'lobby'); assert.ok(s.error, 'needs enough players');
   const { s: r } = start(6);
   assert.equal(r.phase, 'round'); assert.equal(r.players.length, 5); assert.ok(!r.players.includes('h'), 'the host is the game master, not a player');
@@ -143,7 +145,7 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
 }
 // ---- handing the moderating over mid-game
 {
-  const e = env(8); const begin = cfg => { let s = step(G.init(e), e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
+  const e = env(8); const begin = cfg => { let s = step(ginit(e), e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
   let s = begin({ rounds: 3 }); const m = s.millionaire, p2 = s.players.find(x => x !== m);
   assert.equal(s.gm, 'h'); assert.ok(!s.players.includes('h'));
   // the host hands over to a player: they stop playing, the host joins in
@@ -182,7 +184,7 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
 }
 // ---- people who drop out
 {
-  const e = env(7); let s = step(G.init(e), e, 'h', 'config', { rounds: 3 }); s = step(s, { ...e, now: 1000 }, 'h', 'start');
+  const e = env(7); let s = step(ginit(e), e, 'h', 'config', { rounds: 3 }); s = step(s, { ...e, now: 1000 }, 'h', 'start');
   const present = ids => ({ ...e, now: 5000, players: ['h', ...ids].map(id => ({ id, name: id })) });
   const [a, b, c, d, f, g] = s.players;
   assert.equal(G.watchPresence, true);
@@ -214,11 +216,64 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   let w = s; for (let i = 0; i < 3; i++) { w = step(w, e, 'h', 'endRound'); if (w.phase === 'break') w = step(w, e, 'h', 'next'); }
   assert.equal(G.reduce(w, { from: 'h', type: 'presence' }, present(w.players.slice(1))).phase, 'vote');
   // the moderator going away is noticed too (a player moderating)
-  const e8 = env(8); let pm = step(G.init(e8), e8, 'h', 'config', { mod: 'player', moderator: 'p1' }); pm = step(pm, { ...e8, now: 1000 }, 'h', 'start');
+  const e8 = env(8); let pm = step(ginit(e8), e8, 'h', 'config', { mod: 'player', moderator: 'p1' }); pm = step(pm, { ...e8, now: 1000 }, 'h', 'start');
   const pe = ids => ({ ...e8, now: 7000, players: ['h', ...ids].map(id => ({ id, name: id })) });
   const modGone = G.reduce(pm, { from: 'h', type: 'presence' }, pe(pm.players));
   assert.equal(modGone.away.p1, 7000, 'the moderator is not in the room'); assert.equal(modGone.phase, 'round');
   const handed = step(modGone, e8, 'h', 'handover', { to: 'random' }); assert.notEqual(handed.gm, 'p1'); assert.ok(handed.players.includes('p1'), 'the missing moderator is a player again, offline');
+}
+// ---- team battles
+{
+  const e = env(7); const begin = cfg => { let s = step(ginit(e), e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
+  assert.equal(G.init(e).battles, 'every', 'on by default');
+  assert.equal(step(G.init(e), e, 'h', 'config', { battles: 'sometimes' }).battles, 'every'); assert.equal(step(G.init(e), e, 'h', 'config', { battles: 'off' }).battles, 'off');
+  assert.equal(step(G.init(e), e, 'p1', 'config', { battles: 'off' }).battles, 'every', 'only the host');
+  // a round ends with a battle, not with the results
+  let s = begin({ battles: 'every', rounds: 3 });
+  const tasks = play(s, e, { [s.players[0]]: [['kitchen', true, 3000]] });
+  const b = step(tasks, { ...e, now: 40000 }, 'h', 'endRound');
+  assert.equal(b.phase, 'battle'); assert.equal(b.battle.kind, 'tug'); assert.equal(b.battle.playFrom, 40000 + 5000); assert.ok(b.battle.endAt > b.battle.playFrom);
+  assert.equal(b.history.length, 0, 'the round is not over until the battle is'); assert.equal(G.deadline(b), b.battle.endAt + 2500);
+  assert.ok(!('scores' in G.view(b).battle) || G.view(b).battle.scores === undefined, 'scores are not public while it is on'); assert.deepEqual(G.view(b).battle.done, []);
+  const red = b.players.filter(id => b.team[id] === 0), blue = b.players.filter(id => b.team[id] === 1);
+  // too early, wrong people, silly numbers, twice
+  const play0 = { ...e, now: b.battle.playFrom + 100 };
+  assert.equal(step(b, { ...e, now: 41000 }, red[0], 'battleScore', { score: 30 }), b, 'not before the game starts');
+  assert.equal(step(b, play0, 'h', 'battleScore', { score: 30 }), b, 'the moderator does not play'); assert.equal(step(b, play0, 'stranger', 'battleScore', { score: 30 }), b);
+  assert.equal(step(b, play0, red[0], 'battleScore', { score: 5000 }), b, 'a faster-than-possible tap count is refused'); assert.equal(step(b, play0, red[0], 'battleScore', { score: -3 }), b); assert.equal(step(b, play0, red[0], 'battleScore', { score: 'lots' }), b);
+  const one = step(b, play0, red[0], 'battleScore', { score: 40 }); assert.deepEqual(G.view(one).battle.done, [red[0]]); assert.equal(step(one, play0, red[0], 'battleScore', { score: 90 }), one, 'one score each');
+  // everyone scores: red averages more, so red wins the bonus
+  let all = b; for (const id of red) all = step(all, play0, id, 'battleScore', { score: 60 }); for (const id of blue) all = step(all, play0, id, 'battleScore', { score: 40 });
+  assert.equal(all.phase, 'break', 'the battle ends once everyone has played, and the round is scored'); assert.equal(all.history.length, 1);
+  assert.equal(all.history[0].battle.winner, 0); assert.deepEqual(all.history[0].battle.avg, [60, 40]); assert.equal(all.history[0].battle.bonus, 25);
+  assert.equal(all.history[0].teamPts[0], b.teamPts[0] + 25, 'the winners get the bonus'); assert.equal(all.history[0].teamPts[1], b.teamPts[1]);
+  assert.equal(all.clues.length, 1, 'the bonus decides who wins the round and gets the clue'); assert.ok(all.clues[0].to.every(id => all.team[id] === 0));
+  // average per player: a bigger team has no edge
+  const sizes = [red.length, blue.length];
+  if (sizes[0] !== sizes[1]) { let u = b; for (const id of red) u = step(u, play0, id, 'battleScore', { score: 50 }); for (const id of blue) u = step(u, play0, id, 'battleScore', { score: 50 }); assert.equal(u.history[0].battle.winner, null, 'equal averages are a tie'); assert.equal(u.history[0].battle.bonus, 0); assert.deepEqual(u.history[0].teamPts, b.teamPts); }
+  // the clock runs out: people who did not score count as a miss
+  let part = step(b, play0, red[0], 'battleScore', { score: 10 });
+  assert.equal(step(part, { ...e, now: b.battle.endAt + 100 }, 'h', 'timeout').phase, 'battle', 'a moment of grace for late scores');
+  const late = step(part, { ...e, now: b.battle.endAt + 2600 }, 'h', 'timeout'); assert.equal(late.phase, 'break'); assert.equal(late.history[0].battle.winner, 0);
+  // the moderator can skip it, and nobody gets a bonus
+  const skip = step(b, e, 'h', 'skipBattle'); assert.equal(skip.phase, 'break'); assert.equal(skip.history[0].battle, null); assert.equal(step(b, e, red[0], 'skipBattle'), b);
+  // people who are offline are not waited for
+  const gone = G.reduce(b, { from: 'h', type: 'presence' }, { ...e, now: play0.now, players: ['h', ...b.players.slice(1)].map(id => ({ id, name: id })) });
+  let g2 = gone; for (const id of b.players.slice(1)) g2 = step(g2, play0, id, 'battleScore', { score: 20 }); assert.equal(g2.phase, 'break');
+  // the three games take turns, and reflex is won by the LOWER time
+  let k = begin({ battles: 'every', rounds: 4 }); const kinds = [];
+  for (let r = 0; r < 3; r++) { k = step(k, { ...e, now: 50000 + r * 100000 }, 'h', 'endRound'); kinds.push(k.battle.kind); const f = { ...e, now: k.battle.playFrom + 50 }; const rr = k.players.filter(id => k.team[id] === 0), bb = k.players.filter(id => k.team[id] === 1);
+    for (const id of rr) k = step(k, f, id, 'battleScore', { score: k.battle.kind === 'reflex' ? 300 : k.battle.kind === 'trivia' ? 4 : 50 }); for (const id of bb) k = step(k, f, id, 'battleScore', { score: k.battle.kind === 'reflex' ? 500 : k.battle.kind === 'trivia' ? 2 : 20 });
+    assert.equal(k.history[k.history.length - 1].battle.winner, 0, kinds[r] + ' won by red'); k = step(k, e, 'h', 'next'); }
+  assert.deepEqual(kinds, ['tug', 'trivia', 'reflex']);
+  // only after the last round, or never
+  const last = begin({ battles: 'last', rounds: 3 }); const r1 = step(last, e, 'h', 'endRound'); assert.equal(r1.phase, 'break', 'no battle in the early rounds');
+  let l3 = step(r1, e, 'h', 'next'); l3 = step(l3, e, 'h', 'endRound'); l3 = step(l3, e, 'h', 'next'); l3 = step(l3, e, 'h', 'endRound'); assert.equal(l3.phase, 'battle', 'but one in the last round');
+  const off = begin({ battles: 'off', rounds: 3 }); assert.equal(step(off, e, 'h', 'endRound').phase, 'break');
+  // the battle also finishes the game properly: after the last round the vote follows
+  let fin = l3; const ff = { ...e, now: fin.battle.playFrom + 50 }; for (const id of fin.players) fin = step(fin, ff, id, 'battleScore', { score: fin.battle?.kind === 'reflex' ? 300 : 30 }); assert.equal(fin.phase, 'vote');
+  // handing over works during a battle
+  assert.ok(step(b, e, 'h', 'handover', { to: 'random' }).gm !== 'h');
 }
 // ---- accusations
 {
@@ -291,7 +346,7 @@ for (let k = 0; k < 1500; k++) {
 assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
 // ---- walking speed setting
 {
-  const e = env(6); let s = G.init(e);
+  const e = env(6); let s = ginit(e);
   assert.equal(s.speed, 'normal');
   assert.equal(step(s, e, 'h', 'config', { speed: 'fast' }).speed, 'fast');
   assert.equal(step(s, e, 'h', 'config', { speed: 'warp' }).speed, 'normal');
@@ -301,7 +356,7 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
 // ---- walking into rooms on the live map
 {
   let { e, s } = start(6, { mode: 'rooms', agenda: 'visit:vault' }, 1000);
-  assert.equal(s.mode, 'rooms'); assert.equal(G.reduce(G.init(env(6)), { from: 'h', type: 'config', data: { mode: 'bogus' } }, env(6)).mode, 'map', 'map is the default');
+  assert.equal(s.mode, 'rooms'); assert.equal(G.reduce(ginit(env(6)), { from: 'h', type: 'config', data: { mode: 'bogus' } }, env(6)).mode, 'map', 'map is the default');
   const m = s.millionaire, o = s.players.find(x => x !== m);
   assert.equal(step(s, e, 'stranger', 'visit', { room: 'vault' }), s); assert.equal(step(s, e, o, 'visit', { room: 'attic' }), s);
   const v = step(s, e, m, 'visit', { room: 'vault' }); assert.deepEqual(v.visited[m], { vault: true });
@@ -320,7 +375,7 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
 // ---- who moderates: the host, another player, or nobody
 {
   const e = env(7);
-  const setup = cfg => { let s = G.init(e); for (const c of cfg) s = step(s, e, c[0], 'config', c[1]); return s; };
+  const setup = cfg => { let s = ginit(e); for (const c of cfg) s = step(s, e, c[0], 'config', c[1]); return s; };
   // a player moderates: the host plays
   let s = setup([['h', { mod: 'player', moderator: 'p1' }]]);
   assert.equal(s.mod, 'player'); assert.equal(s.moderator, 'p1');
@@ -347,23 +402,23 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
   // the moderator cannot play or be accused
   assert.equal(step(b, e, 'p1', 'accuse', { target: 'p2' }), b); assert.equal(step(b, e, 'p2', 'accuse', { target: 'p1' }), b);
   // a host-moderated game needs 4 players besides the host, a player-moderated one 4 besides the moderator
-  assert.ok(step(step(G.init(env(4)), env(4), 'h', 'config', {}), env(4), 'h', 'start').error);
-  assert.equal(step(G.init(env(5)), env(5), 'h', 'start').phase, 'round');
-  const e4 = env(4); assert.equal(step(step(G.init(e4), e4, 'h', 'config', { mod: 'player', moderator: 'p1' }), e4, 'h', 'start').phase, 'lobby');
-  const e5 = env(5); assert.equal(step(step(G.init(e5), e5, 'h', 'config', { mod: 'player', moderator: 'p1' }), e5, 'h', 'start').phase, 'round', '5 people, one moderating, 4 playing');
+  assert.ok(step(step(ginit(env(4)), env(4), 'h', 'config', {}), env(4), 'h', 'start').error);
+  assert.equal(step(ginit(env(5)), env(5), 'h', 'start').phase, 'round');
+  const e4 = env(4); assert.equal(step(step(ginit(e4), e4, 'h', 'config', { mod: 'player', moderator: 'p1' }), e4, 'h', 'start').phase, 'lobby');
+  const e5 = env(5); assert.equal(step(step(ginit(e5), e5, 'h', 'config', { mod: 'player', moderator: 'p1' }), e5, 'h', 'start').phase, 'round', '5 people, one moderating, 4 playing');
   // nobody moderates: everyone plays, including the host; there are no secrets for anyone to see
-  const en = env(5); let n = step(G.init(en), en, 'h', 'config', { mod: 'none', secs: 0, breakSecs: 0, voteSecs: 0 });
+  const en = env(5); let n = step(ginit(en), en, 'h', 'config', { mod: 'none', secs: 0, breakSecs: 0, voteSecs: 0 });
   assert.equal(n.secs, 0, 'the lobby keeps what was chosen'); n = step(n, en, 'h', 'start');
   assert.equal(n.phase, 'round'); assert.equal(n.gm, null); assert.equal(n.players.length, 5); assert.ok(n.players.includes('h'));
   assert.ok(n.secs > 0 && n.breakSecs > 0 && n.voteSecs > 0, 'with no moderator every clock is on'); assert.ok(n.endAt > en.now);
   assert.ok(Object.values(G.priv(n)).every(x => !x.gm)); assert.equal(Object.keys(G.priv(n)).length, 5);
   assert.equal(step(n, en, 'h', 'agenda', { key: 'lazy' }).agenda.key, n.agenda.key, 'nobody picks the agenda');
   assert.equal(step(n, en, 'h', 'timer', { secs: 0 }).endAt, n.endAt, 'the clock cannot be stopped');
-  assert.equal(step(step(G.init(en), en, 'h', 'config', { mod: 'none', pickMode: 'host', pick: 'p2' }), en, 'h', 'config', { pick: 'p2' }).pick, null, 'no one picks the Millionaire');
+  assert.equal(step(step(ginit(en), en, 'h', 'config', { mod: 'none', pickMode: 'host', pick: 'p2' }), en, 'h', 'config', { pick: 'p2' }).pick, null, 'no one picks the Millionaire');
 }
 // ---- the clocks
 {
-  const e = env(7); const go = cfg => { let s = G.init(e); s = step(s, e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
+  const e = env(7); const go = cfg => { let s = ginit(e); s = step(s, e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
   let s = go({ secs: 0 });
   assert.equal(s.endAt, 0, 'no time limit'); assert.equal(G.deadline(s), 0);
   assert.equal(step(s, { ...e, now: 9e9 }, 'h', 'timeout').phase, 'round', 'it never ends by itself');
@@ -392,15 +447,15 @@ assert.ok(makeTeams(['a', 'b', 'c', 'd', 'e']) && AGENDAS.length >= 10);
 }
 // ---- difficulty
 {
-  const e = env(7); const lv = (d, rounds) => { let s = step(G.init(e), e, 'h', 'config', { difficulty: d, rounds }); s = step(s, e, 'h', 'start'); const out = [s.level]; for (let i = 1; i < rounds; i++) { s = step(s, e, 'h', 'endRound'); s = step(s, e, 'h', 'next'); out.push(s.level); } return out; };
+  const e = env(7); const lv = (d, rounds) => { let s = step(ginit(e), e, 'h', 'config', { difficulty: d, rounds }); s = step(s, e, 'h', 'start'); const out = [s.level]; for (let i = 1; i < rounds; i++) { s = step(s, e, 'h', 'endRound'); s = step(s, e, 'h', 'next'); out.push(s.level); } return out; };
   assert.deepEqual(lv('easy', 4), [0, 0, 0, 0]); assert.deepEqual(lv('normal', 4), [1, 1, 1, 1]); assert.deepEqual(lv('hard', 4), [2, 2, 2, 2]);
   assert.deepEqual(lv('rising', 3), [0, 1, 2]); assert.deepEqual(lv('rising', 4), [0, 1, 1, 2]); assert.deepEqual(lv('rising', 5), [0, 1, 1, 2, 2]); assert.deepEqual(lv('rising', 6), [0, 0, 1, 1, 2, 2]);
-  assert.equal(G.init(e).difficulty, 'rising', 'it rises by default'); assert.equal(step(G.init(e), e, 'h', 'config', { difficulty: 'nope' }).difficulty, 'rising');
+  assert.equal(ginit(e).difficulty, 'rising', 'it rises by default'); assert.equal(step(ginit(e), e, 'h', 'config', { difficulty: 'nope' }).difficulty, 'rising');
   assert.equal(levelFor('rising', 1, 1), 0);
 }
 // ---- sharing a clue: every combination
 {
-  const e0 = env(8); const startRound = () => { let s = step(G.init(e0), e0, 'h', 'config', { rounds: 3 }); return step(s, { ...e0, now: 1000 }, 'h', 'start'); };
+  const e0 = env(8); const startRound = () => { let s = step(ginit(e0), e0, 'h', 'config', { rounds: 3 }); return step(s, { ...e0, now: 1000 }, 'h', 'start'); };
   const rich = (s, extra = {}) => { const m = s.millionaire, mates = s.players.filter(id => s.team[id] === s.team[m] && id !== m), foes = s.players.filter(id => s.team[id] !== s.team[m]); return { m, mates, foes, ...extra }; };
   const winnersWith = (s, who) => play(s, e0, { [who]: [['kitchen', true, 2000], ['garage', true, 2000]] });
   // (a) a teammate of the winners shares: everyone sees it, once
