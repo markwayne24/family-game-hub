@@ -34,6 +34,10 @@ export function renderSecret(el, s, ui, game) {
   const teamTag = t => `<span class="sm-team t${t}">${TEAMS[t].emoji} ${TEAMS[t].name}</span>`;
   const last = s.history[s.history.length - 1];
   const hostId = ui.players.find(x => x.host)?.id;
+  const off = id => (s.away?.[id] ? ' 🔌' : '');
+  // the moderator has been gone a while: the host is nudged to hand over (the game itself keeps going meanwhile)
+  const modGone = ui.isHost && s.gm != null && s.gm !== hostId && s.away?.[s.gm] && Date.now() - s.away[s.gm] > 20000;
+  const modAlert = () => (modGone ? `<div class="banner">⚠️ The moderator (${esc(nm(s.gm))}) seems to be offline. <button class="ghost" id="hoOpenAlert" style="margin-top:6px">🔁 Hand over moderating</button></div>` : '');
   const modName = s.mod === 'player' && s.moderator ? nm(s.moderator) : '';
   const waitFor = s.mod === 'none' ? 'the timer' : 'the moderator';
 
@@ -72,6 +76,8 @@ export function renderSecret(el, s, ui, game) {
   if (!el._tick) {
     el._tick = setInterval(() => {
       if (!el.isConnected || !el.classList.contains('smstage')) { clearInterval(el._tick); el._tick = null; return; }
+      const st = el._s, gone = !!(el._ui.isHost && st.gm != null && st.away?.[st.gm] && Date.now() - st.away[st.gm] > 20000);
+      if (gone !== !!el._modGone) { el._modGone = gone; redraw(); }
       const at = game.deadline(el._s);
       const out = el.querySelector('[data-left]');
       if (!at || !out) return;
@@ -189,7 +195,7 @@ export function renderSecret(el, s, ui, game) {
     }).join('');
     const teamBars = TEAMS.map(t => {
       const members = s.players.filter(id => s.team[id] === t.id);
-      return `<div class="sm-tb t${t.id} ${myTeam === t.id ? 'mine' : ''}"><div class="sm-tbh">${t.emoji} <b>${t.name}</b><span class="sm-tp">${s.teamPts[t.id]} pts</span></div><div class="sm-tm">${members.map(id => esc(nm(id))).join(', ')}</div></div>`;
+      return `<div class="sm-tb t${t.id} ${myTeam === t.id ? 'mine' : ''}"><div class="sm-tbh">${t.emoji} <b>${t.name}</b><span class="sm-tp">${s.teamPts[t.id]} pts</span></div><div class="sm-tm">${members.map(id => esc(nm(id)) + off(id)).join(', ')}</div></div>`;
     }).join('');
     const mineDone = p?.doneRooms?.length ?? 0;
     // the timer buttons the moderator (or the host as a safety net) can use
@@ -198,7 +204,7 @@ export function renderSecret(el, s, ui, game) {
     if (gm) {
       const rows = s.players.map(id => {
         const mine = p.log.filter(e => e.r === s.round && e.id === id);
-        return `<div class="sm-st"><span class="grow">${avatar(nm(id))} <b>${esc(nm(id))}</b> ${teamTag(s.team[id])}${m.gmShow && id === p.millionaire ? ' 💰' : ''}${s.jailedNow.includes(id) ? ' 🚔' : ''}</span><small>${mine.filter(e => e.ok).length}/${mine.length} ✓</small></div>`;
+        return `<div class="sm-st"><span class="grow">${avatar(nm(id))} <b>${esc(nm(id))}</b>${off(id)} ${teamTag(s.team[id])}${m.gmShow && id === p.millionaire ? ' 💰' : ''}${s.jailedNow.includes(id) ? ' 🚔' : ''}</span><small>${mine.filter(e => e.ok).length}/${mine.length} ✓</small></div>`;
       }).join('');
       gmPanel = panel('🎙️ Moderator', `${m.gmShow ? `${secretLine()}<button class="ghost" id="gmHide">🙈 Hide the secrets</button>` : '<p class="muted" style="margin-top:0">The secrets are hidden so nobody can read them over your shoulder.</p><button id="gmShowBtn">👁 Show the secrets</button>'}
         ${rows}${m.gmShow ? `<label class="sm-lab">Change the Millionaire's agenda this round<select id="agendaNow">${AGENDAS.map(a => `<option value="${a.key}" ${a.key === p.agenda?.key ? 'selected' : ''}>${esc(a.text)}</option>`).join('')}</select></label>` : ''}
@@ -229,7 +235,7 @@ export function renderSecret(el, s, ui, game) {
     const allClues = (p?.clues ?? []).filter(c => c.round !== last.round || m.opened.has(c.round));
     const suspects = s.players.filter(id => id !== ui.me);
     const board = playing ? panel('🗂 Detective notebook', `${allClues.length ? `<ul class="sm-cl">${allClues.map(c => `<li><b>R${c.round}</b> ${esc(c.text)}<div>${c.round === last.round && !c.shared ? '' : clueControls(c, false)}</div></li>`).join('')}</ul>` : '<p class="muted" style="margin-top:0">No clues for your team yet.</p>'}
-      <p class="muted">Tap names to cross people off your list:</p><div class="bn-whos">${suspects.map(id => `<button class="sm-sus ${m.notes.has(id) ? 'x' : ''}" data-sus="${id}">${avatar(nm(id))} ${esc(nm(id))}</button>`).join('')}</div>`) : '';
+      <p class="muted">Tap names to cross people off your list:</p><div class="bn-whos">${suspects.map(id => `<button class="sm-sus ${m.notes.has(id) ? 'x' : ''}" data-sus="${id}">${avatar(nm(id))} ${esc(nm(id))}${off(id)}</button>`).join('')}</div>`) : '';
     const acc = s.accusations.length ? `<div class="sm-accs">${s.accusations.map(a => `<div>🕵️ <b>${esc(nm(a.by))}</b> accused <b>${esc(nm(a.target))}</b> in round ${a.r}: ${a.ok ? '✅ correct!' : '❌ wrong'}</div>`).join('')}</div>` : '';
     const used = s.accusations.some(a => a.by === ui.me);
     const accuse = playing ? panel('🕵️ Accuse someone', m.accuse
@@ -256,7 +262,7 @@ export function renderSecret(el, s, ui, game) {
     const suspects = s.players.filter(id => id !== ui.me);
     const board = playing ? panel('🗂 Your clues', `${(p?.clues ?? []).length ? `<ul class="sm-cl">${p.clues.map(c => `<li><b>R${c.round}</b> ${esc(c.text)}<div>${clueControls(c, false)}</div></li>`).join('')}</ul>` : '<p class="muted" style="margin-top:0">Your team found no clues.</p>'}`) : '';
     let vote;
-    if (playing) vote = panel(`🗳 Who is the Secret Millionaire? ${timer(s.voteEnd)}`, `<p class="muted" style="margin-top:0">Everyone votes in secret. If most of you pick the right person, you split the pot. If not, the Millionaire takes it all!</p><div class="sm-votes">${suspects.map(id => `<button class="sm-sus pick ${myVote === id ? 'picked' : ''}" data-vote="${id}">${avatar(nm(id))} ${esc(nm(id))}${myVote === id ? ' ✔' : ''}</button>`).join('')}</div><p class="sm-vc"><b>${s.voted.length}/${s.players.length}</b> have voted</p>`);
+    if (playing) vote = panel(`🗳 Who is the Secret Millionaire? ${timer(s.voteEnd)}`, `<p class="muted" style="margin-top:0">Everyone votes in secret. If most of you pick the right person, you split the pot. If not, the Millionaire takes it all!</p><div class="sm-votes">${suspects.map(id => `<button class="sm-sus pick ${myVote === id ? 'picked' : ''}" data-vote="${id}">${avatar(nm(id))} ${esc(nm(id))}${myVote === id ? ' ✔' : ''}</button>`).join('')}</div><p class="sm-vc"><b>${s.voted.length}/${s.players.length}</b> have voted${s.players.some(id => s.away?.[id]) ? ` · 🔌 ${s.players.filter(id => s.away?.[id]).length} offline` : ''}</p>`);
     else vote = panel(`🗳 The final vote ${timer(s.voteEnd)}`, `<p><b>${s.voted.length}/${s.players.length}</b> have voted.</p>${gm ? (m.gmShow ? `<p class="sm-gm">The Millionaire is <b>${esc(nm(p.millionaire))}</b>.</p><button class="ghost" id="gmHide">🙈 Hide</button>` : '<button id="gmShowBtn">👁 Show the secrets</button>') : ''}`);
     if (ctl) bar = `<div class="bn-bar"><button id="resolve">✅ ${gm || s.mod === 'host' ? '' : 'Host: '}Close the vote now</button></div>`;
     body = `${myTag}${roleCard()}${vote}${sharedPanel()}${intelPanel()}${board}${panel('🏆 Final scores', scoreBoardHtml(rows, { anim: false }).html)}${hostPanel()}${gm ? panel('🎙️ Moderator', handoverBlock()) : ''}`;
@@ -287,7 +293,7 @@ export function renderSecret(el, s, ui, game) {
       ${ui.isHost ? '<div class="bn-foot"><button id="again">🔄 Play again</button></div>' : ''}`;
   }
 
-  el.innerHTML = `<div class="sm ${s.phase === 'lobby' ? 'is-lobby' : ''}">${head}${body}${bar}</div>`;
+  el.innerHTML = `<div class="sm ${s.phase === 'lobby' ? 'is-lobby' : ''}">${head}${s.phase === 'lobby' || s.phase === 'end' ? '' : modAlert()}${body}${bar}</div>`;
 
   const slot = el.querySelector('#mapSlot');
   if (slot && el._lm) slot.replaceWith(el._lm.box);
@@ -325,6 +331,7 @@ export function renderSecret(el, s, ui, game) {
   on('[data-acc]', b => { const t = b.dataset.acc; if (confirm(`Accuse ${nm(t)}? If you're wrong you sit out the next round.`)) { m.accuse = false; sfx('drumroll'); ui.act('accuse', { target: t }); redraw(); } });
   on('[data-vote]', b => { sfx('vote'); ui.act('vote', { target: b.dataset.vote }); });
   on('[data-room]', b => launch(b.dataset.room));
+  on('#hoOpenAlert', () => { sfx('pop'); m.handover = true; redraw(); });
   on('#hoOpen', () => { sfx('pop'); m.handover = true; redraw(); });
   on('#hoCancel', () => { m.handover = false; redraw(); });
   on('[data-ho]', b => { const v = b.dataset.ho; const label = b.textContent.trim(); if (confirm(`Hand over moderating to: ${label}?`)) { m.handover = false; m.gmShow = false; sfx('whoosh'); ui.act('handover', { to: v === 'none' ? null : v }); redraw(); } });

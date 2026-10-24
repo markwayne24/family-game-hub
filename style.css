@@ -1234,3 +1234,4 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 .sm-intel{border-color:#1971c2}
 
 .sm-ho{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}.sm-ho .chips{margin:8px 0}.sm-ho button.ghost{width:100%;margin-top:6px}
+.sm .banner{animation:none}

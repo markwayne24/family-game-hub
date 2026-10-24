@@ -180,6 +180,46 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   const scored = play(begin({ rounds: 3 }), e, { 'p1': [['kitchen', true, 2000]] }); const cur = scored.players.includes('p1') ? 'p1' : scored.players[0];
   const sc = step(scored, e, 'h', 'handover', { to: cur === scored.millionaire ? scored.players.find(x => x !== scored.millionaire) : cur }); assert.ok(sc.players.length >= 3);
 }
+// ---- people who drop out
+{
+  const e = env(7); let s = step(G.init(e), e, 'h', 'config', { rounds: 3 }); s = step(s, { ...e, now: 1000 }, 'h', 'start');
+  const present = ids => ({ ...e, now: 5000, players: ['h', ...ids].map(id => ({ id, name: id })) });
+  const [a, b, c, d, f, g] = s.players;
+  assert.equal(G.watchPresence, true);
+  assert.equal(step(s, present(s.players), 'p1', 'presence'), s, 'only the host checks presence');
+  assert.equal(G.reduce(s, { from: 'h', type: 'presence' }, present(s.players)), s, 'everyone here: nothing changes');
+  const gone = G.reduce(s, { from: 'h', type: 'presence' }, present(s.players.filter(x => x !== d)));
+  assert.deepEqual(Object.keys(gone.away), [d]); assert.equal(gone.away[d], 5000);
+  assert.equal(G.reduce(gone, { from: 'h', type: 'presence' }, { ...present(s.players.filter(x => x !== d)), now: 9000 }).away[d], 5000, 'we remember since when');
+  assert.deepEqual(G.reduce(gone, { from: 'h', type: 'presence' }, present(s.players)).away, {}, 'back again');
+  assert.deepEqual(Object.keys(G.view(gone).away), [d], 'everyone can see who is offline');
+  // a round ends once everyone who is here has done everything
+  let r = s; const away = s.players[0]; const stay = s.players.slice(1);
+  r = G.reduce(r, { from: 'h', type: 'presence' }, present(stay));
+  r = play(r, e, Object.fromEntries(stay.map(id => [id, ROOMS.map(x => [x.id, true, 4000])])));
+  assert.equal(r.phase, 'break', 'the round did not wait for the one who is offline');
+  // coming back: they play on
+  const b2 = step(r, e, 'h', 'next'); assert.equal(b2.phase, 'round'); assert.deepEqual(b2.away, r.away, 'still marked until the next check');
+  assert.equal(G.reduce(b2, { from: 'h', type: 'presence' }, present(s.players)).away[away], undefined);
+  // a round where nobody has done anything is not cut short just because people dropped
+  const quiet = G.reduce(s, { from: 'h', type: 'presence' }, present([]));
+  assert.equal(quiet.phase, 'round'); assert.equal(Object.keys(quiet.away).length, s.players.length);
+  // the vote finishes with the people who are here
+  let v = s; for (let i = 0; i < 3; i++) { v = step(v, e, 'h', 'endRound'); if (v.phase === 'break') v = step(v, e, 'h', 'next'); }
+  assert.equal(v.phase, 'vote'); const m = v.millionaire, others = v.players.filter(x => x !== m), lost = others[0];
+  v = G.reduce(v, { from: 'h', type: 'presence' }, present(v.players.filter(x => x !== lost)));
+  for (const id of v.players.filter(x => x !== lost)) { assert.equal(v.phase, 'vote'); v = step(v, e, id, 'vote', { target: id === m ? others[1] : m }); }
+  assert.equal(v.phase, 'end', 'everyone who is here voted'); assert.ok(v.outcome);
+  // the vote does not end by itself if nobody here has voted
+  let w = s; for (let i = 0; i < 3; i++) { w = step(w, e, 'h', 'endRound'); if (w.phase === 'break') w = step(w, e, 'h', 'next'); }
+  assert.equal(G.reduce(w, { from: 'h', type: 'presence' }, present(w.players.slice(1))).phase, 'vote');
+  // the moderator going away is noticed too (a player moderating)
+  const e8 = env(8); let pm = step(G.init(e8), e8, 'h', 'config', { mod: 'player', moderator: 'p1' }); pm = step(pm, { ...e8, now: 1000 }, 'h', 'start');
+  const pe = ids => ({ ...e8, now: 7000, players: ['h', ...ids].map(id => ({ id, name: id })) });
+  const modGone = G.reduce(pm, { from: 'h', type: 'presence' }, pe(pm.players));
+  assert.equal(modGone.away.p1, 7000, 'the moderator is not in the room'); assert.equal(modGone.phase, 'round');
+  const handed = step(modGone, e8, 'h', 'handover', { to: 'random' }); assert.notEqual(handed.gm, 'p1'); assert.ok(handed.players.includes('p1'), 'the missing moderator is a player again, offline');
+}
 // ---- accusations
 {
   let { e, s } = start(6, { rounds: 3 }, 1000);

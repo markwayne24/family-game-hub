@@ -38,12 +38,13 @@ export const secret = {
       phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
       mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
       players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, breakEnd: 0, voteEnd: 0, shared: [],
-      loc: {}, visited: {}, tags: [], done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
+      loc: {}, visited: {}, tags: [], away: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
       millionaire: null, agenda: null, nextAgenda: null, agendaRes: [], bonus: 0,
       clues: [], accusations: [], jailed: {}, votes: {}, outcome: null, error: null,
     };
   },
   remember: s => ({ saved: s }),
+  watchPresence: true,
   deadline: s => (s.phase === 'round' ? s.endAt : s.phase === 'break' ? s.breakEnd : s.phase === 'vote' ? s.voteEnd : 0) || 0,
 
   reduce(s, a, env) {
@@ -52,6 +53,7 @@ export const secret = {
     const ctl = isHost || (s.gm != null && a.from === s.gm);
     // who may touch the secrets (the Millionaire and their agenda): only the person moderating
     const secretsOk = s.gm != null && a.from === s.gm;
+    if (a.type === 'presence') return a.from === env.hostId ? presence(s, env) : s;
     if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.map(p => [p.id, p.name])) };
 
     if (a.type === 'reset' && isHost) { const k = this.init(env); const keep = ['mod', 'moderator', 'rounds', 'secs', 'breakSecs', 'voteSecs', 'difficulty', 'mode', 'speed', 'pickMode', 'pick']; for (const f of keep) k[f] = s[f]; return k; }
@@ -123,7 +125,7 @@ export const secret = {
           pts: { ...s.pts, [a.from]: (s.pts[a.from] ?? 0) + gain }, teamPts: s.teamPts.map((v, i) => (i === t ? v + gain : v)),
         };
         // everyone who can play has done everything: no need to wait for the clock
-        const all = s.players.filter(id => !sits(id)).every(id => ROOMS.every(r => n.done[id]?.[r.id]));
+        const all = needed(n).every(id => ROOMS.every(r => n.done[id]?.[r.id]));
         return all ? finishRound(n, env.now) : n;
       }
       if (a.type === 'agenda' && secretsOk) return { ...s, agenda: agendaOf(a.data?.key) ? { key: a.data.key } : s.agenda };
@@ -162,7 +164,7 @@ export const secret = {
     if (s.phase === 'vote') {
       if (a.type === 'vote' && s.players.includes(a.from) && s.players.includes(a.data?.target) && a.data.target !== a.from) {
         const n = { ...s, votes: { ...s.votes, [a.from]: a.data.target } };
-        return s.players.every(id => n.votes[id]) ? resolveVote(n) : n;
+        return needed(n, false).every(id => n.votes[id]) ? resolveVote(n) : n;
       }
       if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
       if (a.type === 'handover' && ctl) return handover(s, a.data?.to, a.from, env);
@@ -227,6 +229,23 @@ function finishRound(s, now) {
     agendaRes: [...s.agendaRes, { round: s.round, key: s.agenda?.key, ok: res }], bonus: s.bonus + (res ? BONUS : 0),
     loc: {},
   };
+  return n;
+}
+
+// People who are in the game but not in the room right now. The game carries on without them: a round ends when everybody
+// who is here has finished, a vote when everybody who is here has voted. They pick up where they left off when they come back.
+const needed = (s, skipSitting = true) => s.players.filter(id => !(s.away ?? {})[id] && !(skipSitting && s.jailedNow?.includes(id)));
+function presence(s, env) {
+  if (s.phase === 'lobby' || s.phase === 'end') return s;
+  const here = new Set(env.players.map(p => p.id));
+  const people = [...s.players, ...(s.gm != null && s.gm !== env.hostId ? [s.gm] : [])].filter(id => id !== env.hostId);
+  const away = {};
+  for (const id of people) if (!here.has(id)) away[id] = (s.away ?? {})[id] ?? env.now;
+  const same = (x, y) => Object.keys(x).length === Object.keys(y).length && Object.keys(x).every(k => x[k] === y[k]);
+  if (same(away, s.away ?? {})) return s;
+  const n = { ...s, away };
+  if (n.phase === 'round' && needed(n).length && needed(n).every(id => ROOMS.every(r => n.done[id]?.[r.id])) && n.log.some(e => e.r === n.round)) return finishRound(n, env.now);
+  if (n.phase === 'vote' && needed(n, false).length && Object.keys(n.votes).length && needed(n, false).every(id => n.votes[id])) return resolveVote(n);
   return n;
 }
 
