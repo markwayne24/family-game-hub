@@ -38,7 +38,7 @@ export const secret = {
       phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
       mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
       players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, breakEnd: 0, voteEnd: 0, shared: [],
-      loc: {}, visited: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
+      loc: {}, visited: {}, tags: [], done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
       millionaire: null, agenda: null, nextAgenda: null, agendaRes: [], bonus: 0,
       clues: [], accusations: [], jailed: {}, votes: {}, outcome: null, error: null,
     };
@@ -107,6 +107,11 @@ export const secret = {
       if (a.type === 'visit' && s.players.includes(a.from) && !sits(a.from) && ROOMS.some(r => r.id === a.data?.room) && !s.visited[a.from]?.[a.data.room]) {
         return { ...s, visited: { ...s.visited, [a.from]: { ...s.visited[a.from], [a.data.room]: true } } };
       }
+      // a check: stand next to someone (the screen makes sure of that) and learn which rooms they have visited so far this round.
+      // One per round. Only the person checking sees the answer; the one checked is only told that somebody did.
+      if (a.type === 'tag' && s.players.includes(a.from) && !sits(a.from) && s.players.includes(a.data?.target) && a.data.target !== a.from && !(s.tags ?? []).some(x => x.r === s.round && x.by === a.from)) {
+        return { ...s, tags: [...(s.tags ?? []), { r: s.round, by: a.from, target: a.data.target, visited: Object.keys(s.visited[a.data.target] ?? {}) }] };
+      }
       if (a.type === 'leave' && s.players.includes(a.from)) { const { [a.from]: _, ...loc } = s.loc; return { ...s, loc }; }
       if (a.type === 'done' && s.players.includes(a.from) && !sits(a.from)) {
         const d = a.data ?? {}, room = d.room;
@@ -166,7 +171,7 @@ export const secret = {
 
   // What everyone may see. Who the Millionaire is, the agenda, the clues and the task log stay out of it until the end.
   view(s) {
-    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, visited, ...pub } = s;
+    const { millionaire, agenda, nextAgenda, agendaRes, clues, log, done, goAt, pts, jailed, votes, pick, visited, tags, ...pub } = s;
     const out = { ...pub, jailedNow: s.jailedNow ?? [], hasClue: [...new Set(clues.map(c => c.round))], voted: Object.keys(votes) };
     if (s.phase === 'end') Object.assign(out, { stats: taskStats(log), millionaire, agendaRes, clues: clues.map(({ round, text }) => ({ round, text })) });
     return out;
@@ -176,12 +181,12 @@ export const secret = {
   priv(s) {
     const out = {};
     for (const id of s.players) {
-      out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text, shared: s.shared.some(x => x.round === round) })), doneRooms: Object.keys(s.done[id] ?? {}), myVote: s.votes[id] ?? null };
+      out[id] = { clues: s.clues.filter(c => c.to.includes(id)).map(({ round, text }) => ({ round, text, shared: s.shared.some(x => x.round === round) })), doneRooms: Object.keys(s.done[id] ?? {}), intel: (s.tags ?? []).filter(x => x.by === id).map(({ r, target, visited }) => ({ round: r, target, visited })), tagLeft: s.phase === 'round' && !(s.tags ?? []).some(x => x.r === s.round && x.by === id), seen: s.phase === 'round' ? (s.tags ?? []).filter(x => x.r === s.round && x.target === id).length : 0, myVote: s.votes[id] ?? null };
       if (id === s.millionaire) Object.assign(out[id], { millionaire: true, agenda: s.agenda, agendaRes: s.agendaRes, bonus: s.bonus });
     }
     // in the waiting room the moderator (when it is a player) sees the secrets they have chosen so far
     if (s.phase === 'lobby' && s.mod === 'player' && s.moderator) out[s.moderator] = { lobby: { pick: s.pick, agenda: s.nextAgenda } };
-    if (s.gm != null) out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, visited: s.visited, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
+    if (s.gm != null) out[s.gm] = { gm: true, millionaire: s.millionaire, agenda: s.agenda, nextAgenda: s.nextAgenda, agendaRes: s.agendaRes, bonus: s.bonus, log: s.log, visited: s.visited, tags: s.tags, clues: s.clues, done: s.done, pts: s.pts, votes: s.votes };
     return out;
   },
 

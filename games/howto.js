@@ -81,6 +81,7 @@ export const HOWTO = {
       'Everyone else is split into two teams, mixed again every round. When the game starts, tap to see your secret role. It is hidden again when you tap Hide, so nobody can peek.',
       'In each round, walk around the mansion: drag on the map (or use the arrow keys) and step onto a glowing pad in a room to play its task. Tasks get harder as the rounds go on, unless the host chose otherwise.',
       'The team with the most points gets a secret clue about the Millionaire. The holders choose: share it with everyone, or keep it secret.',
+      'Each round you get one 🔍 check: stand next to a player to learn which rooms they have visited. They only learn that somebody checked them.',
       'The Millionaire gets a secret agenda each round, like "visit the Library" or "make your team lose". Watch for suspicious behaviour!',
       'Between rounds, each player can accuse someone once. If you are right, you win. If you are wrong, you sit out the next round.',
       'After the last round everyone votes. If most of you pick the Millionaire, you split the pot. If not, they take it all.',

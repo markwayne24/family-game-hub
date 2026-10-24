@@ -18,8 +18,8 @@ const SEND_EVERY = 400, KEEPALIVE = 4000;
 export function createLiveMap(o) {
   const box = document.createElement('div');
   box.className = 'sm-livemap';
-  box.innerHTML = '<canvas class="sm-canvas" aria-label="The mansion. Drag to walk."></canvas><div class="sm-use"><p class="sm-hint"></p><button class="sm-usebtn" disabled></button></div>';
-  const cv = box.querySelector('canvas'), g = cv.getContext('2d'), hint = box.querySelector('.sm-hint'), btn = box.querySelector('.sm-usebtn');
+  box.innerHTML = '<canvas class="sm-canvas" aria-label="The mansion. Drag to walk."></canvas><div class="sm-use"><p class="sm-hint"></p><button class="sm-usebtn" disabled></button></div><div class="sm-tagbar" hidden></div>';
+  const cv = box.querySelector('canvas'), g = cv.getContext('2d'), hint = box.querySelector('.sm-hint'), btn = box.querySelector('.sm-usebtn'), tagbar = box.querySelector('.sm-tagbar');
   let opt = o, destroyed = false, raf = 0, off = 0, last = performance.now(), t = 0;
   const idx = id => Math.max(0, opt.players.indexOf(id));
   const st = { me: { ...spawn(idx(opt.me), opt.players.length) }, others: {}, input: { dx: 0, dy: 0 }, keys: new Set(), joy: null, near: null, room: null, visited: new Set(), busy: null, face: 1, sentAt: 0, sent: { x: -1, y: -1, b: null }, dirty: true };
@@ -35,7 +35,7 @@ export function createLiveMap(o) {
     if (!p.init) { p.x = x; p.y = y; p.init = true; }
     p.tx = x; p.ty = y; p.busy = d.b ?? null; p.seen = performance.now();
   });
-  function update(next) { opt = next; paintUse(); }
+  function update(next) { opt = next; paintUse(); paintTags(true); }
   function setBusy(room) { st.busy = room; send(true); }
 
   const send = force => {
@@ -61,6 +61,17 @@ export function createLiveMap(o) {
     else { hint.textContent = 'Drag on the map (or use the arrow keys) to walk. Step on a glowing pad to play its task.'; btn.disabled = true; btn.textContent = 'Walk to a glowing pad'; }
   }
   btn.addEventListener('click', () => { if (st.near && opt.canMove && !opt.doneRooms.includes(st.near) && !st.busy) opt.onUse(st.near); });
+
+  /* ---- the "check a player" buttons: only people standing close by ---- */
+  const NEAR = 120; let shownTags = '';
+  const nearIds = () => (opt.canTag ? opt.players.filter(id => id !== opt.me && st.others[id]?.init && Math.hypot(st.others[id].x - st.me.x, st.others[id].y - st.me.y) <= NEAR) : []);
+  function paintTags(force) {
+    const ids = nearIds(), key = `${opt.canTag}|${ids.join()}`;
+    if (!force && key === shownTags) return; shownTags = key;
+    tagbar.hidden = !opt.canTag;
+    tagbar.innerHTML = opt.canTag ? (ids.length ? `<span class="sm-taghint">🔍 Check who has been where:</span>${ids.map(id => `<button class="sm-tagbtn" data-t="${id}">🔍 ${opt.nameOf(id)}</button>`).join('')}` : '<span class="sm-taghint">🔍 Stand next to a player to check which rooms they have visited. One check per round.</span>') : '';
+    tagbar.querySelectorAll('.sm-tagbtn').forEach(b => b.addEventListener('click', () => opt.onTag?.(b.dataset.t)));
+  }
 
   /* ---- steering: drag on the map, or the keyboard ---- */
   const JOY = 46;
@@ -99,6 +110,7 @@ export function createLiveMap(o) {
       const dx = p.tx - p.x; if (Math.abs(dx) > 0.5) p.face = dx > 0 ? 1 : -1;
       p.x += dx * k; p.y += (p.ty - p.y) * k;
     }
+    paintTags(false);
     send(false);
   }
 

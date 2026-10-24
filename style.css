@@ -1224,3 +1224,11 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 .srs-card button{width:100%;min-height:54px;font-size:1.1rem;margin-top:12px;background:linear-gradient(135deg,#a06a00,#6c4cf5)}
 
 .sm-stats{width:100%;border-collapse:collapse;font-size:.9rem}.sm-stats th{text-align:left;color:var(--mute);font-weight:600;padding:4px 6px}.sm-stats td{padding:6px;border-top:1px solid var(--line)}
+
+/* checking a player */
+.sm-tagbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.sm-tagbar[hidden]{display:none}
+.sm-taghint{flex:1 1 100%;text-align:center;color:var(--mute);font-size:.85rem}
+.sm-tagbtn{flex:1 1 auto;min-height:46px;background:linear-gradient(135deg,#1971c2,#6c4cf5)}
+.sm-seen{margin:0 0 8px;padding:8px 12px;border-radius:12px;background:#fff3cd;color:#664d03;font-weight:600;font-size:.9rem}
+.sm-intel{border-color:#1971c2}

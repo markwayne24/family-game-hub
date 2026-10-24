@@ -114,6 +114,33 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   assert.equal(agendaDone('both:kitchen:garage', [['kitchen', true, 3000], ['garage', true, 3000]]), true); assert.equal(agendaDone('both:kitchen:garage', [['kitchen', true, 3000]]), false);
   assert.ok(AGENDAS.length >= 20); assert.equal(new Set(AGENDAS.map(a => a.key)).size, AGENDAS.length, 'agenda keys are unique');
 }
+// ---- checking a player (the "tag")
+{
+  let { e, s } = start(7, { agenda: 'spy' }, 1000);
+  const [a, b, c, d] = s.players, m = s.millionaire;
+  s = step(s, { ...e, now: 2000 }, c, 'visit', { room: 'vault' }); s = step(s, { ...e, now: 2100 }, c, 'visit', { room: 'kitchen' });
+  let t = step(s, e, a, 'tag', { target: c });
+  assert.equal(t.tags.length, 1); assert.deepEqual(t.tags[0].visited.sort(), ['kitchen', 'vault']);
+  assert.equal(step(t, e, a, 'tag', { target: d }), t, 'one check per round');
+  assert.equal(step(s, e, a, 'tag', { target: a }), s, 'not yourself'); assert.equal(step(s, e, a, 'tag', { target: 'nobody' }), s); assert.equal(step(s, e, 'h', 'tag', { target: c }), s, 'the moderator does not play');
+  assert.equal(step(s, e, 'stranger', 'tag', { target: c }), s);
+  const pr = G.priv(t);
+  assert.deepEqual(pr[a].intel, [{ round: 1, target: c, visited: ['vault', 'kitchen'] }].map(x => ({ ...x, visited: t.tags[0].visited })), 'the checker learns the rooms');
+  assert.equal(pr[a].tagLeft, false); assert.equal(pr[b].tagLeft, true); assert.equal(pr[c].seen, 1, 'the one checked is told somebody did'); assert.equal(pr[b].seen, 0);
+  assert.ok(!('intel' in pr.h) || pr.h.intel === undefined); assert.equal(pr.h.tags.length, 1, 'the moderator sees the checks');
+  assert.deepEqual(pr[b].intel, [], 'nobody else sees the answer'); assert.deepEqual(pr[c].intel, []);
+  assert.ok(!JSON.stringify(G.view(t)).includes('"tags"') && !JSON.stringify(G.view(t)).includes('"intel"'), 'checks are private');
+  // it counts for the Millionaire's "spy" agenda, and the checks carry on in later rounds
+  const mTag = step(t, { ...e, now: 3000 }, m, 'tag', { target: a }); assert.ok(mTag.tags.some(x => x.by === m) || m === a);
+  const f = step(m === a ? t : mTag, { ...e, now: 4000 }, 'h', 'endRound');
+  assert.equal(f.agendaRes[0].ok, true, 'using a check completes the spy agenda');
+  const r2 = step(f, e, 'h', 'next'); assert.equal(G.priv(r2)[a].tagLeft, true, 'a new round, a new check'); assert.equal(G.priv(r2)[a].intel.length, 1, 'the old answers stay in your notebook');
+  assert.equal(step(r2, e, a, 'tag', { target: d }).tags.length, f.tags.length + 1);
+  // not in the break, and not for someone sitting the round out
+  assert.equal(step(f, e, b, 'tag', { target: c }), f);
+  const wrong = step(f, e, f.players.find(x => x !== m), 'accuse', { target: f.players.find(x => x !== m && x !== f.players[0]) ?? m });
+  const sit = step(wrong, e, 'h', 'next'); const who = sit.jailedNow[0]; if (who) assert.equal(step(sit, e, who, 'tag', { target: sit.players.find(x => x !== who) }), sit, 'sitting out');
+}
 // ---- accusations
 {
   let { e, s } = start(6, { rounds: 3 }, 1000);

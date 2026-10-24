@@ -48,11 +48,11 @@ export function renderSecret(el, s, ui, game) {
     el._closeTask = openTask(room, {
       anchor: el, level: s.level,
       onFinish: (ok, ms, kind) => { el._closeTask = null; el._lm?.setBusy(null); ui.act('done', { room, ok, ms, kind }); },
-      onQuit: () => { el._closeTask = null; el._lm?.setBusy(null); ui.act('leave'); },
+      onQuit: () => { el._closeTask = null; el._lm?.setBusy(null); },   // you stay in the room, where others can see you and check you
     });
   };
   if (mapOn) {
-    const lmOpts = { live: ui.live, me: ui.me, players: s.players, nameOf: nm, team: s.team, speed: s.speed, canMove: playing && !sits, watching: !playing, doneRooms: p?.doneRooms ?? [], onVisit: room => ui.act('visit', { room }), onUse: launch, onRelease: () => { if (el._deferred) redraw(); } };
+    const lmOpts = { live: ui.live, me: ui.me, players: s.players, nameOf: nm, team: s.team, speed: s.speed, canMove: playing && !sits, watching: !playing, doneRooms: p?.doneRooms ?? [], canTag: playing && !sits && !!p?.tagLeft, onTag: id => { sfx('mystic'); ui.act('tag', { target: id }); }, onVisit: room => ui.act('visit', { room }), onUse: launch, onRelease: () => { if (el._deferred) redraw(); } };
     if (!el._lm) { el._lm = createLiveMap(lmOpts); el._lmKey = s.round; el.querySelector('.sm-livemap')?.remove(); }
     el._lm.update(lmOpts);
     window.__smap = el._lm;   // handy for testing
@@ -99,6 +99,15 @@ export function renderSecret(el, s, ui, game) {
       return panel('💰 You are the SECRET MILLIONAIRE', `<div class="sm-agenda"><div class="sm-agl">🤫 Your secret agenda${s.phase === 'round' ? '' : ' (this round)'}</div><p>${esc(ag?.text ?? '')}</p><small>Finish it for <b>${money(BONUS)}</b>. Stay hidden until the end and the pot is yours!</small></div>${p.bonus ? `<p class="sm-bonus">Agenda bonus so far: <b>${money(p.bonus)}</b></p>` : ''}<button class="ghost" id="hidePeek">🙈 Hide</button>`, 'sm-secret sm-gold');
     }
     return panel('🕵️ You are a detective', `<p style="margin-top:0">You are NOT the Millionaire. Work with ${myTeam != null ? `team ${TEAMS[myTeam].name}` : 'your team'} to find out who is.</p><button class="ghost" id="hidePeek">🙈 Hide</button>`, 'sm-secret sm-blue');
+  };
+  const ROOMNAME = id => { const r = ROOMS.find(x => x.id === id); return r ? `${r.emoji} ${r.name}` : id; };
+  const intelPanel = () => (p?.intel?.length ? panel('🔍 What your checks found', `<ul class="sm-cl">${p.intel.map(x => `<li><b>R${x.round}</b> ${esc(nm(x.target))} had visited: ${x.visited.length ? x.visited.map(ROOMNAME).join(', ') : '<i>no rooms yet</i>'}</li>`).join('')}</ul>`, 'sm-intel') : '');
+  const seenLine = () => (p?.seen ? `<div class="sm-seen">👀 ${p.seen === 1 ? 'Someone' : p.seen + ' players'} checked on you this round.</div>` : '');
+  // without the live map: you can check anyone in the same room as you
+  const roomCheck = () => {
+    if (!(s.mode === 'rooms' && p?.tagLeft && playing && !sits)) return '';
+    const mine = s.loc[ui.me], here = mine ? s.players.filter(id => id !== ui.me && s.loc[id] === mine) : [];
+    return panel('🔍 Check a player', here.length ? `<p class="muted" style="margin-top:0">Learn which rooms they have visited. One check per round.</p><div class="bn-whos">${here.map(id => `<button class="sm-sus pick" data-tag="${id}">${avatar(nm(id))} ${esc(nm(id))}</button>`).join('')}</div>` : '<p class="muted" style="margin:0">Walk into the same room as someone to check which rooms they have visited. One check per round.</p>');
   };
   const sharedPanel = () => (s.shared.length ? panel('📢 Clues shared with everyone', `<ul class="sm-cl">${s.shared.map(c => `<li><b>R${c.round}</b> ${esc(c.text)} <small class="muted">· ${esc(nm(c.by))}</small></li>`).join('')}</ul>`, 'sm-shared') : '');
   // a clue I hold: share it with everyone, or keep it to myself (I can still share it later)
@@ -181,10 +190,10 @@ export function renderSecret(el, s, ui, game) {
     } else if (ui.isHost) {
       gmPanel = panel('🛠 Host controls', `<p class="muted" style="margin-top:0">${s.mod === 'none' ? 'Nobody moderates. You can still end the round or add time if the group needs it.' : 'The moderator runs the round. These are here in case they step away.'}</p>${clockBtns}<button class="ghost danger" id="endRound">⏭ End this round now</button>`);
     }
-    body = `${myTag}${roleCard()}${panel(`🏆 Teams ${timer(s.endAt, '♾ no time limit')}`, `<div class="sm-tbs">${teamBars}</div>`)}
+    body = `${myTag}${seenLine()}${roleCard()}${panel(`🏆 Teams ${timer(s.endAt, '♾ no time limit')}`, `<div class="sm-tbs">${teamBars}</div>`)}
       ${mapOn ? panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, '<div id="mapSlot"></div>', 'sm-mappanel') : ''}
       ${mapOn ? '' : panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, `${playing && !sits ? '<p class="muted" style="margin-top:0">Tap a room to walk in and do its task. Everyone can see which room you\'re in.</p>' : sits ? '<p class="sm-sitmsg">🚔 You guessed wrong, so you sit this round out. Watch the others!</p>' : '<p class="muted" style="margin-top:0">Watching the mansion live.</p>'}<div class="sm-map">${tiles}</div>`)}
-      ${sharedPanel()}${gmPanel}`;
+      ${roomCheck()}${intelPanel()}${sharedPanel()}${gmPanel}`;
   }
 
   /* ================================ between rounds ================================ */
@@ -221,7 +230,7 @@ export function renderSecret(el, s, ui, game) {
         : '<p class="muted" style="margin-top:0">The secrets are hidden so nobody can read them over your shoulder.</p><button id="gmShowBtn">👁 Show the secrets</button>');
     }
     if (ctl) bar = `<div class="bn-bar"><button id="next">▶ ${gm || s.mod === 'host' ? '' : 'Host: '}Start round ${s.round + 1}</button></div>`;
-    body = `${myTag}${roleCard()}${result}${clue}${agendaRes}${sharedPanel()}${accuse}${board}${gmPanel}${ctl ? '' : panel('', `<p class="muted" style="text-align:center;margin:0">${s.breakEnd ? 'The next round starts when the timer ends.' : `Waiting for ${waitFor} to start the next round…`}</p>`)}`;
+    body = `${myTag}${roleCard()}${result}${clue}${agendaRes}${sharedPanel()}${intelPanel()}${accuse}${board}${gmPanel}${ctl ? '' : panel('', `<p class="muted" style="text-align:center;margin:0">${s.breakEnd ? 'The next round starts when the timer ends.' : `Waiting for ${waitFor} to start the next round…`}</p>`)}`;
   }
 
   /* ================================ the final vote ================================ */
@@ -234,7 +243,7 @@ export function renderSecret(el, s, ui, game) {
     if (playing) vote = panel(`🗳 Who is the Secret Millionaire? ${timer(s.voteEnd)}`, `<p class="muted" style="margin-top:0">Everyone votes in secret. If most of you pick the right person, you split the pot. If not, the Millionaire takes it all!</p><div class="sm-votes">${suspects.map(id => `<button class="sm-sus pick ${myVote === id ? 'picked' : ''}" data-vote="${id}">${avatar(nm(id))} ${esc(nm(id))}${myVote === id ? ' ✔' : ''}</button>`).join('')}</div><p class="sm-vc"><b>${s.voted.length}/${s.players.length}</b> have voted</p>`);
     else vote = panel(`🗳 The final vote ${timer(s.voteEnd)}`, `<p><b>${s.voted.length}/${s.players.length}</b> have voted.</p>${gm ? (m.gmShow ? `<p class="sm-gm">The Millionaire is <b>${esc(nm(p.millionaire))}</b>.</p><button class="ghost" id="gmHide">🙈 Hide</button>` : '<button id="gmShowBtn">👁 Show the secrets</button>') : ''}`);
     if (ctl) bar = `<div class="bn-bar"><button id="resolve">✅ ${gm || s.mod === 'host' ? '' : 'Host: '}Close the vote now</button></div>`;
-    body = `${myTag}${roleCard()}${vote}${sharedPanel()}${board}${panel('🏆 Final scores', scoreBoardHtml(rows, { anim: false }).html)}`;
+    body = `${myTag}${roleCard()}${vote}${sharedPanel()}${intelPanel()}${board}${panel('🏆 Final scores', scoreBoardHtml(rows, { anim: false }).html)}`;
   }
 
   /* ================================ the reveal ================================ */
@@ -300,4 +309,5 @@ export function renderSecret(el, s, ui, game) {
   on('[data-acc]', b => { const t = b.dataset.acc; if (confirm(`Accuse ${nm(t)}? If you're wrong you sit out the next round.`)) { m.accuse = false; sfx('drumroll'); ui.act('accuse', { target: t }); redraw(); } });
   on('[data-vote]', b => { sfx('vote'); ui.act('vote', { target: b.dataset.vote }); });
   on('[data-room]', b => launch(b.dataset.room));
+  on('[data-tag]', b => { sfx('mystic'); ui.act('tag', { target: b.dataset.tag }); });
 }
