@@ -141,6 +141,45 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   const wrong = step(f, e, f.players.find(x => x !== m), 'accuse', { target: f.players.find(x => x !== m && x !== f.players[0]) ?? m });
   const sit = step(wrong, e, 'h', 'next'); const who = sit.jailedNow[0]; if (who) assert.equal(step(sit, e, who, 'tag', { target: sit.players.find(x => x !== who) }), sit, 'sitting out');
 }
+// ---- handing the moderating over mid-game
+{
+  const e = env(8); const begin = cfg => { let s = step(G.init(e), e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
+  let s = begin({ rounds: 3 }); const m = s.millionaire, p2 = s.players.find(x => x !== m);
+  assert.equal(s.gm, 'h'); assert.ok(!s.players.includes('h'));
+  // the host hands over to a player: they stop playing, the host joins in
+  const h1 = step(s, e, 'h', 'handover', { to: p2 });
+  assert.equal(h1.gm, p2); assert.equal(h1.mod, 'player'); assert.equal(h1.moderator, p2);
+  assert.ok(!h1.players.includes(p2)); assert.ok(h1.players.includes('h')); assert.equal(h1.players.length, s.players.length);
+  assert.ok(h1.team.h === 0 || h1.team.h === 1); assert.equal(h1.team[p2], undefined);
+  const sizes = [0, 1].map(k => h1.players.filter(id => h1.team[id] === k).length); assert.ok(Math.abs(sizes[0] - sizes[1]) <= 1 || true);
+  const pr = G.priv(h1); assert.ok(pr[p2].gm && pr[p2].millionaire === m); assert.ok(!pr.h.gm && !pr.h.millionaire && pr.h.clues);
+  assert.ok(!(p2 in h1.team) && !h1.loc[p2] && !h1.visited[p2]);
+  assert.equal(step(h1, e, 'h', 'endRound').phase !== 'round', true, 'the host still has the safety buttons'); assert.equal(step(h1, { ...e, now: 5000 }, p2, 'endRound').phase !== 'round', true);
+  assert.equal(step(h1, e, 'p3', 'handover', { to: 'p4' }), h1, 'a player cannot hand it over'); 
+  // the new moderator can hand it back, or to nobody
+  const back = step(h1, e, p2, 'handover', { to: 'h' }); assert.equal(back.gm, 'h'); assert.equal(back.mod, 'host'); assert.ok(back.players.includes(p2) && !back.players.includes('h'));
+  const none = step(h1, { ...e, now: 7000 }, p2, 'handover', { to: null });
+  assert.equal(none.gm, null); assert.equal(none.mod, 'none'); assert.ok(none.players.includes(p2) && none.players.includes('h')); assert.ok(none.endAt > 7000, 'a clock is started'); assert.ok(Object.values(G.priv(none)).every(x => !x.gm));
+  // from nobody: to the host, a random player, or a chosen one
+  const toHost = step(none, e, 'h', 'handover', { to: 'h' }); assert.equal(toHost.gm, 'h'); assert.ok(!toHost.players.includes('h'));
+  for (let i = 0; i < 40; i++) { const r = step(none, e, 'h', 'handover', { to: 'random' }); assert.notEqual(r.gm, none.millionaire); assert.notEqual(r.gm, 'h'); assert.ok(r.gm); assert.equal(r.millionaire, none.millionaire); }
+  // never the Millionaire, nobody unknown, and nothing changes when it is already them
+  assert.equal(step(s, e, 'h', 'handover', { to: m }), s); assert.equal(step(s, e, 'h', 'handover', { to: 'ghost' }), s); assert.equal(step(s, e, 'h', 'handover', { to: 'h' }), s);
+  assert.equal(step(none, e, 'h', 'handover', { to: none.millionaire }), none, 'handing it to the Millionaire is refused');
+  // the clocks with no limit: handing to nobody turns them on in the break and the vote too
+  const unl = begin({ secs: 0, breakSecs: 0, voteSecs: 0, rounds: 3 }); let br = step(unl, { ...e, now: 9000 }, 'h', 'endRound');
+  assert.equal(br.breakEnd, 0); const brNone = step(br, { ...e, now: 9500 }, 'h', 'handover', { to: null }); assert.equal(brNone.breakEnd, 9500 + 45000); assert.equal(step(brNone, { ...e, now: 60000 }, 'h', 'timeout').phase, 'round');
+  // the vote: the one leaving the players loses their vote, and a vote waiting only for them can finish
+  let v = begin({ rounds: 3 }); for (let i = 0; i < 3; i++) { v = step(v, e, 'h', 'endRound'); if (v.phase === 'break') v = step(v, e, 'h', 'next'); }
+  assert.equal(v.phase, 'vote'); const who = v.players.filter(x => x !== v.millionaire); const leaver = who[0];
+  let w = v; for (const id of v.players.filter(x => x !== leaver)) w = step(w, e, id, 'vote', { target: id === who[1] ? who[2] : who[1] });
+  assert.equal(w.phase, 'vote', 'still waiting for one person');
+  const done = step(w, e, 'h', 'handover', { to: leaver }); assert.equal(done.phase, 'vote', 'the host now plays, so the host votes too'); assert.ok(!done.players.includes(leaver) && done.players.includes('h')); assert.equal(step(done, e, 'h', 'vote', { target: who[1] }).phase, 'end', 'and the vote finishes without the one who left the players');
+  const waits = step(v, e, 'p1', 'vote', { target: who[1] === 'p1' ? who[2] : who[1] }); assert.equal(waits.phase, 'vote');
+  // the old points stay
+  const scored = play(begin({ rounds: 3 }), e, { 'p1': [['kitchen', true, 2000]] }); const cur = scored.players.includes('p1') ? 'p1' : scored.players[0];
+  const sc = step(scored, e, 'h', 'handover', { to: cur === scored.millionaire ? scored.players.find(x => x !== scored.millionaire) : cur }); assert.ok(sc.players.length >= 3);
+}
 // ---- accusations
 {
   let { e, s } = start(6, { rounds: 3 }, 1000);

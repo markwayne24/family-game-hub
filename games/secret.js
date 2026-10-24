@@ -138,6 +138,7 @@ export const secret = {
       }
       if (a.type === 'timeout' && s.endAt && env.now >= s.endAt - 200) return finishRound(s, env.now);
       if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
+      if (a.type === 'handover' && ctl) return handover(s, a.data?.to, a.from, env);
       return s;
     }
 
@@ -147,6 +148,7 @@ export const secret = {
       if (a.type === 'next' && ctl) return beginRound(s, env.now);
       if (a.type === 'timeout' && s.breakEnd && env.now >= s.breakEnd - 200) return beginRound(s, env.now);
       if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
+      if (a.type === 'handover' && ctl) return handover(s, a.data?.to, a.from, env);
       if (a.type === 'accuse' && s.players.includes(a.from) && s.players.includes(a.data?.target) && a.data.target !== a.from && !s.accusations.some(x => x.by === a.from)) {
         const ok = a.data.target === s.millionaire;
         const accusations = [...s.accusations, { r: s.round, by: a.from, target: a.data.target, ok }];
@@ -163,6 +165,7 @@ export const secret = {
         return s.players.every(id => n.votes[id]) ? resolveVote(n) : n;
       }
       if (a.type === 'share') return shareClue(s, a.from, a.data?.round);
+      if (a.type === 'handover' && ctl) return handover(s, a.data?.to, a.from, env);
       if ((a.type === 'resolve' && ctl) || (a.type === 'timeout' && s.voteEnd && env.now >= s.voteEnd - 200)) return resolveVote(s);
       return s;
     }
@@ -224,6 +227,46 @@ function finishRound(s, now) {
     agendaRes: [...s.agendaRes, { round: s.round, key: s.agenda?.key, ok: res }], bonus: s.bonus + (res ? BONUS : 0),
     loc: {},
   };
+  return n;
+}
+
+// Hand the moderating over mid-game: to a player (who stops playing), to the host, to "random" (a player who isn't the
+// Millionaire, so the host can do it without knowing who that is) or to nobody (the app runs on timers).
+// Whoever moderated before goes back to playing, on whichever team is smaller.
+const MIN_AFTER_HANDOVER = 3;
+function handover(s, to, from, env) {
+  const hostId = env.hostId;
+  if (to === 'random') { const pool = s.players.filter(id => id !== s.millionaire && id !== hostId); if (!pool.length) return s; to = pickOne(pool); }
+  if (to !== null && !(typeof to === 'string' && s.names[to] != null)) return s;
+  if (to === s.gm || to === s.millionaire) return s;
+  const old = s.gm;
+  let players = s.players.slice(), team = { ...s.team };
+  // the new moderator stops playing
+  let n = { ...s };
+  if (to !== null && players.includes(to)) {
+    players = players.filter(id => id !== to); delete team[to];
+    const drop = o => { const { [to]: _x, ...rest } = o; return rest; };
+    n = { ...n, loc: drop(s.loc), visited: drop(s.visited), done: drop(s.done), goAt: drop(s.goAt), pts: drop(s.pts), jailed: drop(s.jailed),
+      jailedNow: (s.jailedNow ?? []).filter(id => id !== to),
+      votes: Object.fromEntries(Object.entries(s.votes).filter(([k, v]) => k !== to && v !== to)) };
+  }
+  // the one who moderated before joins the players again, on the smaller team
+  if (old != null && old !== to && s.names[old] != null && !players.includes(old)) {
+    const sizes = [0, 1].map(k => players.filter(id => team[id] === k).length);
+    players.push(old); team[old] = sizes[0] <= sizes[1] ? 0 : 1;
+    n = { ...n, total: { ...s.total, [old]: s.total[old] ?? 0 } };
+  }
+  if (players.length < MIN_AFTER_HANDOVER) return s;
+  n = { ...n, players, team, gm: to, mod: to === null ? 'none' : to === hostId ? 'host' : 'player', moderator: to === null || to === hostId ? null : to };
+  // nobody moderating: every clock has to run, so the app can carry on by itself
+  if (to === null) {
+    n.secs = n.secs || 120; n.breakSecs = n.breakSecs || 45; n.voteSecs = n.voteSecs || 120;
+    if (n.phase === 'round' && !n.endAt) n.endAt = env.now + n.secs * 1000;
+    if (n.phase === 'break' && !n.breakEnd) n.breakEnd = env.now + n.breakSecs * 1000;
+    if (n.phase === 'vote' && !n.voteEnd) n.voteEnd = env.now + n.voteSecs * 1000;
+  }
+  // a vote that was only waiting for the person who just left can now finish
+  if (n.phase === 'vote' && players.every(id => n.votes[id])) return resolveVote(n);
   return n;
 }
 

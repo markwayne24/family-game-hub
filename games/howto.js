@@ -86,6 +86,6 @@ export const HOWTO = {
       'Between rounds, each player can accuse someone once. If you are right, you win. If you are wrong, you sit out the next round.',
       'After the last round everyone votes. If most of you pick the Millionaire, you split the pot. If not, they take it all.',
     ],
-    tips: ['Cross names off in your notebook as clues come in.', 'If you are the Millionaire, do your tasks like everyone else so you blend in.', 'The moderator can end a round at any time, add time, or remove the time limit.'],
+    tips: ['Cross names off in your notebook as clues come in.', 'If you are the Millionaire, do your tasks like everyone else so you blend in.', 'The moderator can end a round at any time, add time, remove the time limit, or hand moderating over to someone else.'],
   },
 };

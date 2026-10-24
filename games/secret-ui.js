@@ -109,6 +109,22 @@ export function renderSecret(el, s, ui, game) {
     const mine = s.loc[ui.me], here = mine ? s.players.filter(id => id !== ui.me && s.loc[id] === mine) : [];
     return panel('🔍 Check a player', here.length ? `<p class="muted" style="margin-top:0">Learn which rooms they have visited. One check per round.</p><div class="bn-whos">${here.map(id => `<button class="sm-sus pick" data-tag="${id}">${avatar(nm(id))} ${esc(nm(id))}</button>`).join('')}</div>` : '<p class="muted" style="margin:0">Walk into the same room as someone to check which rooms they have visited. One check per round.</p>');
   };
+  // hand the moderating over: the moderator knows who the Millionaire is and picks a player; the host (who may not know) can pick a random one
+  const handoverBlock = () => {
+    if (!ctl) return '';
+    if (!m.handover) return '<button class="ghost" id="hoOpen">🔁 Hand over moderating</button>';
+    const opts = [];
+    if (gm) {
+      for (const id of s.players.filter(x => x !== p.millionaire)) opts.push([id, esc(nm(id))]);
+      if (hostId && !ui.isHost && hostId !== p.millionaire) opts.push([hostId, '🎬 The host']);
+    } else {
+      opts.push(['random', '🎲 A random player']);
+      if (hostId) opts.push([hostId, '🙋 I\'ll moderate']);
+    }
+    opts.push(['none', '🤖 Nobody (the app runs it)']);
+    return `<div class="sm-ho"><p class="muted" style="margin-top:0">Who moderates from now on? They stop playing, and you join the players.</p><div class="chips">${opts.map(([v, l]) => `<button class="chip pick" data-ho="${v}">${l}</button>`).join('')}</div><button class="ghost" id="hoCancel">Cancel</button></div>`;
+  };
+  const hostPanel = () => (ui.isHost && !gm ? panel('🛠 Host controls', handoverBlock()) : '');
   const sharedPanel = () => (s.shared.length ? panel('📢 Clues shared with everyone', `<ul class="sm-cl">${s.shared.map(c => `<li><b>R${c.round}</b> ${esc(c.text)} <small class="muted">· ${esc(nm(c.by))}</small></li>`).join('')}</ul>`, 'sm-shared') : '');
   // a clue I hold: share it with everyone, or keep it to myself (I can still share it later)
   const clueControls = (c, full) => {
@@ -186,9 +202,9 @@ export function renderSecret(el, s, ui, game) {
       }).join('');
       gmPanel = panel('🎙️ Moderator', `${m.gmShow ? `${secretLine()}<button class="ghost" id="gmHide">🙈 Hide the secrets</button>` : '<p class="muted" style="margin-top:0">The secrets are hidden so nobody can read them over your shoulder.</p><button id="gmShowBtn">👁 Show the secrets</button>'}
         ${rows}${m.gmShow ? `<label class="sm-lab">Change the Millionaire's agenda this round<select id="agendaNow">${AGENDAS.map(a => `<option value="${a.key}" ${a.key === p.agenda?.key ? 'selected' : ''}>${esc(a.text)}</option>`).join('')}</select></label>` : ''}
-        ${clockBtns}<button class="ghost danger" id="endRound">⏭ End this round now</button>`);
+        ${clockBtns}<button class="ghost danger" id="endRound">⏭ End this round now</button>${handoverBlock()}`);
     } else if (ui.isHost) {
-      gmPanel = panel('🛠 Host controls', `<p class="muted" style="margin-top:0">${s.mod === 'none' ? 'Nobody moderates. You can still end the round or add time if the group needs it.' : 'The moderator runs the round. These are here in case they step away.'}</p>${clockBtns}<button class="ghost danger" id="endRound">⏭ End this round now</button>`);
+      gmPanel = panel('🛠 Host controls', `<p class="muted" style="margin-top:0">${s.mod === 'none' ? 'Nobody moderates. You can still end the round or add time if the group needs it.' : 'The moderator runs the round. These are here in case they step away.'}</p>${clockBtns}<button class="ghost danger" id="endRound">⏭ End this round now</button>${handoverBlock()}`);
     }
     body = `${myTag}${seenLine()}${roleCard()}${panel(`🏆 Teams ${timer(s.endAt, '♾ no time limit')}`, `<div class="sm-tbs">${teamBars}</div>`)}
       ${mapOn ? panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, '<div id="mapSlot"></div>', 'sm-mappanel') : ''}
@@ -226,11 +242,11 @@ export function renderSecret(el, s, ui, game) {
     if (gm) {
       const r = p.agendaRes[p.agendaRes.length - 1], c = p.clues.find(x => x.round === last.round);
       gmPanel = panel('🎙️ Moderator', m.gmShow ? `${secretLine().replace(/<br>.*$/, '</p>')}<p>Agenda ${r?.ok ? '✅ completed' : '❌ missed'} by <b>${esc(nm(p.millionaire))}</b>: <i>${esc(agendaOf(r?.key)?.text ?? '')}</i></p>${c ? `<p>Clue sent to ${c.to.map(id => esc(nm(id))).join(', ')}${s.shared.some(x => x.round === c.round) ? ' (shared with everyone)' : ''}:<br><i>“${esc(c.text)}”</i></p>` : ''}
-        <label class="sm-lab">Next round's secret agenda<select id="agendaNext"><option value="">🎲 Random</option>${AGENDAS.map(a => `<option value="${a.key}" ${a.key === p.nextAgenda ? 'selected' : ''}>${esc(a.text)}</option>`).join('')}</select></label><button class="ghost" id="gmHide">🙈 Hide the secrets</button>`
-        : '<p class="muted" style="margin-top:0">The secrets are hidden so nobody can read them over your shoulder.</p><button id="gmShowBtn">👁 Show the secrets</button>');
+        <label class="sm-lab">Next round's secret agenda<select id="agendaNext"><option value="">🎲 Random</option>${AGENDAS.map(a => `<option value="${a.key}" ${a.key === p.nextAgenda ? 'selected' : ''}>${esc(a.text)}</option>`).join('')}</select></label><button class="ghost" id="gmHide">🙈 Hide the secrets</button>${handoverBlock()}`
+        : `<p class="muted" style="margin-top:0">The secrets are hidden so nobody can read them over your shoulder.</p><button id="gmShowBtn">👁 Show the secrets</button>${handoverBlock()}`);
     }
     if (ctl) bar = `<div class="bn-bar"><button id="next">▶ ${gm || s.mod === 'host' ? '' : 'Host: '}Start round ${s.round + 1}</button></div>`;
-    body = `${myTag}${roleCard()}${result}${clue}${agendaRes}${sharedPanel()}${intelPanel()}${accuse}${board}${gmPanel}${ctl ? '' : panel('', `<p class="muted" style="text-align:center;margin:0">${s.breakEnd ? 'The next round starts when the timer ends.' : `Waiting for ${waitFor} to start the next round…`}</p>`)}`;
+    body = `${myTag}${roleCard()}${result}${clue}${agendaRes}${sharedPanel()}${intelPanel()}${accuse}${board}${gmPanel}${hostPanel()}${ctl ? '' : panel('', `<p class="muted" style="text-align:center;margin:0">${s.breakEnd ? 'The next round starts when the timer ends.' : `Waiting for ${waitFor} to start the next round…`}</p>`)}`;
   }
 
   /* ================================ the final vote ================================ */
@@ -243,7 +259,7 @@ export function renderSecret(el, s, ui, game) {
     if (playing) vote = panel(`🗳 Who is the Secret Millionaire? ${timer(s.voteEnd)}`, `<p class="muted" style="margin-top:0">Everyone votes in secret. If most of you pick the right person, you split the pot. If not, the Millionaire takes it all!</p><div class="sm-votes">${suspects.map(id => `<button class="sm-sus pick ${myVote === id ? 'picked' : ''}" data-vote="${id}">${avatar(nm(id))} ${esc(nm(id))}${myVote === id ? ' ✔' : ''}</button>`).join('')}</div><p class="sm-vc"><b>${s.voted.length}/${s.players.length}</b> have voted</p>`);
     else vote = panel(`🗳 The final vote ${timer(s.voteEnd)}`, `<p><b>${s.voted.length}/${s.players.length}</b> have voted.</p>${gm ? (m.gmShow ? `<p class="sm-gm">The Millionaire is <b>${esc(nm(p.millionaire))}</b>.</p><button class="ghost" id="gmHide">🙈 Hide</button>` : '<button id="gmShowBtn">👁 Show the secrets</button>') : ''}`);
     if (ctl) bar = `<div class="bn-bar"><button id="resolve">✅ ${gm || s.mod === 'host' ? '' : 'Host: '}Close the vote now</button></div>`;
-    body = `${myTag}${roleCard()}${vote}${sharedPanel()}${intelPanel()}${board}${panel('🏆 Final scores', scoreBoardHtml(rows, { anim: false }).html)}`;
+    body = `${myTag}${roleCard()}${vote}${sharedPanel()}${intelPanel()}${board}${panel('🏆 Final scores', scoreBoardHtml(rows, { anim: false }).html)}${hostPanel()}${gm ? panel('🎙️ Moderator', handoverBlock()) : ''}`;
   }
 
   /* ================================ the reveal ================================ */
@@ -309,5 +325,8 @@ export function renderSecret(el, s, ui, game) {
   on('[data-acc]', b => { const t = b.dataset.acc; if (confirm(`Accuse ${nm(t)}? If you're wrong you sit out the next round.`)) { m.accuse = false; sfx('drumroll'); ui.act('accuse', { target: t }); redraw(); } });
   on('[data-vote]', b => { sfx('vote'); ui.act('vote', { target: b.dataset.vote }); });
   on('[data-room]', b => launch(b.dataset.room));
+  on('#hoOpen', () => { sfx('pop'); m.handover = true; redraw(); });
+  on('#hoCancel', () => { m.handover = false; redraw(); });
+  on('[data-ho]', b => { const v = b.dataset.ho; const label = b.textContent.trim(); if (confirm(`Hand over moderating to: ${label}?`)) { m.handover = false; m.gmShow = false; sfx('whoosh'); ui.act('handover', { to: v === 'none' ? null : v }); redraw(); } });
   on('[data-tag]', b => { sfx('mystic'); ui.act('tag', { target: b.dataset.tag }); });
 }
