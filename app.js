@@ -52,43 +52,55 @@ async function resumeHost(user, code) {
   enterRoom(code, store.get('hubName') || 'Host', true);
 }
 
-// Signed-out visitors see the landing page: a few games as a teaser, the rest stay locked until they sign in.
-const TEASER = ['werewolf', 'bingo', 'impostor'];
-
+// Signed-out visitors see the landing page: what Game Corner is, every game (searchable), and sign in.
+// It uses the full width on desktop; every other screen stays phone-width.
 function loginScreen(msg = '') {
-  const all = Object.values(GAMES);
-  const teaser = TEASER.map(id => GAMES[id]).filter(Boolean);
-  const locked = all.length - teaser.length;
+  const count = Object.keys(GAMES).length;
+  app.className = 'landing';
   app.innerHTML = `
-    <section class="hero">
-      <h1>🎲 ${BRAND}</h1>
-      <p class="tagline">Party games for the whole barkada. One phone hosts, everyone joins with a link. No app to install.</p>
-      <div class="row"><a class="btn" href="#signin">Sign in to play</a><span class="muted">${all.length} games inside</span></div>
-    </section>
-    <section class="card">
-      <h2>What's inside</h2>
-      <div class="catalog">${teaser.map(x => gameCardHtml(x)).join('')}${Array.from({ length: Math.min(locked, 3) }, () =>
-        '<div class="gtile locked" aria-hidden="true"><span class="gemoji">🔒</span><b>???</b><p class="muted">Sign in to unlock</p></div>').join('')}</div>
-      <p class="muted">+${locked} more games, from quick rounds to full Werewolf nights, once you sign in.</p>
-    </section>
-    <section class="card">
-      <h2>How it works</h2>
-      <ol class="steps"><li>Sign in with Google or email and create a room.</li><li>Share the invite link. Friends join with just a name.</li><li>Pick a game and play together, in the same room or on a call.</li></ol>
-    </section>
-    <div class="card auth">
-      <h2 id="signin">Sign in or create an account</h2>
-      <button type="button" class="google" id="google">${GOOGLE_ICON}<span>Continue with Google</span></button>
-      <p class="divider"><span>or use email</span></p>
-      <form id="f">
-        <input name="email" type="email" placeholder="Email" required autocomplete="email">
-        <input name="password" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password">
-        <p class="err" id="ferr">${esc(msg)}</p>
-        <p class="muted fine">By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
-        <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
-      </form>
+    <nav class="lnav">
+      <a class="brand" href="/"><img src="icons/icon-64.png" alt="" width="36" height="36"><span>${BRAND}</span></a>
+      <div class="lnav-links"><a href="#catalog">Games</a><a href="#how">How it works</a><a href="#jc">Join a room</a><a class="btn small" href="#signin">Sign in</a></div>
+    </nav>
+    <div class="lgrid">
+      <section class="lintro">
+        <h1>Party games for the whole barkada</h1>
+        <p class="tagline">${count} games to play together on your phones. One person hosts, everyone else joins with a link and a name. No app to install, and it's free.</p>
+        <div class="lstats"><span>🎲 ${count} games</span><span>👥 1 to 50+ players</span><span>📱 Phone, tablet or computer</span><span>💸 Free</span></div>
+        <div class="row lcta"><a class="btn" href="#catalog">Browse games</a><a class="btn ghostbtn" href="#signin">Sign in to host</a></div>
+      </section>
+      <div class="card auth" id="signin">
+        <h2>Sign in or create an account</h2>
+        <p class="muted">Hosts need an account. Joining a friend's room doesn't.</p>
+        <button type="button" class="google" id="google">${GOOGLE_ICON}<span>Continue with Google</span></button>
+        <p class="divider"><span>or use email</span></p>
+        <form id="f">
+          <input name="email" type="email" placeholder="Email" required autocomplete="email">
+          <input name="password" type="password" placeholder="Password (min 8 characters)" required minlength="8" autocomplete="current-password">
+          <p class="err" id="ferr">${esc(msg)}</p>
+          <p class="muted fine">By continuing you agree to our <a href="/terms">Terms</a> and <a href="/privacy">Privacy Policy</a>.</p>
+          <div class="row"><button type="submit">Sign in</button><button type="button" class="ghost" id="signup">Create account</button></div>
+        </form>
+      </div>
+      <div class="lgames">${catalogHtml({ title: 'All games', intro: 'Search or filter to find the right game for your group. Sign in to host any of them.' })}</div>
     </div>
+    <section class="lhow" id="how">
+      <h2>How it works</h2>
+      <ol class="lsteps">
+        <li><b>1</b><h3>Sign in and create a room</h3><p>Use Google or your email. You get a room with its own code.</p></li>
+        <li><b>2</b><h3>Share the link</h3><p>Friends and family open it on their phones and type a name. No account needed.</p></li>
+        <li><b>3</b><h3>Pick a game and play</h3><p>Everyone plays on their own screen, in the same room or on a video call.</p></li>
+      </ol>
+    </section>
     ${joinCodeHtml()}
     ${footerHtml()}`;
+  bindCatalog({ play: g => {
+    const card = app.querySelector('#signin');
+    app.querySelector('#ferr').textContent = '';
+    card.querySelector('.muted').textContent = `Sign in to host ${g.name}. Your friends join with just a name.`;
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('flash'); void card.offsetWidth; card.classList.add('flash');
+  } });
   bindJoinCode();
   const f = app.querySelector('#f');
   const ferr = app.querySelector('#ferr');
@@ -122,6 +134,7 @@ const GOOGLE_ICON = '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden
 
 // New email accounts must prove the address is real: Supabase emails a 6-digit code (and a link that does the same).
 function verifyScreen(email, msg = '') {
+  app.className = '';
   app.innerHTML = `
     <h1>🎲 ${BRAND}</h1>
     <form class="card" id="v">
@@ -152,14 +165,15 @@ function verifyScreen(email, msg = '') {
 // Games in the order the home screen lists them (best known first), then any game without details yet.
 const orderedGames = () => [...Object.keys(META).map(id => GAMES[id]).filter(Boolean), ...Object.values(GAMES).filter(g => !META[g.id])];
 
-// One game: what it is, who it's for and how long it takes. `how` adds the rules, folded away.
-const gameCardHtml = (x, how = false) => {
+// One game: what it is, who it's for and how long it takes. `how` adds the rules, folded away; `play` adds a sign-in button (landing page).
+const gameCardHtml = (x, how = false, play = false) => {
   const m = META[x.id];
   const facts = m ? `<div class="gfacts"><span>👥 ${playersLabel(m)}</span><span>⏱ ${m.minutes} min</span></div>
       <div class="gtags"><span class="gtag">${TYPES[m.type]}</span>${m.kids ? '<span class="gtag kids">👧 Kid-friendly</span>' : ''}</div>` : '';
   return `<article class="gtile"><div class="ghead"><span class="gemoji">${x.emoji}</span><b>${esc(x.name)}</b></div>
       <p class="gpitch">${esc(m?.pitch ?? HOWTO[x.id]?.goal ?? '')}</p>${facts}
-      ${how && HOWTO[x.id] ? `<details class="ghow"><summary>How to play</summary>${howtoHtml(x)}</details>` : ''}</article>`;
+      ${how && HOWTO[x.id] ? `<details class="ghow"><summary>How to play</summary>${howtoHtml(x)}</details>` : ''}
+      ${play ? `<button class="ghost small gplay" data-play="${x.id}">Sign in to play</button>` : ''}</article>`;
 };
 
 // Guests with a room code don't need an account: joining a room signs them in anonymously.
@@ -176,30 +190,48 @@ function bindJoinCode() {
   };
 }
 
-// Signed-in home: every game with its details, filtered by group size and type.
+// Every game with its details, searchable and filtered by group size and type. Used on the landing page and the signed-in home.
 const GROUPS = [['any', 'Any size'], ['1', 'Just me'], ['2', '2'], ['3', '3–4'], ['5', '5+']];
-const catalogHtml = () => `<section class="card" id="catalog">
-    <h2>Pick a game</h2>
-    <p class="muted">${Object.keys(GAMES).length} games. Choose one after you create a room. Tap "How to play" for the rules.</p>
+const catalogHtml = ({ title = 'Pick a game', intro = 'Choose one after you create a room. Tap "How to play" for the rules.' } = {}) => `<section class="card" id="catalog">
+    <div class="cathead"><h2>${title}</h2><span class="muted" id="gcount"></span></div>
+    <p class="muted">${intro}</p>
+    <div class="search"><span aria-hidden="true">🔎</span><input id="gsearch" type="search" placeholder="Search games, e.g. werewolf, words, kids" autocomplete="off" aria-label="Search games"></div>
     <div class="filters">
       <div class="chips" role="group" aria-label="How many are playing?"><span class="flabel">👥 Playing</span>${GROUPS.map(([v, l]) => `<button class="chip pick" data-group="${v}">${l}</button>`).join('')}</div>
       <div class="chips" role="group" aria-label="Type of game"><span class="flabel">🎲 Type</span><button class="chip pick" data-type="any">All</button>${Object.entries(TYPES).map(([v, l]) => `<button class="chip pick" data-type="${v}">${l}</button>`).join('')}</div>
     </div>
     <div class="catalog" id="glist"></div>
   </section>`;
-function bindCatalog() {
-  const f = { group: store.get('hubGroup') || 'any', type: store.get('hubType') || 'any' };
+// What a search looks through: the name, the pitch, the type, the goal, and "kids" for kid-friendly games.
+const searchText = x => {
+  const m = META[x.id];
+  return [x.name, m?.pitch, m && TYPES[m.type], HOWTO[x.id]?.goal, m?.kids && 'kids kid-friendly family'].filter(Boolean).join(' ').toLowerCase();
+};
+function bindCatalog({ play = null } = {}) {
+  const f = { q: '', group: store.get('hubGroup') || 'any', type: store.get('hubType') || 'any' };
+  const all = orderedGames();
   const draw = () => {
-    const list = orderedGames().filter(x => {
+    const words = f.q.toLowerCase().split(/\s+/).filter(Boolean);
+    const list = all.filter(x => {
       const m = META[x.id];
+      if (words.length && !words.every(w => searchText(x).includes(w))) return false;
       if (!m) return f.group === 'any' && f.type === 'any';
       return (f.group === 'any' || fitsGroup(m, +f.group)) && (f.type === 'any' || m.type === f.type);
     });
-    app.querySelector('#glist').innerHTML = list.map(x => gameCardHtml(x, true)).join('')
-      || '<p class="muted">No game matches. Try another group size or type.</p>';
+    app.querySelector('#glist').innerHTML = list.map(x => gameCardHtml(x, true, !!play)).join('')
+      || `<div class="gempty"><p>No game matches${f.q ? ` "${esc(f.q)}"` : ''}.</p><button class="ghost small" id="gclear">Show all games</button></div>`;
+    app.querySelector('#gcount').textContent = list.length === all.length ? `${all.length} games` : `${list.length} of ${all.length} games`;
     app.querySelectorAll('[data-group]').forEach(b => b.setAttribute('aria-pressed', b.dataset.group === f.group));
     app.querySelectorAll('[data-type]').forEach(b => b.setAttribute('aria-pressed', b.dataset.type === f.type));
+    app.querySelector('#gclear')?.addEventListener('click', () => {
+      Object.assign(f, { q: '', group: 'any', type: 'any' });
+      store.set('hubGroup', 'any'); store.set('hubType', 'any');
+      app.querySelector('#gsearch').value = '';
+      draw();
+    });
+    if (play) app.querySelectorAll('[data-play]').forEach(b => b.onclick = () => play(GAMES[b.dataset.play]));
   };
+  app.querySelector('#gsearch').oninput = e => { f.q = e.target.value.trim(); draw(); };
   app.querySelectorAll('[data-group]').forEach(b => b.onclick = () => { f.group = b.dataset.group; store.set('hubGroup', f.group); draw(); });
   app.querySelectorAll('[data-type]').forEach(b => b.onclick = () => { f.type = b.dataset.type; store.set('hubType', f.type); draw(); });
   draw();
@@ -217,6 +249,7 @@ async function signOut() {
 }
 
 async function hostHome(user, msg = '') {
+  app.className = '';
   S.me = user.id;
   let { data: row } = await sb.from('hosts').select('user_id').maybeSingle();
   if (!row) {
@@ -262,6 +295,7 @@ async function hostHome(user, msg = '') {
 }
 
 async function joinScreen(code, msg = '') {
+  app.className = '';
   const { data: { session } } = await sb.auth.getSession();
   if (!session) await sb.auth.signInAnonymously();
   const { data: ok } = await sb.rpc('room_exists', { room_code: code });
@@ -457,6 +491,7 @@ function enterRoom(code, name, isHost) {
 }
 
 function buildShell() {
+  app.className = '';
   app.innerHTML = `
     <div id="topbar">
       <div class="topcode" title="Room code"><span class="muted">Room</span> <b class="code">${esc(S.code)}</b></div>

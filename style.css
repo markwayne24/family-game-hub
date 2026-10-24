@@ -1235,3 +1235,52 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 
 .sm-ho{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}.sm-ho .chips{margin:8px 0}.sm-ho button.ghost{width:100%;margin-top:6px}
 .sm .banner{animation:none}
+
+/* ---------- landing page (signed out): full width on desktop, one column on phones ---------- */
+#app.landing{max-width:1180px}
+.landing h1{animation:none}
+.lnav{position:sticky;top:0;z-index:20;display:flex;align-items:center;justify-content:space-between;gap:12px;margin:-16px -16px 8px;padding:10px 16px;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:800;font-size:1.15rem}
+.brand img{border-radius:10px}
+.lnav-links{display:flex;align-items:center;gap:18px}
+.lnav-links a:not(.btn){color:var(--ink);text-decoration:none;font-weight:600;font-size:.95rem}
+.lnav-links a:not(.btn):hover{color:var(--accent)}
+a.btn.small{padding:8px 14px;font-size:.95rem}
+a.btn.ghostbtn{background:transparent;color:var(--accent);border:1px solid var(--accent)}
+.lgrid{display:flex;flex-direction:column;gap:0}
+.lintro{order:1;padding:20px 0 4px}
+.lgames{order:2}
+.lgrid>.auth{order:3}
+.lintro h1{font-size:clamp(2rem,6vw,3.2rem);line-height:1.1;letter-spacing:-.02em;margin:0 0 12px}
+.lintro .tagline{font-size:clamp(1.05rem,2.2vw,1.25rem);color:var(--mute);max-width:40em}
+.lstats{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 18px}
+.lstats span{background:var(--card);border:1px solid var(--line);border-radius:99px;padding:6px 12px;font-size:.9rem;font-weight:600}
+.lcta{gap:10px}
+.auth.flash{animation:authFlash 1.2s ease}
+@keyframes authFlash{0%,100%{box-shadow:none}30%{box-shadow:0 0 0 4px color-mix(in srgb,var(--accent) 45%,transparent)}}
+#signin,#catalog,#how,#jc{scroll-margin-top:76px}
+.cathead{display:flex;align-items:baseline;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.cathead h2{margin:0}
+.search{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--line);border-radius:14px;padding:0 12px;margin:10px 0 4px}
+.search:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px color-mix(in srgb,var(--accent) 20%,transparent)}
+.search input{border:0;background:transparent;margin:0;padding:12px 0;outline:none;font-size:1rem}
+.gempty{grid-column:1/-1;text-align:center;padding:24px 8px;color:var(--mute)}
+.gplay{margin-top:auto;align-self:flex-start}
+.lhow{margin:24px 0 8px}
+.lhow h2{text-align:center;margin-bottom:14px}
+.lsteps{list-style:none;padding:0;margin:0;display:grid;gap:12px}
+.lsteps li{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:16px}
+.lsteps b{display:inline-grid;place-items:center;width:34px;height:34px;border-radius:50%;background:var(--accent);color:#fff;font-size:1rem}
+.lsteps h3{margin:10px 0 4px;font-size:1.05rem}
+.lsteps p{margin:0;color:var(--mute)}
+.landing #jc{max-width:560px;margin-left:auto;margin-right:auto}
+#app.landing #glist{grid-template-columns:repeat(auto-fill,minmax(250px,1fr))}
+@media (max-width:719px){.lnav-links a:not(.btn){display:none}}
+@media (min-width:720px){.lsteps{grid-template-columns:repeat(3,1fr)}}
+@media (min-width:960px){
+  .lgrid{display:grid;grid-template-columns:minmax(0,1fr) 380px;grid-template-areas:"intro auth" "games games";column-gap:32px;align-items:center}
+  .lintro{grid-area:intro;padding:32px 0}
+  .lgrid>.auth{grid-area:auth;margin:24px 0}
+  .lgames{grid-area:games}
+  .lgames .card{padding:24px}
+}
