@@ -13,7 +13,7 @@ const DECOR = {
   hall: [['🪴', 60, 300], ['🪴', 540, 300], ['🖼️', 150, 500], ['🖼️', 450, 500], ['🕯️', 60, 500], ['🕯️', 540, 500]],
 };
 const hue = name => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
-const SEND_EVERY = 400, KEEPALIVE = 4000;
+const SEND_EVERY = 400, KEEPALIVE = 4000, DWELL_MS = 450;
 
 export function createLiveMap(o) {
   const box = document.createElement('div');
@@ -22,7 +22,7 @@ export function createLiveMap(o) {
   const cv = box.querySelector('canvas'), g = cv.getContext('2d'), hint = box.querySelector('.sm-hint'), btn = box.querySelector('.sm-usebtn'), tagbar = box.querySelector('.sm-tagbar');
   let opt = o, destroyed = false, raf = 0, off = 0, last = performance.now(), t = 0;
   const idx = id => Math.max(0, opt.players.indexOf(id));
-  const st = { me: { ...spawn(idx(opt.me), opt.players.length) }, others: {}, input: { dx: 0, dy: 0 }, keys: new Set(), joy: null, near: null, room: null, visited: new Set(), busy: null, face: 1, sentAt: 0, sent: { x: -1, y: -1, b: null }, dirty: true };
+  const st = { armed: false, nearSince: 0, me: { ...spawn(idx(opt.me), opt.players.length) }, others: {}, input: { dx: 0, dy: 0 }, keys: new Set(), joy: null, near: null, room: null, visited: new Set(), busy: null, face: 1, sentAt: 0, sent: { x: -1, y: -1, b: null }, dirty: true };
   const api = { box, st, opt: () => opt, setInput(dx, dy) { st.input.dx = dx; st.input.dy = dy; }, teleport(x, y) { if (canStand(x, y)) { st.me.x = x; st.me.y = y; st.dirty = true; } }, update, destroy, setBusy };
 
   function other(id) {
@@ -56,9 +56,9 @@ export function createLiveMap(o) {
     if (opt.watching) { hint.textContent = 'Watching the mansion live.'; btn.hidden = true; return; }
     btn.hidden = false;
     if (!opt.canMove) { hint.textContent = '🚔 You are sitting this round out.'; btn.hidden = true; return; }
-    if (st.near && !done) { const r = roomOf(st.near); hint.textContent = `You are in the ${r.name}.`; btn.disabled = false; btn.textContent = `${r.emoji} ${r.title}: play!`; }
+    if (st.near && !done) { const r = roomOf(st.near); hint.textContent = `You are in the ${r.name}. The task opens by itself, or tap the button.`; btn.disabled = false; btn.textContent = `${r.emoji} ${r.title}: play!`; }
     else if (st.near) { const r = roomOf(st.near); hint.textContent = `You already finished the ${r.name}.`; btn.disabled = true; btn.textContent = '✅ Done here'; }
-    else { hint.textContent = 'Drag on the map (or use the arrow keys) to walk. Step on a glowing pad to play its task.'; btn.disabled = true; btn.textContent = 'Walk to a glowing pad'; }
+    else { hint.textContent = 'Drag on the map (or use the arrow keys) to walk. Stand on a glowing pad and its task opens.'; btn.disabled = true; btn.textContent = 'Walk to a glowing pad'; }
   }
   btn.addEventListener('click', () => { if (st.near && opt.canMove && !opt.doneRooms.includes(st.near) && !st.busy) opt.onUse(st.near); });
 
@@ -101,7 +101,10 @@ export function createLiveMap(o) {
       if (dx || dy) { const n = step(st.me, dx, dy, dt, SPEEDS[opt.speed] ?? 1); if (n.x !== st.me.x || n.y !== st.me.y) { st.me = n; st.dirty = true; } if (Math.abs(dx) > 0.2) st.face = dx > 0 ? 1 : -1; }
     }
     const near = nearStation(st.me.x, st.me.y);
-    if (near !== st.near) { st.near = near; paintUse(); }
+    if (near !== st.near) { st.near = near; st.nearSince = performance.now(); st.armed = true; paintUse(); }
+    // standing on a task pad for a moment opens its task, so nobody has to find a button. After closing it you must step off and
+    // back on (or tap the button) to open it again, and just walking across a pad does nothing.
+    if (st.near && st.armed && opt.canMove && !st.busy && !opt.doneRooms.includes(st.near) && performance.now() - st.nearSince >= DWELL_MS) { st.armed = false; opt.onUse(st.near); }
     const room = roomAt(st.me.x, st.me.y);
     if (room !== st.room) { st.room = room; if (room && !st.visited.has(room)) { st.visited.add(room); opt.onVisit?.(room); } }
     const k = 1 - Math.exp(-dt * 10);
