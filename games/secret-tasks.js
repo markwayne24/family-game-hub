@@ -392,7 +392,7 @@ export function openTask(roomId, { anchor, onFinish, onQuit, kind, level = 1 }) 
   kind = kind ?? globalThis.__forceTask?.[roomId] ?? room.tasks[rnd(room.tasks.length)];   // (the hook is for browser tests)
   const info = TASKS[kind];
   const o = document.createElement('div');
-  o.className = 'st-overlay';
+  o.className = `st-overlay st-in-${room.id}`;
   const timers = [];
   const later = (fn, ms) => { const t = setTimeout(() => { if (o.isConnected) fn(); }, ms); timers.push(t); return t; };
   const close = () => { timers.forEach(clearTimeout); o.querySelector('.st-body')?._stop?.(); clearInterval(watch); o.remove(); };
@@ -404,15 +404,27 @@ export function openTask(roomId, { anchor, onFinish, onQuit, kind, level = 1 }) 
   sfx('pop');
   o.querySelector('.st-x').addEventListener('click', () => { if (done) return; close(); onQuit?.(); });
   const body = o.querySelector('.st-body');
+  // 3, 2, 1 before the task starts, so nobody is caught out (tests can switch it off)
+  const ready = run => {
+    if (globalThis.__noCountdown || reduceMotion()) return run();
+    let n = 3;
+    const tick = () => {
+      if (!o.isConnected) return;
+      body.innerHTML = n > 0 ? `<div class="st-cd" key="${n}">${n}</div><p class="st-how">Get ready…</p>` : '<div class="st-cd go">GO!</div>';
+      sfx(n > 0 ? 'blip' : 'ding');
+      if (n-- > 0) later(tick, 600); else later(run, 450);
+    };
+    tick();
+  };
   o.querySelector('#stGo').addEventListener('click', () => {
     sfx('flip');
-    GAMES[kind](body, (ok, ms) => {
+    ready(() => GAMES[kind](body, (ok, ms) => {
       if (done) return; done = true; body._stop?.();
       const pts = taskPoints(ok, ms);
       sfx(ok ? 'win' : 'lose');
       body.innerHTML = `<div class="st-result ${ok ? 'good' : 'bad'}"><div class="st-big">${ok ? '✅' : '❌'}</div><h3>${ok ? 'Task complete!' : 'Task failed'}</h3><p>${ok ? `+${pts} points for your team` : 'No points this time.'}</p><small>${(ms / 1000).toFixed(1)} seconds</small><button class="st-go" id="stOk">Continue</button></div>`;
       o.querySelector('#stOk').addEventListener('click', () => { close(); onFinish(ok, ms, kind); });
-    }, { later, level });
+    }, { later, level }));
   });
   return close;
 }

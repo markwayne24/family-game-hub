@@ -1,8 +1,8 @@
-import { sfx, fresh, memo, confetti } from './fx.js';
+import { sfx, fresh, memo, confetti, isMuted, setMuted } from './fx.js';
 import { ROOMS, TEAMS, TASKS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
 import { openTask } from './secret-tasks.js';
 import { createLiveMap } from './secret-map.js';
-import { revealScene, roleScene } from './secret-fx.js';
+import { revealScene, roleScene, roundIntro, splash } from './secret-fx.js';
 import { avatar, scoreBoardHtml } from './impostor-fx.js';
 
 const MODS = {
@@ -64,26 +64,31 @@ export function renderSecret(el, s, ui, game) {
 
   // leaving a room's task when the round is over
   if (s.phase !== 'round' && el._closeTask) { el._closeTask(); el._closeTask = null; }
+  // before every round: "Round 2, medium tasks, 3, 2, 1, GO". The map is frozen until GO so it is fair. In round 1 it waits for the role reveal.
+  const startIntro = () => { el._introPending = false; roundIntro({ round: s.round, rounds: s.rounds, level: s.level, team: TEAMS[myTeam], anchor: el, onDone: () => el._lm?.setFrozen(false) }); };
   if (fresh(el, 'round', `${s.round}:${s.phase}`)) {
-    if (s.phase === 'round') { sfx('whoosh'); m.peek = false; m.gmShow = false; }
-    else if (s.phase === 'break') sfx('ding');
-    else if (s.phase === 'vote') sfx('drumroll');
+    if (s.phase === 'round') {
+      sfx('whoosh'); m.peek = false; m.gmShow = false;
+      if (playing && Date.now() - s.startAt < 8000) {
+        el._lm?.setFrozen(true); setTimeout(() => el._lm?.setFrozen(false), 25000);   // (a safety net)
+        if (s.round === 1) el._introPending = true; else startIntro();
+      }
+    } else if (s.phase === 'break') { splash({ emoji: '⏱', title: 'Round complete!', sub: 'Who won? Any clues?', sound: 'ding' }); }
+    else if (s.phase === 'vote') splash({ emoji: '🗳', title: 'The final vote', sub: 'Who is the Secret Millionaire?', sound: 'drumroll', ms: 2000 });
   }
-  // the first thing a player sees: the same "your secret role is ready" screen for everybody, so nobody can tell who is who
   if (s.phase === 'round' && s.round === 1 && playing && p && fresh(el, 'roleScene', s.startAt)) {
-    roleScene({ isM: !!p.millionaire, team: TEAMS[myTeam], agenda: agendaOf(p.agenda?.key)?.text, bonus: money(BONUS), anchor: el });
+    roleScene({ isM: !!p.millionaire, team: TEAMS[myTeam], agenda: agendaOf(p.agenda?.key)?.text, bonus: money(BONUS), anchor: el, onClose: () => { if (el._introPending) startIntro(); } });
   }
   if (!el._tick) {
     el._tick = setInterval(() => {
-      if (!el.isConnected || !el.classList.contains('smstage')) { clearInterval(el._tick); el._tick = null; return; }
+      if (!el.isConnected || !el.classList.contains('smstage')) { clearInterval(el._tick); el._tick = null; el._full?.remove(); el._full = null; el._lm?.destroy(); el._lm = null; return; }
       const st = el._s, gone = !!(el._ui.isHost && st.gm != null && st.away?.[st.gm] && Date.now() - st.away[st.gm] > 20000);
       if (gone !== !!el._modGone) { el._modGone = gone; redraw(); }
       const at = game.deadline(el._s);
-      const out = el.querySelector('[data-left]');
-      if (!at || !out) return;
+      const outs = [...el.querySelectorAll('[data-left]'), ...(el._full ? el._full.querySelectorAll('[data-left]') : [])];
+      if (!at || !outs.length) return;
       const left = Math.max(0, at - Date.now());
-      out.textContent = fmt(left);
-      out.classList.toggle('hot', left <= 10000);
+      for (const out of outs) { out.textContent = fmt(left); out.classList.toggle('hot', left <= 10000); }
       const sec = Math.ceil(left / 1000);
       if (left <= 10000 && left > 0 && sec !== el._lastSec) { el._lastSec = sec; sfx('tick'); }
     }, 500);
@@ -94,6 +99,17 @@ export function renderSecret(el, s, ui, game) {
   const timer = (at, none = '') => (at ? `<span class="sm-timer">⏱ <b data-left>${fmt(Math.max(0, at - Date.now()))}</b></span>` : none ? `<span class="sm-timer">${none}</span>` : '');
   const secsLabel = n => (n ? (n % 60 === 0 ? `${n / 60} min` : `${n} sec`) : '');
   let body = '', bar = '';
+
+  // Full screen while walking: the mansion fills the phone with just a slim bar on top. ☰ goes back to the normal page with everything else.
+  const immersive = mapOn && playing && m.full !== false && !!el._lm;
+  if (immersive) {
+    if (!el._full) { el._full = document.createElement('div'); el._full.className = 'sm-full'; el._full.innerHTML = '<div class="smf-hud"></div><div class="smf-stage"></div>'; document.body.append(el._full); }
+    const L = el._full, mineDone = p?.doneRooms?.length ?? 0;
+    L.querySelector('.smf-hud').innerHTML = `<span class="smf-pill">R${s.round}/${s.rounds}</span>${s.endAt ? timer(s.endAt) : '<span class="sm-timer">♾</span>'}<span class="smf-pill">${TEAMS.map(x => `<span class="${myTeam === x.id ? 'smf-me' : ''}">${x.emoji} ${s.teamPts[x.id]}</span>`).join(' · ')}</span><span class="smf-pill">✅ ${mineDone}/${ROOMS.length}</span><span class="grow"></span>${p ? '<button class="smf-btn" id="smfRole" aria-label="My secret role">🎭</button>' : ''}<button class="smf-btn" id="smfMenu" aria-label="Menu">☰</button>`;
+    const stage = L.querySelector('.smf-stage'); if (el._lm.box.parentElement !== stage) stage.append(el._lm.box);
+    L.querySelector('#smfMenu').onclick = () => { sfx('pop'); m.full = false; redraw(); };
+    const role = L.querySelector('#smfRole'); if (role) role.onclick = () => roleScene({ isM: !!p.millionaire, team: TEAMS[myTeam], agenda: agendaOf(p.agenda?.key)?.text, bonus: money(BONUS), anchor: el });
+  } else if (el._full) { el._full.remove(); el._full = null; }
 
   /* ---- who you are: your team, and a role card that is hidden until you tap it (the same for everyone) ---- */
   const myTag = playing && myTeam != null ? `<div class="sm-me">You are on ${teamTag(myTeam)}${sits ? ' <span class="sm-sit">🚔 sitting this round out</span>' : ''}</div>` : '';
@@ -213,9 +229,10 @@ export function renderSecret(el, s, ui, game) {
       gmPanel = panel('🛠 Host controls', `<p class="muted" style="margin-top:0">${s.mod === 'none' ? 'Nobody moderates. You can still end the round or add time if the group needs it.' : 'The moderator runs the round. These are here in case they step away.'}</p>${clockBtns}<button class="ghost danger" id="endRound">⏭ End this round now</button>${handoverBlock()}`);
     }
     body = `${myTag}${seenLine()}${roleCard()}${panel(`🏆 Teams ${timer(s.endAt, '♾ no time limit')}`, `<div class="sm-tbs">${teamBars}</div>`)}
-      ${mapOn ? panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, '<div id="mapSlot"></div>', 'sm-mappanel') : ''}
+      ${mapOn ? panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, immersive ? '<p class="muted" style="margin:0">The map is full screen.</p>' : '<div id="mapSlot"></div>', 'sm-mappanel') : ''}
       ${mapOn ? '' : panel(`🏠 The mansion${playing && !sits ? ` <span class="bn-count">${mineDone}/${ROOMS.length} done</span>` : ''}`, `${playing && !sits ? '<p class="muted" style="margin-top:0">Tap a room to walk in and do its task. Everyone can see which room you\'re in.</p>' : sits ? '<p class="sm-sitmsg">🚔 You guessed wrong, so you sit this round out. Watch the others!</p>' : '<p class="muted" style="margin-top:0">Watching the mansion live.</p>'}<div class="sm-map">${tiles}</div>`)}
       ${roomCheck()}${intelPanel()}${sharedPanel()}${gmPanel}`;
+    if (mapOn && playing && !immersive) bar = '<div class="bn-bar"><button id="smfBack">🗺 Back to the full-screen map</button></div>';
   }
 
   /* ================================ between rounds ================================ */
@@ -331,6 +348,7 @@ export function renderSecret(el, s, ui, game) {
   on('[data-acc]', b => { const t = b.dataset.acc; if (confirm(`Accuse ${nm(t)}? If you're wrong you sit out the next round.`)) { m.accuse = false; sfx('drumroll'); ui.act('accuse', { target: t }); redraw(); } });
   on('[data-vote]', b => { sfx('vote'); ui.act('vote', { target: b.dataset.vote }); });
   on('[data-room]', b => launch(b.dataset.room));
+  on('#smfBack', () => { sfx('pop'); m.full = true; redraw(); });
   on('#hoOpenAlert', () => { sfx('pop'); m.handover = true; redraw(); });
   on('#hoOpen', () => { sfx('pop'); m.handover = true; redraw(); });
   on('#hoCancel', () => { m.handover = false; redraw(); });

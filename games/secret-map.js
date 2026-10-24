@@ -1,29 +1,24 @@
 import { W, H, R, SPEEDS, AREAS, STATIONS, STATION_RADIUS, step, spawn, roomAt, nearStation, canStand } from './secret-world.js';
 import { ROOMS, roomOf, TEAMS } from './secret-data.js';
 import { reduceMotion } from './fx.js';
+import { paintMansion, drawPad, drawBuddy, drawDust } from './secret-art.js';
 
 // The live map: a top-down mansion drawn on a canvas, everyone walking at once.
 // Everything here lives on this phone. Positions are shared with the others as small, throw-away messages
 // (never stored in the game state), a few times a second while someone is moving.
 
-const FLOORS = { hall: '#d9c8a4', door: '#c9b78f', kitchen: '#ffe3c2', library: '#dccbf5', garage: '#d3dbe0', garden: '#cdeccb', vault: '#fff0b3' };
-const DECOR = {
-  kitchen: [['🧊', 262, 70], ['🍳', 70, 70], ['🥖', 262, 232]], library: [['📚', 535, 70], ['🛋️', 335, 232], ['🕰️', 535, 232]],
-  garage: [['🚗', 80, 728], ['🧰', 262, 728], ['🛞', 262, 590]], garden: [['🌳', 535, 590], ['🌷', 335, 590], ['⛲', 535, 728]], vault: [['💎', 262, 362], ['💰', 338, 440]],
-  hall: [['🪴', 60, 300], ['🪴', 540, 300], ['🖼️', 150, 500], ['🖼️', 450, 500], ['🕯️', 60, 500], ['🕯️', 540, 500]],
-};
 const hue = name => { let h = 0; for (const c of String(name)) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
 const SEND_EVERY = 400, KEEPALIVE = 4000, DWELL_MS = 450;
 
 export function createLiveMap(o) {
   const box = document.createElement('div');
   box.className = 'sm-livemap';
-  box.innerHTML = '<canvas class="sm-canvas" aria-label="The mansion. Drag to walk."></canvas><div class="sm-use"><p class="sm-hint"></p><button class="sm-usebtn" disabled></button></div><div class="sm-tagbar" hidden></div>';
+  box.innerHTML = '<div class="sm-cvwrap"><canvas class="sm-canvas" aria-label="The mansion. Drag to walk."></canvas></div><div class="sm-use"><p class="sm-hint"></p><button class="sm-usebtn" disabled></button></div><div class="sm-tagbar" hidden></div>';
   const cv = box.querySelector('canvas'), g = cv.getContext('2d'), hint = box.querySelector('.sm-hint'), btn = box.querySelector('.sm-usebtn'), tagbar = box.querySelector('.sm-tagbar');
   let opt = o, destroyed = false, raf = 0, off = 0, last = performance.now(), t = 0;
   const idx = id => Math.max(0, opt.players.indexOf(id));
   const st = { armed: false, nearSince: 0, me: { ...spawn(idx(opt.me), opt.players.length) }, others: {}, input: { dx: 0, dy: 0 }, keys: new Set(), joy: null, near: null, room: null, visited: new Set(), busy: null, face: 1, sentAt: 0, sent: { x: -1, y: -1, b: null }, dirty: true };
-  const api = { box, st, opt: () => opt, setInput(dx, dy) { st.input.dx = dx; st.input.dy = dy; }, teleport(x, y) { if (canStand(x, y)) { st.me.x = x; st.me.y = y; st.dirty = true; } }, update, destroy, setBusy };
+  const api = { box, st, opt: () => opt, setFrozen(v) { st.frozen = !!v; }, setInput(dx, dy) { st.input.dx = dx; st.input.dy = dy; }, teleport(x, y) { if (canStand(x, y)) { st.me.x = x; st.me.y = y; st.dirty = true; } }, update, destroy, setBusy };
 
   function other(id) {
     return (st.others[id] ??= { ...spawn(idx(id), opt.players.length), tx: 0, ty: 0, busy: null, face: 1, init: false });
@@ -96,84 +91,79 @@ export function createLiveMap(o) {
 
   /* ---- each frame ---- */
   function tick(dt) {
-    if (opt.canMove && !st.busy) {
+    if (opt.canMove && !st.busy && !st.frozen) {
       const [dx, dy] = steer();
-      if (dx || dy) { const n = step(st.me, dx, dy, dt, SPEEDS[opt.speed] ?? 1); if (n.x !== st.me.x || n.y !== st.me.y) { st.me = n; st.dirty = true; } if (Math.abs(dx) > 0.2) st.face = dx > 0 ? 1 : -1; }
+      if (dx || dy) { const n = step(st.me, dx, dy, dt, SPEEDS[opt.speed] ?? 1); if (n.x !== st.me.x || n.y !== st.me.y) { st.me = n; st.dirty = true; st.moving = true; } else st.moving = false; if (Math.abs(dx) > 0.2) st.face = dx > 0 ? 1 : -1; } else st.moving = false;
     }
     const near = nearStation(st.me.x, st.me.y);
     if (near !== st.near) { st.near = near; st.nearSince = performance.now(); st.armed = true; paintUse(); }
     // standing on a task pad for a moment opens its task, so nobody has to find a button. After closing it you must step off and
     // back on (or tap the button) to open it again, and just walking across a pad does nothing.
-    if (st.near && st.armed && opt.canMove && !st.busy && !opt.doneRooms.includes(st.near) && performance.now() - st.nearSince >= DWELL_MS) { st.armed = false; opt.onUse(st.near); }
+    if (st.near && st.armed && opt.canMove && !st.busy && !st.frozen && !opt.doneRooms.includes(st.near) && performance.now() - st.nearSince >= DWELL_MS) { st.armed = false; opt.onUse(st.near); }
     const room = roomAt(st.me.x, st.me.y);
     if (room !== st.room) { st.room = room; if (room && !st.visited.has(room)) { st.visited.add(room); opt.onVisit?.(room); } }
+    if (st.frozen || st.busy) st.moving = false;
+    if (st.moving) puff(st.me.x, st.me.y);
     const k = 1 - Math.exp(-dt * 10);
     for (const [id, p] of Object.entries(st.others)) {
       if (!p.init) continue;
       const dx = p.tx - p.x; if (Math.abs(dx) > 0.5) p.face = dx > 0 ? 1 : -1;
-      p.x += dx * k; p.y += (p.ty - p.y) * k;
+      p.x += dx * k; p.y += (p.ty - p.y) * k; p.moving = Math.hypot(p.tx - p.x, p.ty - p.y) > 1.5; if (p.moving) puff(p.x, p.y);
     }
+    for (const d of dust) d.life -= dt * 2.2;
+    while (dust.length && dust[0].life <= 0) dust.shift();
     paintTags(false);
     send(false);
   }
 
   /* ---- drawing ---- */
-  const rr = (x, y, w, h, r) => { g.beginPath(); g.roundRect ? g.roundRect(x, y, w, h, r) : g.rect(x, y, w, h); };
   function who(id) { return { id, name: opt.nameOf(id), team: opt.team[id] }; }
-  function drawPlayer(x, y, face, name, team, busy, me) {
-    const bob = reduceMotion() ? 0 : Math.sin(t * 9 + x * 0.05) * 1.2;
-    g.save(); g.translate(x, y + bob);
-    g.fillStyle = '#0003'; g.beginPath(); g.ellipse(0, R * 0.9, R * 0.95, R * 0.4, 0, 0, 7); g.fill();
-    g.fillStyle = `hsl(${hue(name)} 70% 55%)`; g.strokeStyle = TEAMS[team]?.color ?? '#fff'; g.lineWidth = 3.2;
-    g.beginPath(); g.arc(0, 0, R, 0, 7); g.fill(); g.stroke();
-    g.fillStyle = '#fff'; g.beginPath(); g.ellipse(face * 4.4, -2.5, 5.8, 4.6, 0, 0, 7); g.fill();
-    g.fillStyle = '#111'; g.beginPath(); g.arc(face * 6.6, -2.5, 2.4, 0, 7); g.fill();
-    g.restore();
-    g.font = '800 17px system-ui,sans-serif'; g.textAlign = 'center'; g.lineWidth = 4; g.strokeStyle = '#000b'; g.fillStyle = me ? '#ffe066' : '#fff';
-    g.strokeText(name, x, y - R - 8); g.fillText(name, x, y - R - 8);
-    if (busy) { g.font = '22px system-ui'; g.fillText('💭', x + R + 6, y - R - 22); }
+  // On the page the map is as wide as the screen; full screen it is as big as fits (the mansion keeps its shape).
+  function fit() {
+    const full = !!box.closest('.sm-full'), wrap = cv.parentElement;
+    if (!full) { if (cv.style.width) { cv.style.width = ''; cv.style.height = ''; wrap.style.flex = ''; } return; }
+    const bars = (box.querySelector('.sm-use')?.offsetHeight ?? 0) + (tagbar.offsetHeight ?? 0) + 18;
+    const aw = box.clientWidth - 4, ah = box.clientHeight - bars; if (aw <= 0 || ah <= 0) return;
+    const k = Math.min(aw / W, ah / H), w = Math.floor(W * k), h = Math.floor(H * k);
+    wrap.style.flex = 'none';
+    if (cv.style.width !== w + 'px' || cv.style.height !== h + 'px') { cv.style.width = w + 'px'; cv.style.height = h + 'px'; }
   }
+  // the mansion itself never changes, so it is painted once per screen size and copied every frame
+  let bgImg = null, bgKey = '';
+  function background(sc) {
+    const key = `${cv.width}x${cv.height}`;
+    if (bgKey !== key) { bgImg = document.createElement('canvas'); bgImg.width = cv.width; bgImg.height = cv.height; const c = bgImg.getContext('2d'); c.scale(sc, sc); paintMansion(c); bgKey = key; }
+    return bgImg;
+  }
+  const dust = []; let lastDust = 0;
+  function puff(x, y) { if (reduceMotion() || t - lastDust < 0.14) return; dust.push({ x: x + (Math.random() - 0.5) * 6, y: y + 12, life: 1 }); lastDust = t; }
   function draw() {
+    fit();
     const w = cv.clientWidth; if (!w) return;
     const dpr = Math.min(2, devicePixelRatio || 1), ph = Math.round((w * H) / W);
     if (cv.width !== Math.round(w * dpr) || cv.height !== Math.round(ph * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(ph * dpr); }
     const sc = (w * dpr) / W;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.drawImage(background(sc), 0, 0);
     g.setTransform(sc, 0, 0, sc, 0, 0);
-    g.fillStyle = '#1b1530'; g.fillRect(0, 0, W, H);
-    // walls first (every area a little bigger), then floors on top, so touching areas melt into one
-    g.fillStyle = '#3a2d5e';
-    for (const [x0, y0, x1, y1] of Object.values(AREAS)) { rr(x0 - 6, y0 - 6, x1 - x0 + 12, y1 - y0 + 12, 12); g.fill(); }
-    for (const [name, [x0, y0, x1, y1]] of Object.entries(AREAS)) {
-      g.fillStyle = FLOORS[name] ?? (name.endsWith('Door') ? FLOORS.door : FLOORS.hall);
-      rr(x0, y0, x1 - x0, y1 - y0, 8); g.fill();
-    }
-    g.textAlign = 'center'; g.textBaseline = 'middle'; g.globalAlpha = 0.55; g.font = '34px system-ui';
-    for (const list of Object.values(DECOR)) for (const [e, x, y] of list) g.fillText(e, x, y);
-    g.globalAlpha = 1; g.textBaseline = 'alphabetic';
-    // the task pads
-    for (const r of ROOMS) {
-      const [sx, sy] = STATIONS[r.id], done = opt.doneRooms.includes(r.id), pulse = reduceMotion() ? 0 : Math.sin(t * 3) * 3;
-      g.fillStyle = done ? '#2f9e4455' : '#f0b42955'; g.beginPath(); g.arc(sx, sy, STATION_RADIUS * 0.7 + pulse, 0, 7); g.fill();
-      g.strokeStyle = done ? '#2f9e44' : '#f0b429'; g.lineWidth = 3; g.setLineDash(done ? [] : [6, 5]); g.beginPath(); g.arc(sx, sy, STATION_RADIUS * 0.7, 0, 7); g.stroke(); g.setLineDash([]);
-      g.font = '34px system-ui'; g.textBaseline = 'middle'; g.fillStyle = '#000'; g.fillText(done ? '✅' : r.emoji, sx, sy); g.textBaseline = 'alphabetic';
-      g.font = '800 17px system-ui'; g.fillStyle = '#4a3b00'; g.fillText(r.name, sx, sy + STATION_RADIUS * 0.7 + 22);
-    }
+    for (const r of ROOMS) drawPad(g, r, { t: reduceMotion() ? 0 : t, done: opt.doneRooms.includes(r.id), near: st.near === r.id, label: r.name });
+    drawDust(g, dust);
     // everybody, back to front
     const list = [];
     for (const id of opt.players) {
       if (id === opt.me) continue;
       const p = st.others[id] ?? other(id);
-      list.push({ y: p.y, id, x: p.x, face: p.face, busy: p.busy, me: false });
+      list.push({ y: p.y, id, x: p.x, face: p.face, busy: p.busy, me: false, moving: !!p.moving });
     }
-    if (opt.canMove || opt.players.includes(opt.me)) list.push({ y: st.me.y, id: opt.me, x: st.me.x, face: st.face, busy: st.busy, me: true });
+    if (opt.canMove || opt.players.includes(opt.me)) list.push({ y: st.me.y, id: opt.me, x: st.me.x, face: st.face, busy: st.busy, me: true, moving: !!st.moving });
     list.sort((a, b) => a.y - b.y);
-    for (const p of list) { const w2 = who(p.id); drawPlayer(p.x, p.y, p.face, w2.name, w2.team, p.busy, p.me); }
+    for (const p of list) { const w2 = who(p.id); drawBuddy(g, { x: p.x, y: p.y, face: p.face, name: w2.name, teamColor: TEAMS[w2.team]?.color ?? '#adb5bd', moving: p.moving, t: reduceMotion() ? 0 : t, busy: p.busy, me: p.me, seed: hue(w2.name) % 7 }); }
     // the on-screen stick
     if (st.joy) {
       g.setTransform(dpr, 0, 0, dpr, 0, 0);
       const { ox, oy, x, y } = st.joy, vx = x - ox, vy = y - oy, l = Math.hypot(vx, vy), k = l > JOY ? JOY / l : 1;
-      g.fillStyle = '#ffffff33'; g.strokeStyle = '#ffffffaa'; g.lineWidth = 2; g.beginPath(); g.arc(ox, oy, JOY, 0, 7); g.fill(); g.stroke();
-      g.fillStyle = '#ffffffcc'; g.beginPath(); g.arc(ox + vx * k, oy + vy * k, 18, 0, 7); g.fill();
+      g.fillStyle = '#ffffff26'; g.strokeStyle = '#ffffffaa'; g.lineWidth = 2; g.beginPath(); g.arc(ox, oy, JOY, 0, 7); g.fill(); g.stroke();
+      const knob = g.createRadialGradient(ox + vx * k - 5, oy + vy * k - 5, 2, ox + vx * k, oy + vy * k, 20); knob.addColorStop(0, '#fff'); knob.addColorStop(1, '#ffffffaa');
+      g.fillStyle = knob; g.beginPath(); g.arc(ox + vx * k, oy + vy * k, 18, 0, 7); g.fill();
     }
   }
   function frame(now) {

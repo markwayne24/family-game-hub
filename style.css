@@ -1235,3 +1235,67 @@ button.sm-room{border-color:var(--accent);box-shadow:0 4px 12px #6c4cf522}
 
 .sm-ho{margin-top:12px;padding-top:10px;border-top:1px solid var(--line)}.sm-ho .chips{margin:8px 0}.sm-ho button.ghost{width:100%;margin-top:6px}
 .sm .banner{animation:none}
+
+/* full-screen walking, and the starts of rounds and tasks */
+.sm-full{position:fixed;inset:0;z-index:60;display:flex;flex-direction:column;background:radial-gradient(ellipse at 50% 30%,#2a1f4a,#0d0a1c 75%);color:#fff;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+.smf-hud{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 10px;background:linear-gradient(180deg,#000a,#0000)}
+.smf-pill{background:#ffffff1f;border:1px solid #ffffff2e;border-radius:99px;padding:3px 10px;font-weight:700;font-size:.85rem;backdrop-filter:blur(4px)}
+.smf-pill.t0{border-color:#e03131}.smf-pill.t1{border-color:#1971c2}.smf-pill.mine{background:#ffffff40}
+.smf-hud .sm-timer{background:#ffffff1f;color:#fff;border:1px solid #ffffff2e;margin:0}
+.smf-hud .grow{flex:1}
+.smf-btn{width:40px;height:40px;padding:0;border-radius:50%;background:#ffffff22;border:1px solid #ffffff33;font-size:1.1rem;backdrop-filter:blur(4px)}
+.smf-stage{flex:1;min-height:0;display:flex}
+.sm-full .sm-livemap{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;padding:0 10px 10px}
+.sm-full .sm-cvwrap{flex:1;min-height:0;display:flex;align-items:center;justify-content:center}
+.sm-full .sm-canvas{max-width:none;margin:0;box-shadow:none;border-radius:18px;aspect-ratio:auto}
+.sm-full .sm-hint{color:#ffffffb0}
+.sm-full .sm-taghint{color:#ffffffb0}
+.sm-cvwrap{display:block}
+.sm-intro{position:fixed;inset:0;z-index:90;display:flex;align-items:center;justify-content:center;text-align:center;color:#fff;padding:20px;transition:opacity .35s}
+.sm-intro.out{opacity:0}
+.smi-bg{position:absolute;inset:0;background:radial-gradient(circle at 50% 35%,#4b2a9e,#120a2e 70%);opacity:.96}
+.sm-intro.going .smi-bg{animation:smiFlash .65s ease-out both}
+@keyframes smiFlash{0%{filter:brightness(2.2)}100%{filter:none}}
+.smi-card{position:relative;width:100%;max-width:380px}
+.smi-round{font-size:2.6rem;font-weight:900;letter-spacing:.06em;animation:smiIn .6s cubic-bezier(.2,1.4,.4,1) both;text-shadow:0 4px 22px #8f6bff}
+.smi-round small{font-size:1rem;opacity:.7;font-weight:700}
+.smi-lv{margin-top:6px;font-weight:700;color:#ffd766;animation:smiIn .6s .15s both}.smi-lv span{letter-spacing:.2em}
+.smi-team{margin-top:6px;opacity:.9;animation:smiIn .6s .3s both}
+.smi-count{height:150px;font-size:7rem;font-weight:900;line-height:150px;color:#fff;opacity:0}
+.smi-count.pop{animation:smiPop .8s ease-out both}
+.smi-count.go{color:#69db7c;text-shadow:0 0 40px #2f9e44}
+@keyframes smiPop{0%{transform:scale(2.2);opacity:0}25%{transform:scale(1);opacity:1}100%{transform:scale(.85);opacity:.15}}
+@keyframes smiIn{from{opacity:0;transform:translateY(18px) scale(.9)}to{opacity:1;transform:none}}
+.smi-tip{opacity:.8;font-size:.95rem;margin:0}
+.sm-splash{position:fixed;inset:0;z-index:88;display:flex;align-items:center;justify-content:center;pointer-events:none;transition:opacity .35s}
+.sm-splash.out{opacity:0}
+.sms-card{display:flex;flex-direction:column;align-items:center;gap:4px;padding:22px 34px;border-radius:24px;background:#120a2ee8;color:#fff;box-shadow:0 20px 60px #0009;border:2px solid #ffd76688;animation:smiIn .5s cubic-bezier(.2,1.4,.4,1) both}
+.sms-e{font-size:3.4rem}.sms-card b{font-size:1.6rem}.sms-card small{opacity:.8}
+.st-cd{font-size:6rem;font-weight:900;color:var(--accent);animation:smiPop .6s ease-out both}.st-cd.go{color:var(--ok)}
+@media (prefers-reduced-motion:reduce){.smi-round,.smi-lv,.smi-team,.smi-count.pop,.st-cd,.sms-card{animation:none!important}.smi-count{opacity:1}}
+/* tighter bars so the mansion gets the room */
+.sm-full .smf-hud{flex-wrap:nowrap;gap:5px;padding:6px 8px}
+.sm-full .smf-pill,.sm-full .smf-hud .sm-timer{padding:2px 8px;font-size:.78rem;white-space:nowrap}
+.sm-full .smf-btn{width:34px;height:34px;font-size:1rem;flex:none}
+.sm-full .sm-hint{display:none}
+.sm-full .sm-usebtn:disabled{display:none}
+.sm-full .sm-usebtn{min-height:44px}
+.sm-full .sm-taghint{font-size:.78rem}
+.sm-full .sm-tagbtn{min-height:40px}
+.sm-full .sm-livemap{gap:6px;padding-bottom:6px}
+.sm-full .sm-use{min-height:44px}
+.sm-full .sm-tagbar[hidden]{display:flex;visibility:hidden}
+.sm-full .sm-tagbar{min-height:44px}
+.sm-full .sm-livemap{justify-content:center}.smf-me{color:#ffe066}
+
+/* tasks fill the whole screen, in the colours of their room */
+.st-overlay{padding:0;align-items:stretch;background:#0b1437}
+.st-overlay .st-card{max-width:none;min-height:100%;border-radius:0;padding:0;display:flex;flex-direction:column;box-shadow:none}
+.st-overlay .st-head{margin:0;padding:calc(14px + env(safe-area-inset-top)) 16px 14px;color:#fff;background:linear-gradient(135deg,var(--rc1,#6c4cf5),var(--rc2,#a06a00))}
+.st-overlay .st-head small{color:#ffffffcc}
+.st-overlay .st-room{font-size:2.4rem;filter:drop-shadow(0 2px 6px #0006)}
+.st-overlay .st-x{background:#ffffff30;color:#fff}
+.st-overlay .st-body{flex:1;min-height:0;padding:18px 16px calc(18px + env(safe-area-inset-bottom));justify-content:center}
+.st-in-kitchen{--rc1:#e8590c;--rc2:#f59f00}.st-in-library{--rc1:#6741d9;--rc2:#9c36b5}.st-in-garage{--rc1:#495057;--rc2:#1c7ed6}.st-in-garden{--rc1:#2b8a3e;--rc2:#66a80f}.st-in-vault{--rc1:#a06a00;--rc2:#6c4cf5}
+.st-overlay .st-body>*{max-width:460px;margin-left:auto;margin-right:auto;width:100%}
+.st-overlay .st-field{height:min(46vh,340px)}
