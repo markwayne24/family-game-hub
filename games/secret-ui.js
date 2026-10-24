@@ -1,5 +1,5 @@
 import { sfx, fresh, memo, confetti, isMuted, setMuted } from './fx.js';
-import { ROOMS, TEAMS, TASKS, BATTLES, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
+import { ROOMS, TEAMS, TASKS, BATTLES, BATTLE_FREQ, BATTLE_BONUSES, BATTLE_ORDER, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, money, DIFFICULTIES } from './secret-data.js';
 import { openTask } from './secret-tasks.js';
 import { createLiveMap } from './secret-map.js';
 import { revealScene, roleScene, roundIntro, splash, scoreTicker } from './secret-fx.js';
@@ -81,7 +81,7 @@ export function renderSecret(el, s, ui, game) {
       }
     } else if (s.phase === 'battle') { sfx('drumroll'); }
     else if (s.phase === 'break') { if (!last?.battle) splash({ emoji: '⏱', title: 'Round complete!', sub: 'Who won? Any clues?', sound: 'ding' }); else sfx('ding'); }
-    else if (s.phase === 'vote') splash({ emoji: '🗳', title: 'The final vote', sub: 'Who is the Secret Millionaire?', sound: 'drumroll', ms: 2000 });
+    else if (s.phase === 'vote') { if (!last?.battle) splash({ emoji: '🗳', title: 'The final vote', sub: 'Who is the Secret Millionaire?', sound: 'drumroll', ms: 2000 }); }
   }
   // a team battle: everyone plays the same quick game at once, full screen
   if (s.phase === 'battle' && s.battle && playing) { if (fresh(el, 'battle', s.battle.startAt)) { el._bt?.close(); el._bt = openBattle({ s, ui, anchor: el, nm, myTeam, level: s.level }); } }
@@ -89,7 +89,7 @@ export function renderSecret(el, s, ui, game) {
   // ...and when it is over, the result and the new totals on every phone
   const prevPhase = memo(el, 'phaseSeen', s.phase);
   if (prevPhase === 'battle' && s.phase !== 'battle' && last?.battle) {
-    battleResult({ res: last.battle, teams: TEAMS, from: last.teamPts.map((v, i) => (i === last.battle.winner ? v - last.battle.bonus : v)), to: last.teamPts, myTeam, anchor: el });
+    battleResult({ res: last.battle, teams: TEAMS, from: last.teamPts.map((v, i) => (i === last.battle.winner ? v - last.battle.bonus : v)), to: last.teamPts, myTeam, anchor: el, onClose: () => { if (el._s?.phase === 'vote') splash({ emoji: '🗳', title: 'The final vote', sub: 'Who is the Secret Millionaire?', sound: 'drumroll', ms: 2000 }); } });
   }
   if (s.phase === 'round' && s.round === 1 && playing && p && fresh(el, 'roleScene', s.startAt)) {
     roleScene({ isM: !!p.millionaire, team: TEAMS[myTeam], agenda: agendaOf(p.agenda?.key)?.text, bonus: money(BONUS), anchor: el, onClose: () => { if (el._introPending) startIntro(); } });
@@ -187,7 +187,7 @@ export function renderSecret(el, s, ui, game) {
     const secretsPanel = iPickSecrets ? panel('🤫 The secrets', `<div class="sm-set">
         <label>Who is the Millionaire?<select id="pickMode"><option value="random" ${s.pickMode === 'random' ? 'selected' : ''}>🎲 Pick at random</option>${here.map(x => opt('p:' + x.id, s.pickMode === 'host' ? 'p:' + sec.pick : '', `Choose ${esc(x.name)}`)).join('')}</select></label>
         <label>First round's secret agenda<select id="agenda0"><option value="">🎲 Random</option>${AGENDAS.map(a => opt(a.key, sec.nextAgenda ?? '', esc(a.text))).join('')}</select></label></div><p class="muted">Only you see this. Everyone else is told nothing.</p>`) : '';
-    const summary = `<ul class="sm-sum"><li>${MODS[s.mod].emoji} ${MODS[s.mod].name}${modName ? `: <b>${esc(modName)}</b>` : ''}</li><li>🔁 ${s.rounds} rounds · ⏱ ${s.secs ? secsLabel(s.secs) : 'no time limit'} each</li><li>🎯 Tasks: ${DIFFICULTIES[s.difficulty]}</li><li>⚔ ${s.battles === 'every' ? 'Red vs Blue battle after every round' : s.battles === 'last' ? 'Red vs Blue battle after the last round' : 'No team battles'}</li></ul>`;
+    const summary = `<ul class="sm-sum"><li>${MODS[s.mod].emoji} ${MODS[s.mod].name}${modName ? `: <b>${esc(modName)}</b>` : ''}</li><li>🔁 ${s.rounds} rounds · ⏱ ${s.secs ? secsLabel(s.secs) : 'no time limit'} each</li><li>🎯 Tasks: ${DIFFICULTIES[s.difficulty]}</li><li>⚔ ${s.battles === 'off' ? 'No team battles' : `Red vs Blue battle: ${BATTLE_FREQ[s.battles].toLowerCase()}, +${s.battleBonus}${s.battleFinale ? ' (double in the finale)' : ''}`}</li></ul>`;
     if (ui.isHost) {
       const modChips = Object.entries(MODS).map(([k, v]) => `<button class="chip pick ${s.mod === k ? 'sel' : ''}" data-mod="${k}">${v.emoji} ${v.name}</button>`).join('');
       const others = ui.players.filter(x => !x.host);
@@ -199,7 +199,10 @@ export function renderSecret(el, s, ui, game) {
           <label>Time per round<select data-cfg="secs">${[0, 60, 90, 120, 180, 240, 300].filter(n => n || !none).map(n => opt(n, s.secs, n ? secsLabel(n) : '♾ No limit: the moderator ends it')).join('')}</select></label>
           <label>Break between rounds<select data-cfg="breakSecs">${[0, 15, 30, 45, 60, 90, 120, 180].filter(n => n || !none).map(n => opt(n, s.breakSecs, n ? `Next round starts after ${secsLabel(n)}` : 'Wait for the moderator')).join('')}</select></label>
           <label>Final vote time<select data-cfg="voteSecs">${[0, 60, 90, 120, 180, 300].filter(n => n || !none).map(n => opt(n, s.voteSecs, n ? secsLabel(n) : 'Wait for the moderator')).join('')}</select></label>
-          <label>Team battle (Red vs Blue)<select data-cfgs="battles">${[['every', '⚔ After every round'], ['last', '⚔ Only after the last round'], ['off', 'No team battles']].map(([v, l]) => opt(v, s.battles, l)).join('')}</select></label>
+          <label>Team battle (Red vs Blue)<select data-cfgs="battles">${Object.entries(BATTLE_FREQ).map(([v, l]) => opt(v, s.battles, '⚔ ' + l)).join('')}</select></label>
+          ${s.battles === 'off' ? '' : `<label>Bonus for the winning team<select data-cfg="battleBonus">${BATTLE_BONUSES.map(n => opt(n, s.battleBonus, `+${n} points`)).join('')}</select></label>
+          <label>The last round's battle<select id="finaleSel">${opt('no', s.battleFinale ? 'yes' : 'no', 'Normal points')}${opt('yes', s.battleFinale ? 'yes' : 'no', 'Double points (big finale)')}</select></label>
+          <div><div class="sm-lab" style="margin:0 0 6px">Battle games in play</div><div class="chips">${BATTLE_ORDER.map(k => `<button class="chip pick ${s.pool.includes(k) ? 'sel' : ''}" data-pool="${k}">${BATTLES[k].emoji} ${BATTLES[k].name}</button>`).join('')}</div></div>`}
           <label>How hard are the tasks?<select data-cfgs="difficulty">${Object.entries(DIFFICULTIES).map(([k, v]) => opt(k, s.difficulty, v)).join('')}</select></label>
           <label>How players move<select id="modeSel"><option value="map" ${s.mode === 'map' ? 'selected' : ''}>🗺 Walk around the mansion (live)</option><option value="rooms" ${s.mode === 'rooms' ? 'selected' : ''}>📋 Pick a room from a list (uses less data)</option></select></label>
           <label>Walking speed (live map)<select id="speedSel">${[['slow', '🐢 Slow'], ['normal', '🚶 Normal'], ['fast', '🏃 Fast']].map(([v, l]) => opt(v, s.speed, l)).join('')}</select></label>
@@ -371,6 +374,8 @@ export function renderSecret(el, s, ui, game) {
   on('[data-vote]', b => { sfx('vote'); ui.act('vote', { target: b.dataset.vote }); });
   on('[data-room]', b => launch(b.dataset.room));
   on('#smfBack', () => { sfx('pop'); m.full = true; redraw(); });
+  el.querySelector('#finaleSel')?.addEventListener('change', e => { sfx('pop'); ui.act('config', { battleFinale: e.target.value === 'yes' }); });
+  on('[data-pool]', b => { sfx('pop'); ui.act('config', { togglePool: b.dataset.pool }); });
   on('#skipBattle', () => { if (confirm('Skip this team battle? Nobody gets the bonus.')) ui.act('skipBattle'); });
   on('#hoOpenAlert', () => { sfx('pop'); m.handover = true; redraw(); });
   on('#hoOpen', () => { sfx('pop'); m.handover = true; redraw(); });

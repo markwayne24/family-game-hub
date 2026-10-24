@@ -17,6 +17,16 @@ export function battleQuestions(seed, level, n = 5) {
   return a.slice(0, n).map(([q, ok, ...bad]) => { const opts = [ok, ...bad]; for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; } return { q, ok, opts }; });
 }
 
+// the same sums for everybody, from the same seed
+export function mathQuestion(r, level) {
+  const t = Math.floor(r() * 3), big = [1, 1.6, 2.4][level] ?? 1, a = 3 + Math.floor(r() * 9 * big), b = 2 + Math.floor(r() * 7 * big);
+  const [q, ans] = t === 0 ? [`${a} + ${b}`, a + b] : t === 1 ? [`${a + b} − ${b}`, a] : [`${2 + Math.floor(r() * 7)} × ${2 + Math.floor(r() * 6)}`, 0];
+  let ok = ans; if (t === 2) { const [x, y] = q.split(' × ').map(Number); ok = x * y; }
+  const set = new Set([ok]); while (set.size < 4) set.add(Math.max(0, ok + Math.floor(r() * 11) - 5));
+  const opts = [...set]; for (let i = opts.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [opts[i], opts[j]] = [opts[j], opts[i]]; }
+  return { q, ok, opts };
+}
+
 // Team averages from the live numbers (a missing number counts as zero, or nothing at all for reflex).
 export function liveAverages(s, live, kind) {
   return [0, 1].map(t => {
@@ -85,6 +95,35 @@ export function openBattle({ s, ui, anchor, nm, myTeam, level }) {
       };
       next();
       at(dur, end);
+    } else if (b.kind === 'maths') {
+      const r = mulberry(b.seed + 7); let lock = false;
+      const next = () => { const { q, ok, opts } = mathQuestion(r, level); lock = false;
+        body.innerHTML = `<div class="bt-clock"><i style="width:${Math.max(0, (b.endAt - Date.now()) / dur) * 100}%"></i></div><p class="bt-q big">${q} = ?</p><div class="bt-opts two">${opts.map(x => `<button class="bt-opt" data-ok="${x === ok ? 1 : 0}">${x}</button>`).join('')}</div><p class="bt-count">Right so far: <b>${mine}</b></p>`;
+        body.querySelectorAll('.bt-opt').forEach(x => tap(x, () => { if (over || lock) return; lock = true; const good = x.dataset.ok === '1'; if (good) { mine++; sfx('ding'); send(); bars(); next(); } else { sfx('buzz'); x.classList.add('bad'); setTimeout(() => { if (!over && o.isConnected) next(); }, 600); } }));
+      };
+      next(); at(dur, end);
+    } else if (b.kind === 'memory') {
+      const r = mulberry(b.seed + 11), seq = Array.from({ length: 20 }, () => Math.floor(r() * 4)), COLS = ['#e03131', '#2f9e44', '#1971c2', '#f08c00'];
+      let level = 1, shownAll = false;
+      const round = () => { const len = level + 2, want = seq.slice(0, len); let pos = 0; shownAll = false;
+        body.innerHTML = `<div class="bt-clock"><i style="width:${Math.max(0, (b.endAt - Date.now()) / dur) * 100}%"></i></div><p class="bt-count" id="msay">Level <b>${level}</b>: watch…</p><div class="bt-pads">${COLS.map((c, i) => `<button class="bt-pad" data-i="${i}" style="--c:${c}" disabled></button>`).join('')}</div><p class="bt-count">Chain length so far: <b>${mine}</b></p>`;
+        const pads = [...body.querySelectorAll('.bt-pad')], say = body.querySelector('#msay'); const flash = (i, ms = 360) => { pads[i].classList.add('lit'); sfx('blip'); at(ms, () => pads[i].classList.remove('lit')); };
+        want.forEach((v, k) => at(700 + k * 560, () => flash(v)));
+        at(700 + len * 560 + 150, () => { shownAll = true; say.innerHTML = `Level <b>${level}</b>: your turn!`; pads.forEach(p => (p.disabled = false)); });
+        pads.forEach(p => tap(p, () => { if (!shownAll || over) return; const i = +p.dataset.i; flash(i, 180);
+          if (i === want[pos]) { pos++; if (pos === len) { mine = level; level++; shownAll = false; pads.forEach(x => (x.disabled = true)); sfx('ding'); send(); bars(); at(800, round); } }
+          else { sfx('buzz'); shownAll = false; pads.forEach(x => (x.disabled = true)); say.textContent = 'Wrong one! You are out.'; at(700, end); } }));
+      };
+      round(); at(dur, end);
+    } else if (b.kind === 'gems') {
+      const r = mulberry(b.seed + 13); let net = 0;
+      body.innerHTML = `<div class="bt-clock"><i style="width:100%"></i></div><div class="bt-field" id="gf"></div><p class="bt-count">Gems: <b id="gn">0</b></p>`;
+      clock(dur); const gf = body.querySelector('#gf'), gn = body.querySelector('#gn');
+      for (let ts = 300; ts < dur - 1500; ts += 330 + Math.floor(r() * 220)) { const bomb = r() < 0.22, x = 6 + Math.floor(r() * 78), fall = 1500 + Math.floor(r() * 700); at(ts, () => {
+        const e = document.createElement('button'); e.className = 'bt-gem'; e.textContent = bomb ? '💣' : '💎'; e.style.left = x + '%'; e.style.animationDuration = fall + 'ms'; let hit = false;
+        tap(e, () => { if (hit || over) return; hit = true; if (bomb) { net = Math.max(0, net - 2); sfx('bang'); e.textContent = '💥'; } else { net++; sfx('pop'); e.textContent = '✨'; } mine = net; gn.textContent = net; e.classList.add('hit'); setTimeout(() => e.remove(), 250); bars(); });
+        e.addEventListener('animationend', () => { if (!hit) e.remove(); }); gf.append(e); }); }
+      at(dur, end);
     } else {
       let tries = 0, ready = false, t0 = 0, early = 0;
       body.innerHTML = `<div class="bt-clock"><i style="width:100%"></i></div><p class="bt-count" id="rsay">Wait for green…</p><button class="bt-light" id="light">…</button><p class="bt-count">Best: <b id="rbest">–</b> · try <b id="rtry">1</b> of 3</p>`;
@@ -106,7 +145,7 @@ export function openBattle({ s, ui, anchor, nm, myTeam, level }) {
 }
 
 // The result, on every phone: both averages, who won, the bonus, and the new team totals counting up.
-export function battleResult({ res, teams, from, to, myTeam, anchor }) {
+export function battleResult({ res, teams, from, to, myTeam, anchor, onClose }) {
   const K = BATTLES[res.kind], o = document.createElement('div');
   o.className = 'sm-battle-res';
   const win = res.winner, mine = win != null && win === myTeam;
@@ -117,7 +156,7 @@ export function battleResult({ res, teams, from, to, myTeam, anchor }) {
     <p class="btr-sub">${K.unit === 'ms' ? 'average of each player\'s best time' : 'average per player'}${win == null ? '. No bonus this time.' : '. Bonus points for the winners!'}</p>
     <div class="btr-tot">${teams.map((tm, i) => `<div class="t${i}"><small>${tm.emoji} total</small><b data-i="${i}">${from[i]}</b></div>`).join('')}</div><p class="btr-tap">Tap to continue</p></div>`;
   document.body.append(o);
-  let closed = false; const close = () => { if (closed) return; closed = true; o.classList.add('out'); setTimeout(() => o.remove(), 350); };
+  let closed = false; const close = () => { if (closed) return; closed = true; o.classList.add('out'); setTimeout(() => o.remove(), 350); onClose?.(); };
   o.addEventListener('click', close);
   sfx(win == null ? 'blip' : mine ? 'win' : 'mystic'); if (mine && !reduceMotion()) setTimeout(confetti, 400);
   setTimeout(() => { for (const i of [0, 1]) { const n = o.querySelector(`.btr-tot b[data-i="${i}"]`), a = from[i], z = to[i], t0 = performance.now(); const step = now => { const k = Math.min(1, (now - t0) / 1100); n.textContent = Math.round(a + (z - a) * (1 - (1 - k) ** 3)); if (k < 1 && o.isConnected) requestAnimationFrame(step); }; requestAnimationFrame(step); } if (win != null) sfx('ding'); }, 1100);

@@ -1,4 +1,4 @@
-import { ROOMS, TEAMS, TASKS, BATTLES, BATTLE_ORDER, BATTLE_BONUS, BATTLE_INTRO_MS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
+import { ROOMS, TEAMS, TASKS, BATTLES, BATTLE_ORDER, BATTLE_BONUS, BATTLE_BONUSES, BATTLE_FREQ, BATTLE_INTRO_MS, MIN_PLAYERS, TOTAL_POT, BONUS, AGENDAS, agendaOf, levelFor, DIFFICULTIES } from './secret-data.js';
 import { makeClue, taskPoints } from './secret-clues.js';
 import { renderSecret } from './secret-ui.js';
 
@@ -36,7 +36,7 @@ export const secret = {
   init(env, opts) {
     if (opts?.memory?.saved) return opts.memory.saved;
     return {
-      phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, battles: 'every', battle: null, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
+      phase: 'lobby', gm: null, mod: 'host', moderator: null, rounds: 4, secs: 120, battles: 'every', battleBonus: BATTLE_BONUS, battleFinale: false, pool: [...BATTLE_ORDER], order: [], battlesHeld: 0, battle: null, breakSecs: 0, voteSecs: 120, difficulty: 'rising', level: 0,
       mode: 'map', speed: 'normal', pickMode: 'random', pick: null,
       players: [], names: {}, team: {}, round: 0, startAt: 0, endAt: 0, breakEnd: 0, voteEnd: 0, shared: [],
       loc: {}, visited: {}, tags: [], away: {}, done: {}, goAt: {}, pts: {}, total: {}, teamPts: [0, 0], log: [], history: [],
@@ -57,7 +57,7 @@ export const secret = {
     if (a.type === 'presence') return a.from === env.hostId ? presence(s, env) : s;
     if (s.phase === 'lobby') s = { ...s, names: Object.fromEntries(env.players.map(p => [p.id, p.name])) };
 
-    if (a.type === 'reset' && isHost) { const k = this.init(env); const keep = ['mod', 'moderator', 'battles', 'rounds', 'secs', 'breakSecs', 'voteSecs', 'difficulty', 'mode', 'speed', 'pickMode', 'pick']; for (const f of keep) k[f] = s[f]; return k; }
+    if (a.type === 'reset' && isHost) { const k = this.init(env); const keep = ['mod', 'moderator', 'battles', 'battleBonus', 'battleFinale', 'pool', 'rounds', 'secs', 'breakSecs', 'voteSecs', 'difficulty', 'mode', 'speed', 'pickMode', 'pick']; for (const f of keep) k[f] = s[f]; return k; }
 
     /* ---------- the waiting room ---------- */
     if (s.phase === 'lobby') {
@@ -72,7 +72,10 @@ export const secret = {
           if (BREAK_SECS.includes(p.breakSecs)) n.breakSecs = p.breakSecs;
           if (VOTE_SECS.includes(p.voteSecs)) n.voteSecs = p.voteSecs;
           if (p.difficulty in DIFFICULTIES) n.difficulty = p.difficulty;
-          if (['every', 'last', 'off'].includes(p.battles)) n.battles = p.battles;
+          if (p.battles in BATTLE_FREQ) n.battles = p.battles;
+          if (BATTLE_BONUSES.includes(p.battleBonus)) n.battleBonus = p.battleBonus;
+          if (typeof p.battleFinale === 'boolean') n.battleFinale = p.battleFinale;
+          if (typeof p.togglePool === 'string' && p.togglePool in BATTLES) { const on = s.pool.includes(p.togglePool); const next = on ? s.pool.filter(k => k !== p.togglePool) : [...s.pool, p.togglePool]; if (next.length) n.pool = BATTLE_ORDER.filter(k => next.includes(k)); }
           if (p.mode === 'map' || p.mode === 'rooms') n.mode = p.mode;
           if (['slow', 'normal', 'fast'].includes(p.speed)) n.speed = p.speed;
           if (p.mod in MODERATORS) { n.mod = p.mod; if (p.mod !== 'player') n.moderator = null; if (p.mod !== 'host') { n.pickMode = 'random'; n.pick = null; n.nextAgenda = null; } }
@@ -96,7 +99,7 @@ export const secret = {
         // with nobody moderating the app must run itself, so every clock has to be on
         const secs = s.mod === 'none' && !s.secs ? 120 : s.secs, breakSecs = s.mod === 'none' && !s.breakSecs ? 45 : s.breakSecs, voteSecs = s.mod === 'none' && !s.voteSecs ? 120 : s.voteSecs;
         const m = s.mod === 'host' || s.mod === 'player' ? (s.pickMode === 'host' && players.includes(s.pick) ? s.pick : pickOne(players)) : pickOne(players);
-        return beginRound({ ...s, gm, secs, breakSecs, voteSecs, players, millionaire: m, round: 0, total: Object.fromEntries(players.map(id => [id, 0])), error: null }, env.now);
+        return beginRound({ ...s, order: shuffle((s.pool?.length ? s.pool : BATTLE_ORDER)), battlesHeld: 0, gm, secs, breakSecs, voteSecs, players, millionaire: m, round: 0, total: Object.fromEntries(players.map(id => [id, 0])), error: null }, env.now);
       }
       return s;
     }
@@ -150,7 +153,7 @@ export const secret = {
     if (s.phase === 'battle') {
       const b = s.battle;
       if (a.type === 'battleScore' && s.players.includes(a.from) && b && !(a.from in b.scores) && env.now >= b.playFrom - 600) {
-        const v = Number(a.data?.score), k = BATTLES[b.kind], max = { tug: Math.ceil((k.dur / 1000) * 14) + 10, trivia: b.qs.length, reflex: 3000 }[b.kind], min = b.kind === 'reflex' ? 90 : 0;
+        const v = Number(a.data?.score), k = BATTLES[b.kind], max = b.kind === 'trivia' ? b.qs.length : k.max, min = k.min ?? 0;
         if (!Number.isFinite(v) || v < min || v > max) return s;
         const n = { ...s, battle: { ...b, scores: { ...b.scores, [a.from]: Math.round(v) } } };
         return needed(n, false).every(id => id in n.battle.scores) ? endBattle(n, env.now) : n;
@@ -231,14 +234,16 @@ function beginRound(s, now) {
 // A round's tasks are over. With team battles on, the teams settle the round with a head-to-head game first.
 function finishRound(s, now) {
   const both = [0, 1].every(k => s.players.some(id => s.team[id] === k));
-  if (s.battles && s.battles !== 'off' && both && (s.battles === 'every' || s.round === s.rounds)) return startBattle(s, now);
+  const last = s.round === s.rounds;
+  const due = { off: false, every: true, last, second: s.round % 2 === 0, random: last || Math.random() < 0.6 }[s.battles ?? 'off'];
+  if (due && both) return startBattle(s, now);
   return completeRound(s, now);
 }
 
 function startBattle(s, now) {
-  const kind = BATTLE_ORDER[(s.round - 1) % BATTLE_ORDER.length], seed = Math.floor(Math.random() * 1e9);
+  const order = s.order?.length ? s.order : BATTLE_ORDER, kind = order[(s.battlesHeld ?? 0) % order.length], seed = Math.floor(Math.random() * 1e9);
   const qs = kind === 'trivia' ? Array.from({ length: 5 }, (_, i) => i) : [];
-  return { ...s, phase: 'battle', loc: {}, battle: { kind, round: s.round, startAt: now, playFrom: now + BATTLE_INTRO_MS, endAt: now + BATTLE_INTRO_MS + BATTLES[kind].dur, seed, qs, scores: {} } };
+  return { ...s, battlesHeld: (s.battlesHeld ?? 0) + 1, phase: 'battle', loc: {}, battle: { kind, round: s.round, startAt: now, playFrom: now + BATTLE_INTRO_MS, endAt: now + BATTLE_INTRO_MS + BATTLES[kind].dur, seed, qs, scores: {} } };
 }
 
 // Who won: the average per player (so a bigger team has no edge). Missing players count as a miss. A tie gives nobody the bonus.
@@ -247,8 +252,9 @@ function endBattle(s, now) {
   const avg = [0, 1].map(t => { const ids = s.players.filter(id => s.team[id] === t); return ids.length ? ids.reduce((a, id) => a + (b.scores[id] ?? miss), 0) / ids.length : miss; }).map(x => Math.round(x * 10) / 10);
   const better = k.lower ? avg[0] < avg[1] : avg[0] > avg[1], tie = avg[0] === avg[1];
   const winner = tie ? null : better ? 0 : 1;
-  const teamPts = s.teamPts.map((v, i) => (i === winner ? v + BATTLE_BONUS : v));
-  return completeRound({ ...s, teamPts, battle: null, lastBattle: { kind: b.kind, avg, winner, bonus: winner == null ? 0 : BATTLE_BONUS, scores: b.scores } }, now);
+  const bonus = (s.battleBonus ?? BATTLE_BONUS) * (s.battleFinale && s.round === s.rounds ? 2 : 1);
+  const teamPts = s.teamPts.map((v, i) => (i === winner ? v + bonus : v));
+  return completeRound({ ...s, teamPts, battle: null, lastBattle: { kind: b.kind, avg, winner, bonus: winner == null ? 0 : bonus, scores: b.scores } }, now);
 }
 
 function completeRound(s, now) {

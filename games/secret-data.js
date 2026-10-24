@@ -40,12 +40,17 @@ export const TEAMS = [
 export const MIN_PLAYERS = 4;
 // Team battles: everybody on both teams plays the same quick game at once; the team with the better average wins the bonus.
 export const BATTLE_BONUS = 25;
+export const BATTLE_BONUSES = [15, 25, 40, 60];
 export const BATTLES = {
-  tug: { name: 'Tug of War', emoji: '🪢', dur: 12000, how: 'Tap PULL as fast as you can! The team with the most taps per player wins.', unit: 'taps' },
-  trivia: { name: 'Trivia Showdown', emoji: '🧠', dur: 40000, how: 'Five questions, eight seconds each. The team with the most right answers per player wins.', unit: 'right' },
-  reflex: { name: 'Reflex Race', emoji: '⚡', dur: 22000, how: 'Tap the moment the light turns green, three times. Your best time counts. The quicker team wins.', unit: 'ms', lower: true },
+  tug: { name: 'Tug of War', emoji: '🪢', dur: 12000, how: 'Tap PULL as fast as you can! The team with the most taps per player wins.', unit: 'taps', max: 190 },
+  trivia: { name: 'Trivia Showdown', emoji: '🧠', dur: 40000, how: 'Five questions, eight seconds each. The team with the most right answers per player wins.', unit: 'right', max: 5 },
+  reflex: { name: 'Reflex Race', emoji: '⚡', dur: 22000, how: 'Tap the moment the light turns green, three times. Your best time counts. The quicker team wins.', unit: 'ms', lower: true, max: 3000, min: 90 },
+  maths: { name: 'Maths Race', emoji: '➗', dur: 30000, how: 'Solve as many sums as you can in 30 seconds. The team with the most right answers per player wins.', unit: 'right', max: 45 },
+  memory: { name: 'Memory Chain', emoji: '🔮', dur: 50000, how: 'Watch the lights, then repeat the pattern. It gets one longer each time. One mistake and you are out. The team with the longest chains wins.', unit: 'levels', max: 14 },
+  gems: { name: 'Gem Rush', emoji: '💎', dur: 20000, how: 'Tap the falling gems 💎 but NOT the bombs 💣 (they cost you 2). The team with the most gems per player wins.', unit: 'gems', max: 90 },
 };
-export const BATTLE_ORDER = ['tug', 'trivia', 'reflex'];
+export const BATTLE_ORDER = Object.keys(BATTLES);
+export const BATTLE_FREQ = { every: 'After every round', second: 'After every second round', random: 'Now and then (random)', last: 'Only after the last round', off: 'No team battles' };
 export const BATTLE_INTRO_MS = 5000;
 export const DIFFICULTIES = { easy: 'Easy', normal: 'Normal', hard: 'Hard', rising: 'Rising: gets harder every round' };
 // How hard the tasks are in a given round: 0 (easiest) to 2 (hardest).

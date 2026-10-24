@@ -224,7 +224,7 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
 }
 // ---- team battles
 {
-  const e = env(7); const begin = cfg => { let s = step(ginit(e), e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
+  const e = env(7); const begin = cfg => { let s = step(ginit(e), e, 'h', 'config', cfg); s = step(s, { ...e, now: 1000 }, 'h', 'start'); return { ...s, order: ['tug', 'trivia', 'reflex', 'maths', 'memory', 'gems'] }; };
   assert.equal(G.init(e).battles, 'every', 'on by default');
   assert.equal(step(G.init(e), e, 'h', 'config', { battles: 'sometimes' }).battles, 'every'); assert.equal(step(G.init(e), e, 'h', 'config', { battles: 'off' }).battles, 'off');
   assert.equal(step(G.init(e), e, 'p1', 'config', { battles: 'off' }).battles, 'every', 'only the host');
@@ -274,6 +274,44 @@ const play = (s, e, plan, now0 = 2000) => {            // plan: id -> [[room, ok
   let fin = l3; const ff = { ...e, now: fin.battle.playFrom + 50 }; for (const id of fin.players) fin = step(fin, ff, id, 'battleScore', { score: fin.battle?.kind === 'reflex' ? 300 : 30 }); assert.equal(fin.phase, 'vote');
   // handing over works during a battle
   assert.ok(step(b, e, 'h', 'handover', { to: 'random' }).gm !== 'h');
+}
+// ---- more battle games, the bonus, and how often they happen
+{
+  const e = env(7); const fresh0 = cfg => { let s = step(ginit(e), e, 'h', 'config', cfg); return step(s, { ...e, now: 1000 }, 'h', 'start'); };
+  // the games in play
+  let c = step(G.init(e), e, 'h', 'config', {}); assert.equal(c.pool.length, 6, 'all six by default');
+  c = step(c, e, 'h', 'config', { togglePool: 'tug' }); assert.ok(!c.pool.includes('tug')); c = step(c, e, 'h', 'config', { togglePool: 'tug' }); assert.ok(c.pool.includes('tug'));
+  let one = step(G.init(e), e, 'h', 'config', {}); for (const k of one.pool.slice(1)) one = step(one, e, 'h', 'config', { togglePool: k }); assert.deepEqual(one.pool, ['tug']); assert.deepEqual(step(one, e, 'h', 'config', { togglePool: 'tug' }).pool, ['tug'], 'at least one game stays on');
+  assert.deepEqual(step(G.init(e), e, 'h', 'config', { togglePool: 'chess' }).pool, G.init(e).pool); assert.deepEqual(step(G.init(e), e, 'p1', 'config', { togglePool: 'tug' }).pool, G.init(e).pool, 'only the host');
+  const st = fresh0({}); assert.deepEqual([...st.order].sort(), [...st.pool].sort(), 'the order is a shuffle of the games chosen');
+  const only = fresh0({ battles: 'every' }); let o2 = step(step(ginit(e), e, 'h', 'config', { battles: 'every', togglePool: 'tug' }), e, 'h', 'config', { togglePool: 'trivia' }); o2 = step(o2, { ...e, now: 1000 }, 'h', 'start'); assert.ok(o2.order.every(k => ['reflex', 'maths', 'memory', 'gems'].includes(k)));
+  // the three new games and their limits
+  const limits = { maths: [45, 46], memory: [14, 15], gems: [90, 91] };
+  for (const [kind, [ok, bad]] of Object.entries(limits)) {
+    let s = fresh0({ battles: 'every', rounds: 3 }); s = { ...s, order: [kind] }; s = step(s, { ...e, now: 5000 }, 'h', 'endRound'); assert.equal(s.battle.kind, kind);
+    const f = { ...e, now: s.battle.playFrom + 10 }, id = s.players[0];
+    assert.equal(step(s, f, id, 'battleScore', { score: bad }), s, kind + ' over the limit'); assert.equal(step(s, f, id, 'battleScore', { score: ok }).battle.scores[id], ok);
+  }
+  // each game is used once before any comes round again
+  let r = fresh0({ battles: 'every', rounds: 6 }); const seen = [];
+  for (let i = 0; i < 6; i++) { r = step(r, { ...e, now: 10000 + i * 1e5 }, 'h', 'endRound'); seen.push(r.battle.kind); const f = { ...e, now: r.battle.playFrom + 10 }; for (const id of r.players) r = step(r, f, id, 'battleScore', { score: r.battle.kind === 'reflex' ? 400 : 1 }); if (r.phase === 'break') r = step(r, e, 'h', 'next'); }
+  assert.equal(new Set(seen).size, 6, 'six different games: ' + seen);
+  // the bonus
+  for (const bonus of [15, 40, 60]) {
+    let s = fresh0({ battles: 'every', battleBonus: bonus, rounds: 3 }); s = { ...s, order: ['tug'] }; assert.equal(s.battleBonus, bonus); s = step(s, { ...e, now: 5000 }, 'h', 'endRound');
+    const f = { ...e, now: s.battle.playFrom + 10 }; for (const id of s.players) s = step(s, f, id, 'battleScore', { score: s.team[id] === 0 ? 30 : 10 }); assert.equal(s.history[0].battle.bonus, bonus); assert.equal(s.history[0].teamPts[0], bonus);
+  }
+  assert.equal(step(G.init(e), e, 'h', 'config', { battleBonus: 1000 }).battleBonus, 25, 'only the listed amounts');
+  // double points in the finale
+  let fin = fresh0({ battles: 'every', battleBonus: 25, battleFinale: true, rounds: 3 }); fin = { ...fin, order: ['tug'] };
+  for (let i = 0; i < 3; i++) { fin = step(fin, { ...e, now: 5000 + i * 1e5 }, 'h', 'endRound'); const f = { ...e, now: fin.battle.playFrom + 10 }; for (const id of fin.players) fin = step(fin, f, id, 'battleScore', { score: fin.team[id] === 0 ? 30 : 10 }); assert.equal(fin.history[i].battle.bonus, i === 2 ? 50 : 25, 'round ' + (i + 1)); if (fin.phase === 'break') fin = step(fin, e, 'h', 'next'); }
+  // how often
+  const when = (freq, rounds) => { let s = fresh0({ battles: freq, rounds }); const out = []; for (let i = 0; i < rounds; i++) { s = step(s, { ...e, now: 9000 + i * 1e5 }, 'h', 'endRound'); out.push(s.phase === 'battle'); if (s.phase === 'battle') s = step(s, e, 'h', 'skipBattle'); if (s.phase === 'break') s = step(s, e, 'h', 'next'); } return out; };
+  assert.deepEqual(when('every', 4), [true, true, true, true]); assert.deepEqual(when('second', 4), [false, true, false, true]); assert.deepEqual(when('second', 5), [false, true, false, true, false]);
+  assert.deepEqual(when('last', 4), [false, false, false, true]); assert.deepEqual(when('off', 4), [false, false, false, false]);
+  let any1 = 0, anyNo = 0; for (let i = 0; i < 60; i++) { const w = when('random', 3); assert.equal(w[2], true, 'the last round always has one'); if (w[0]) any1++; else anyNo++; }
+  assert.ok(any1 > 10 && anyNo > 5, 'random really is random: ' + any1 + '/' + anyNo);
+  assert.equal(step(G.init(e), e, 'h', 'config', { battles: 'often' }).battles, 'every');
 }
 // ---- accusations
 {
