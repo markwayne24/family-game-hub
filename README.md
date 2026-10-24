@@ -30,7 +30,7 @@ Home screen: after signing in you get a "Start a game night" card (create a room
 
 Privacy and terms: `privacy.html` and `terms.html` are plain pages served at `/privacy` and `/terms` (`vercel.json` turns on clean URLs). Every home screen links to them in the footer, and the sign-in form links to them too, as Google's OAuth branding check requires. Update them if the app starts collecting anything new.
 
-Landing page: signed-out visitors see a landing page with three games as a teaser (the rest are locked), how it works, the sign-in form and a "Got a room code?" box. After signing in, the home screen lists every game with its goal and how to play. Guests with an invite link or room code still join without an account.
+Landing page: signed-out visitors see the full list of games, with search (by name, description, type or "kids") and the same player-count and type filters as the home screen. It uses the full width on desktop (intro and sign-in side by side, then a 3–4 column game grid) and a single column on phones. Each game has "How to play" and a "Sign in to play" button that jumps to the sign-in card. There is also "How it works" and a "Got a room code?" box; guests with a code or invite link still join without an account.
 
 Accounts: anyone can sign up and host rooms, with **Continue with Google** or with an email and a password (8+ characters). A new email account gets a 6-digit code by email and must enter it (or tap the link in the email) before it can sign in, so only real addresses get in. Guests joining a room still don't need an account.
 
